@@ -1,0 +1,94 @@
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import type { SessionUser } from '@goinze/shared-types';
+import { CommunicationService } from './communication.service';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { Public } from '../common/decorators/public.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+
+@Controller('communication')
+@UseGuards(JwtAuthGuard, RolesGuard)
+export class CommunicationController {
+  constructor(private readonly communicationService: CommunicationService) {}
+
+  // ---- Announcements ----
+  @Public()
+  @Get('announcements')
+  listAnnouncements(
+    @CurrentUser() user: SessionUser | undefined,
+    @Query('schoolId') schoolId?: string,
+  ) {
+    return this.communicationService.listAnnouncements(
+      user?.schoolId ?? schoolId ?? null,
+    );
+  }
+
+  @Post('announcements')
+  @Roles('SCHOOL_ADMIN')
+  createAnnouncement(
+    @CurrentUser() user: SessionUser,
+    @Body() data: { title: string; body: string; audience?: string; pinned?: boolean },
+  ) {
+    return this.communicationService.createAnnouncement(user.schoolId, data);
+  }
+
+  // ---- Messages ----
+  @Get('messages')
+  listMessages(@CurrentUser() user: SessionUser) {
+    return this.communicationService.listMessages(user.id);
+  }
+
+  @Post('messages')
+  sendMessage(
+    @CurrentUser() user: SessionUser,
+    @Body() data: { recipientId?: string; subject?: string; body: string },
+  ) {
+    return this.communicationService.sendMessage({
+      senderId: user.id,
+      recipientId: data.recipientId,
+      subject: data.subject,
+      body: data.body,
+    });
+  }
+
+  @Patch('messages/:id/read')
+  markMessageRead(@Param('id') id: string) {
+    return this.communicationService.markMessageRead(id);
+  }
+
+  // ---- Notifications ----
+  @Get('notifications')
+  listNotifications(@CurrentUser() user: SessionUser) {
+    return this.communicationService.listNotifications(user.id);
+  }
+
+  @Post('notifications')
+  @Roles('SCHOOL_ADMIN')
+  createNotification(
+    @CurrentUser() user: SessionUser,
+    @Body() data: { userId?: string; title: string; body: string; channel?: string },
+  ) {
+    return this.communicationService.createNotification({
+      schoolId: user.schoolId,
+      userId: data.userId,
+      title: data.title,
+      body: data.body,
+      channel: data.channel,
+    });
+  }
+
+  @Patch('notifications/:id/read')
+  markNotificationRead(@Param('id') id: string) {
+    return this.communicationService.markNotificationRead(id);
+  }
+}

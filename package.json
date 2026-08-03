@@ -1,0 +1,27 @@
+{
+  "name": "goinzeschool",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Goinzeschool — Enterprise School Management ERP (public site, admin, student, lecturer portals, NestJS API)",
+  "packageManager": "pnpm@11.15.1",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "db:generate": "pnpm --filter @goinze/database generate",
+    "db:push": "pnpm --filter @goinze/database push",
+    "db:migrate": "pnpm --filter @goinze/database migrate",
+    "db:seed": "pnpm --filter @goinze/database seed",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "turbo": "^2.5.0",
+    "typescript": "^5.6.3"
+  }
+}

@@ -1,0 +1,117 @@
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+import type { SessionUser } from '@goinze/shared-types';
+import { FinanceService } from './finance.service';
+import {
+  CreateFeeStructureDto,
+  InitPaymentDto,
+  VerifyPaymentDto,
+  RefundDto,
+  CreateScholarshipDto,
+} from './dto/finance.dto';
+import { PaginationDto } from '../common/dto/pagination.dto';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { Public } from '../common/decorators/public.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+
+@Controller('finance')
+@UseGuards(JwtAuthGuard, RolesGuard)
+export class FinanceController {
+  constructor(private readonly financeService: FinanceService) {}
+
+  // ---- Fee structures ----
+  @Get('fee-structures')
+  @Roles('SCHOOL_ADMIN', 'ACCOUNTANT')
+  listFeeStructures(@CurrentUser() user: SessionUser) {
+    return this.financeService.listFeeStructures(user.schoolId);
+  }
+
+  @Post('fee-structures')
+  @Roles('SCHOOL_ADMIN', 'ACCOUNTANT')
+  createFeeStructure(
+    @CurrentUser() user: SessionUser,
+    @Body() dto: CreateFeeStructureDto,
+  ) {
+    return this.financeService.createFeeStructure(user.schoolId, dto);
+  }
+
+  // ---- Payments ----
+  @Get('payments')
+  @Roles('SCHOOL_ADMIN', 'ACCOUNTANT')
+  listPayments(
+    @CurrentUser() user: SessionUser,
+    @Query() query: PaginationDto,
+    @Query('status') status?: string,
+  ) {
+    return this.financeService.listPayments(user.schoolId, query, status);
+  }
+
+  @Public()
+  @Post('payments/init')
+  initPayment(
+    @CurrentUser() user: SessionUser | undefined,
+    @Body() dto: InitPaymentDto,
+  ) {
+    return this.financeService.initPayment(user?.schoolId ?? null, dto);
+  }
+
+  @Public()
+  @Post('payments/verify')
+  verifyPayment(@Body() dto: VerifyPaymentDto) {
+    return this.financeService.verifyPayment(dto);
+  }
+
+  /** Flutterwave webhook (charge.completed). */
+  @Public()
+  @Post('payments/webhook')
+  webhook(@Req() req: Request) {
+    return this.financeService.handleWebhook(req.body);
+  }
+
+  // ---- Refunds ----
+  @Post('refunds')
+  @Roles('SCHOOL_ADMIN', 'ACCOUNTANT')
+  refund(@CurrentUser() user: SessionUser, @Body() dto: RefundDto) {
+    return this.financeService.refund(dto, user.id);
+  }
+
+  // ---- Scholarships ----
+  @Get('scholarships')
+  @Roles('SCHOOL_ADMIN', 'ACCOUNTANT')
+  listScholarships(@CurrentUser() user: SessionUser) {
+    return this.financeService.listScholarships(user.schoolId);
+  }
+
+  @Post('scholarships')
+  @Roles('SCHOOL_ADMIN', 'ACCOUNTANT')
+  createScholarship(
+    @CurrentUser() user: SessionUser,
+    @Body() dto: CreateScholarshipDto,
+  ) {
+    return this.financeService.createScholarship(user.schoolId, dto);
+  }
+
+  // ---- Ledger ----
+  @Get('ledger/:studentId')
+  @Roles('SCHOOL_ADMIN', 'ACCOUNTANT', 'STUDENT')
+  ledger(@Param('studentId') studentId: string) {
+    return this.financeService.ledgerForStudent(studentId);
+  }
+
+  // ---- Dashboard summary ----
+  @Get('dashboard')
+  @Roles('SCHOOL_ADMIN', 'ACCOUNTANT')
+  dashboard(@CurrentUser() user: SessionUser) {
+    return this.financeService.dashboardSummary(user.schoolId);
+  }
+}

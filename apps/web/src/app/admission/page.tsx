@@ -1,0 +1,120 @@
+"use client";
+
+import { CheckCircle2, ClipboardList, CreditCard, FileText } from "lucide-react";
+import { currentAcademicSession } from "@goinze/shared-utils";
+import PageHeader from "@/components/PageHeader";
+import Section from "@/components/Section";
+import Card from "@/components/Card";
+import AdmissionForm from "@/components/AdmissionForm";
+import { asArray, defaultFees, getBlockBody, useContentBlocks } from "@/lib/content";
+
+const requirements = [
+  {
+    Icon: FileText,
+    title: "SSCE Credit Passes",
+    body: "Credit passes at SSCE (WAEC, NECO or GCE O/L) in no more than two sittings, including English Language, Mathematics and Biology or Health Science, as required by your chosen programme.",
+  },
+  {
+    Icon: ClipboardList,
+    title: "Entrance Examination",
+    body: "Secure the cut-off pass mark in the entrance examination and be successful at an interview conducted by the college authority.",
+  },
+  {
+    Icon: CheckCircle2,
+    title: "Certificates & Documents",
+    body: "Original certificates/results, testimonials, birth certificate or declaration of age, indigene certificate and a letter of attestation from a respected member of your community.",
+  },
+  {
+    Icon: CreditCard,
+    title: "Acceptance & Registration Fees",
+    body: "Pay the acceptance and registration fees through the designated banks and complete your registration formalities within the specified time frame.",
+  },
+];
+
+export default function AdmissionPage() {
+  const { blocks } = useContentBlocks();
+
+  const fees = (() => {
+    const cms = asArray(getBlockBody(blocks, "admission.fees"));
+    return cms.length > 0 ? cms : defaultFees;
+  })();
+
+  return (
+    <>
+      <PageHeader
+        breadcrumb="Admission"
+        title="Admission"
+        subtitle="Everything you need to join Goinze International School of Medical Health Science and Technology — requirements, fees and how to apply."
+      />
+
+      {/* Requirements */}
+      <Section
+        eyebrow="Before You Apply"
+        title="Admission Requirements"
+        subtitle="Make sure you have the following ready before starting your application."
+      >
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {requirements.map(({ Icon, title, body }) => (
+            <Card key={title} hover className="p-6">
+              <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-brand">
+                <Icon className="h-5 w-5" />
+              </span>
+              <h3 className="mt-4 text-base font-bold text-slate-900">{title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-slate-600">{body}</p>
+            </Card>
+          ))}
+        </div>
+      </Section>
+
+      {/* Fees table */}
+      <Section
+        className="bg-slate-50"
+        eyebrow="Investment"
+        title="Schedule of Fees"
+        subtitle={`Indicative fees for the ${currentAcademicSession()} academic session.`}
+      >
+        <Card className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[480px] text-left text-sm">
+              <thead>
+                <tr className="bg-brand text-white">
+                  <th className="px-6 py-4 font-semibold">Item</th>
+                  <th className="px-6 py-4 font-semibold">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fees.map((row, i) => (
+                  <tr
+                    key={row.item ?? i}
+                    className={`border-b border-slate-100 last:border-0 ${
+                      i % 2 === 0 ? "bg-white" : "bg-slate-50"
+                    }`}
+                  >
+                    <td className="px-6 py-4 font-medium text-slate-800">{row.item}</td>
+                    <td className="px-6 py-4 font-semibold text-brand">{row.amount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+        <p className="mt-4 text-xs text-slate-500">
+          * Tuition and other session/semester fees are as approved by the college —
+          contact the Bursary for the current schedule. There is no refund of fees once paid.
+        </p>
+      </Section>
+
+      {/* Application form */}
+      <Section
+        eyebrow="Apply Now"
+        title="Start Your Application"
+        subtitle="Fill in the form below and our admissions team will guide you through the next steps."
+        id="apply"
+      >
+        <Card className="p-8">
+          <AdmissionForm />
+        </Card>
+      </Section>
+    </>
+  );
+}
