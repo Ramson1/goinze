@@ -88,11 +88,11 @@ export default function Navbar() {
               />
             </span>
             <span className="flex flex-col leading-tight">
-              <span className={`text-base font-bold ${onBlue ? "text-white" : "text-brand"}`}>
-                Goinzeschool
+              <span className={`text-[11px] font-bold uppercase tracking-wide ${onBlue ? "text-white" : "text-brand"}`}>
+                Goinze International School
               </span>
-              <span className={`text-[11px] ${onBlue ? "text-blue-100" : "text-slate-500"}`}>
-                Medical Health Science &amp; Technology
+              <span className={`text-[9px] font-medium uppercase tracking-wider ${onBlue ? "text-blue-100" : "text-slate-500"}`}>
+                of Medical Health Science and Technology
               </span>
             </span>
           </Link>

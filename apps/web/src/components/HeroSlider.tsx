@@ -31,6 +31,23 @@ const slides: Slide[] = [
       "Modern lecture halls, laboratories, a library and hostels — everything a disciplined community of health learners needs to thrive.",
     cta: { label: "About the School", href: "/about" },
   },
+  // Graduation & success stories
+  {
+    image: "/hero/graduation-1.png",
+    eyebrow: "Graduation",
+    title: "Your Journey Ends in a Cap and Gown",
+    subtitle:
+      "Every year we celebrate graduates who leave Goinze ready to serve their communities as licensed health professionals.",
+    cta: { label: "Meet Our Alumni", href: "/alumni" },
+  },
+  {
+    image: "/hero/graduation-2.jpeg",
+    eyebrow: "Success Stories",
+    title: "From Bwari to Health Facilities Nationwide",
+    subtitle:
+      "Our graduates work in hospitals, laboratories, pharmacies and public health agencies across Nigeria and beyond.",
+    cta: { label: "Start Your Application", href: "/admission" },
+  },
   // Laboratories
   {
     image: "/hero/anatomy-lab.png",
@@ -95,23 +112,6 @@ const slides: Slide[] = [
     subtitle:
       "Practical physiology sessions connect classroom theory to living systems — from vital signs to organ function.",
     cta: { label: "Explore Programmes", href: "/academics" },
-  },
-  // Graduation
-  {
-    image: "/hero/graduation-1.png",
-    eyebrow: "Graduation",
-    title: "Your Journey Ends in a Cap and Gown",
-    subtitle:
-      "Every year we celebrate graduates who leave Goinze ready to serve their communities as licensed health professionals.",
-    cta: { label: "Meet Our Alumni", href: "/alumni" },
-  },
-  {
-    image: "/hero/graduation-2.jpeg",
-    eyebrow: "Success Stories",
-    title: "From Bwari to Health Facilities Nationwide",
-    subtitle:
-      "Our graduates work in hospitals, laboratories, pharmacies and public health agencies across Nigeria and beyond.",
-    cta: { label: "Start Your Application", href: "/admission" },
   },
 ];
 
