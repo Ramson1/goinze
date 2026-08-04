@@ -22,6 +22,7 @@ export function getToken(): string | null {
 export function clearTokens() {
   if (typeof document === 'undefined') return;
   document.cookie = 'goinze_token=; path=/; max-age=0';
+  document.cookie = 'goinze_refresh_token=; path=/; max-age=0';
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

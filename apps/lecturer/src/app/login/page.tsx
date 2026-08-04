@@ -7,6 +7,17 @@ import { useState, type FormEvent } from 'react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
 
+function decodeRoleFromToken(token: string): string | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1]));
+    return payload.role ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -43,11 +54,27 @@ export default function LoginPage() {
         throw new Error('Authentication succeeded but no token was returned.');
       }
 
-      // Store the access token in a cookie (httpOnly is preferred server-side;
-      // this client cookie is a placeholder for the portal session flow).
+      // Store the access token in a cookie
       document.cookie = `goinze_token=${accessToken}; path=/; max-age=${
         60 * 60 * 24 * 7
       }; SameSite=Lax`;
+
+      // Store the refresh token for silent renewal
+      const refreshToken: string | undefined =
+        data?.data?.refreshToken ?? data?.refreshToken;
+      if (refreshToken) {
+        document.cookie = `goinze_refresh_token=${refreshToken}; path=/; max-age=${
+          60 * 60 * 24 * 30
+        }; SameSite=Lax`;
+      }
+
+      // Verify the user has a lecturer role
+      const role = decodeRoleFromToken(accessToken);
+      if (!role || role !== 'LECTURER') {
+        document.cookie = 'goinze_token=; path=/; max-age=0';
+        document.cookie = 'goinze_refresh_token=; path=/; max-age=0';
+        throw new Error('Your account does not have permission to access the lecturer portal.');
+      }
 
       router.push('/dashboard');
       router.refresh();

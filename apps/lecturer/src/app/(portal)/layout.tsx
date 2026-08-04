@@ -12,6 +12,17 @@ function getCookie(name: string): string | null {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
+function decodeRoleFromToken(token: string): string | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1]));
+    return payload.role ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export default function PortalLayout({
   children,
 }: Readonly<{
@@ -19,15 +30,35 @@ export default function PortalLayout({
 }>) {
   const router = useRouter();
   const [authChecked, setAuthChecked] = useState(false);
+  const [roleError, setRoleError] = useState<string | null>(null);
 
   useEffect(() => {
     const token = getCookie('goinze_token');
     if (!token) {
       router.replace('/login');
-    } else {
-      setAuthChecked(true);
+      return;
     }
+    const role = decodeRoleFromToken(token);
+    if (!role || role !== 'LECTURER') {
+      setRoleError('This portal is for lecturers only.');
+      document.cookie = 'goinze_token=; path=/; max-age=0';
+      setTimeout(() => router.replace('/login'), 2500);
+      return;
+    }
+    setAuthChecked(true);
   }, [router]);
+
+  if (roleError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <p className="text-lg font-semibold text-red-600">Access Denied</p>
+          <p className="mt-2 text-sm text-slate-500">{roleError}</p>
+          <p className="mt-1 text-xs text-slate-400">Redirecting to login…</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!authChecked) {
     return (

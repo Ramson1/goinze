@@ -15,6 +15,19 @@ import {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
 
+const STUDENT_ROLES = new Set(['STUDENT', 'PARENT']);
+
+function decodeRoleFromToken(token: string): string | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1]));
+    return payload.role ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function setTokenCookie(name: string, value: string, days = 7) {
   const expires = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toUTCString();
   document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
@@ -59,6 +72,15 @@ export default function LoginPage() {
       setTokenCookie('gz_access_token', accessToken);
       if (json?.data?.refreshToken) {
         setTokenCookie('gz_refresh_token', json.data.refreshToken as string, 30);
+      }
+
+      // Verify the user has a student role
+      const role = decodeRoleFromToken(accessToken);
+      if (!role || !STUDENT_ROLES.has(role)) {
+        // Clear the token — this portal is for students only
+        document.cookie = 'gz_access_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+        document.cookie = 'gz_refresh_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+        throw new Error('Your account does not have permission to access the student portal.');
       }
 
       router.push('/dashboard');

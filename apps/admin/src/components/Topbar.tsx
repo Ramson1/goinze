@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Bell, ChevronDown, LogOut, Menu, Search, Settings, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -15,10 +16,17 @@ const notifications = [
 ];
 
 export default function Topbar({ onMenuClick }: TopbarProps) {
+  const router = useRouter();
   const [notifOpen, setNotifOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
+
+  function handleSignOut() {
+    document.cookie = 'access_token=; path=/; max-age=0';
+    document.cookie = 'refresh_token=; path=/; max-age=0';
+    router.replace('/login');
+  }
 
   // Close popovers when clicking outside
   useEffect(() => {
@@ -130,7 +138,11 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
                 </li>
               </ul>
               <div className="border-t border-gray-100 py-1">
-                <button type="button" className="flex w-full items-center gap-2.5 px-4 py-2 text-sm font-medium text-rose-600 hover:bg-rose-50">
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  className="flex w-full items-center gap-2.5 px-4 py-2 text-sm font-medium text-rose-600 hover:bg-rose-50"
+                >
                   <LogOut className="h-4 w-4" /> Sign out
                 </button>
               </div>

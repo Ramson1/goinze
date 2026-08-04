@@ -7,6 +7,19 @@ import { AlertCircle, Eye, EyeOff, Loader2, Lock, Mail } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
 
+const ADMIN_ROLES = new Set(['SUPER_ADMIN', 'SCHOOL_ADMIN', 'ADMISSION_OFFICER', 'ACCOUNTANT']);
+
+function decodeRoleFromToken(token: string): string | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1]));
+    return payload.role ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -45,6 +58,15 @@ export default function LoginPage() {
       const refreshToken: string | undefined = data?.refreshToken ?? data?.data?.refreshToken;
       if (refreshToken) {
         document.cookie = `refresh_token=${refreshToken}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
+      }
+
+      // Verify the user has an admin role
+      const role = decodeRoleFromToken(token);
+      if (!role || !ADMIN_ROLES.has(role)) {
+        // Clear the token — this portal is for admin/staff only
+        document.cookie = 'access_token=; path=/; max-age=0';
+        document.cookie = 'refresh_token=; path=/; max-age=0';
+        throw new Error('Your account does not have permission to access the admin dashboard.');
       }
 
       router.push('/dashboard');
