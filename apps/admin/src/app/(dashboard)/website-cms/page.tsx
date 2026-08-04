@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import {
+  CheckCircle,
   Database,
+  ExternalLink,
   Globe,
   Image as ImageIcon,
   Pencil,
@@ -23,6 +25,8 @@ import {
 type Tab = 'content' | 'gallery';
 
 const KEY_PATTERN = /^[a-z0-9]+(?:[._-][a-z0-9]+)*$/;
+
+const WEB_URL = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000';
 
 const SUGGESTED_KEYS: { key: string; title: string }[] = [
   { key: 'home.hero', title: 'Homepage Hero' },
@@ -75,6 +79,7 @@ export default function WebsiteCmsPage() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadMode, setUploadMode] = useState<'url' | 'file'>('file');
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -125,12 +130,22 @@ export default function WebsiteCmsPage() {
     }
     setBusy('save-block');
     try {
+      // If the body is valid JSON, store it directly so arrays/objects
+      // are preserved for the public website's asArray()/asObject() helpers.
+      let parsedBody: unknown;
+      try {
+        parsedBody = JSON.parse(blockBody);
+      } catch {
+        parsedBody = blockBody;
+      }
+
       await cmsApi.upsertContent({
         key,
         title: blockTitle.trim() || undefined,
-        body: { text: blockBody },
+        body: parsedBody,
       });
       setBlockOpen(false);
+      setSuccessMsg(`Content block "${key}" saved successfully.`);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save content block.');
@@ -174,6 +189,7 @@ export default function WebsiteCmsPage() {
       setMediaType('IMAGE');
       setUploadFile(null);
       setUploadMode('file');
+      setSuccessMsg('Gallery item added successfully.');
       await load();
     } catch (err) {
       setUploading(false);
@@ -228,15 +244,25 @@ export default function WebsiteCmsPage() {
         title="Website CMS"
         subtitle="Manage the content blocks and gallery of your public school website."
         action={
-          tab === 'content' ? (
-            <button type="button" onClick={openNewBlock} className="btn-primary">
-              <Plus className="h-4 w-4" /> New Block
-            </button>
-          ) : (
-            <button type="button" onClick={() => setGalleryOpen(true)} className="btn-primary">
-              <Plus className="h-4 w-4" /> Add Media
-            </button>
-          )
+          <div className="flex items-center gap-2">
+            <a
+              href={WEB_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-secondary flex items-center gap-1.5"
+            >
+              <ExternalLink className="h-4 w-4" /> Preview on Website
+            </a>
+            {tab === 'content' ? (
+              <button type="button" onClick={openNewBlock} className="btn-primary">
+                <Plus className="h-4 w-4" /> New Block
+              </button>
+            ) : (
+              <button type="button" onClick={() => setGalleryOpen(true)} className="btn-primary">
+                <Plus className="h-4 w-4" /> Add Media
+              </button>
+            )}
+          </div>
         }
       />
 
@@ -263,6 +289,20 @@ export default function WebsiteCmsPage() {
           <ImageIcon className="h-4 w-4" /> Gallery
         </button>
       </div>
+
+      {successMsg && (
+        <div className="mb-4 flex items-center gap-2 rounded-xl border border-green-100 bg-green-50 px-4 py-3 text-sm font-medium text-green-700">
+          <CheckCircle className="h-4 w-4 shrink-0" />
+          <span>{successMsg}</span>
+          <button
+            type="button"
+            onClick={() => setSuccessMsg(null)}
+            className="ml-auto text-green-400 hover:text-green-600"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="mb-5 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
@@ -405,8 +445,8 @@ export default function WebsiteCmsPage() {
                   value={blockBody}
                   onChange={(e) => setBlockBody(e.target.value)}
                   rows={7}
-                  placeholder="Write the content for this block…"
-                  className="input resize-none"
+                  placeholder="Write plain text, or paste JSON for structured content (arrays/objects)"
+                  className="input resize-none font-mono text-sm"
                 />
               </div>
 

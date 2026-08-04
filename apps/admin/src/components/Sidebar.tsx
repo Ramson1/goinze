@@ -189,6 +189,18 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
         <div className="shrink-0 border-t border-white/10 px-5 py-4">
           <p className="text-xs text-blue-300/70">Goinzeschool ERP</p>
           <p className="text-[11px] text-blue-300/50">Admin Portal · v0.1.0</p>
+          <p className="mt-2 text-[10px] leading-tight text-blue-300/40">
+            Designed &amp; developed by{' '}
+            <a
+              href="https://rhemaexpertsolutions.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-200/60 hover:text-white"
+            >
+              Rhema Expert Solutions
+            </a>
+          </p>
+          <p className="text-[10px] text-blue-300/40">+234 803 522 6642</p>
         </div>
       </aside>
     </>

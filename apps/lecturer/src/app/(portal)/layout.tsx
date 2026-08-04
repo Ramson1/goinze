@@ -44,6 +44,21 @@ export default function PortalLayout({
         <div className="pl-64">
           <Topbar />
           <main className="mx-auto w-full max-w-7xl px-6 py-8">{children}</main>
+          <footer className="border-t border-slate-200/80 px-6 py-4 text-center text-xs text-slate-400">
+            <p>Goinzeschool Lecturer Portal · Enterprise School ERP</p>
+            <p className="mt-1 text-[11px] text-slate-400">
+              Designed &amp; developed by{' '}
+              <a
+                href="https://rhemaexpertsolutions.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-brand hover:underline"
+              >
+                Rhema Expert Solutions
+              </a>
+              {' '}| +234 803 522 6642
+            </p>
+          </footer>
         </div>
       </div>
     </LecturerProvider>

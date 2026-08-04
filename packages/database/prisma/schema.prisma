@@ -165,6 +165,12 @@ enum AttendanceMethod {
   BIOMETRIC
 }
 
+enum StaffCategory {
+  ACADEMIC
+  NON_ACADEMIC
+  ADMINISTRATIVE
+}
+
 enum IdCardType {
   STUDENT
   STAFF
@@ -473,6 +479,7 @@ model Staff {
   employmentDate  DateTime?
   qualification   String?
   isLecturer      Boolean  @default(false)
+  staffCategory   StaffCategory?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

@@ -13,12 +13,14 @@ export class StaffService {
     query: PaginationDto,
     departmentId?: string,
     isLecturer?: string,
+    staffCategory?: string,
   ): Promise<Paginated<any>> {
     const where: Record<string, any> = {};
     if (schoolId) where.schoolId = schoolId;
     if (departmentId) where.departmentId = departmentId;
     if (isLecturer === 'true') where.isLecturer = true;
     if (isLecturer === 'false') where.isLecturer = false;
+    if (staffCategory) where.staffCategory = staffCategory;
     if (query.search) {
       where.OR = [
         { firstName: { contains: query.search, mode: 'insensitive' } },
@@ -86,6 +88,7 @@ export class StaffService {
           : undefined,
         qualification: data.qualification,
         isLecturer: Boolean(data.isLecturer),
+        staffCategory: data.staffCategory || undefined,
       },
     });
   }
@@ -107,6 +110,7 @@ export class StaffService {
         employmentType: data.employmentType,
         qualification: data.qualification,
         isLecturer: data.isLecturer,
+        staffCategory: data.staffCategory,
       },
     });
   }

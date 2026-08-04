@@ -47,7 +47,19 @@ export default function PortalLayout({
           <Topbar onMenuClick={() => setSidebarOpen(true)} />
           <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
           <footer className="border-t border-slate-200/80 px-4 py-4 text-center text-xs text-slate-400 sm:px-6 lg:px-8">
-            Goinzeschool Student Portal · Enterprise School ERP
+            <p>Goinzeschool Student Portal · Enterprise School ERP</p>
+            <p className="mt-1 text-[11px] text-slate-400">
+              Designed &amp; developed by{' '}
+              <a
+                href="https://rhemaexpertsolutions.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-brand hover:underline"
+              >
+                Rhema Expert Solutions
+              </a>
+              {' '}| +234 803 522 6642
+            </p>
           </footer>
         </div>
       </div>

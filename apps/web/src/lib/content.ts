@@ -44,12 +44,37 @@ export function getBlockBody(blocks: WebsiteContentRecord[], key: string): unkno
   return block?.body ?? null;
 }
 
-/** Tolerant array coercion — accepts arrays, or JSON strings that parse to arrays. */
+/**
+ * Unwrap the `{ text: "..." }` envelope that the admin CMS stores.
+ * If the value is `{ text: <string> }`, try to JSON-parse the text;
+ * otherwise return the raw text so callers can still display it.
+ */
+function unwrapText(value: unknown): unknown {
+  if (
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    "text" in (value as Record<string, unknown>)
+  ) {
+    const inner = (value as Record<string, unknown>).text;
+    if (typeof inner === "string") {
+      try {
+        return JSON.parse(inner);
+      } catch {
+        return inner; // plain text — return as-is
+      }
+    }
+  }
+  return value;
+}
+
+/** Tolerant array coercion — accepts arrays, JSON strings, or {text: JSON-string}. */
 export function asArray(value: unknown): any[] {
-  if (Array.isArray(value)) return value;
-  if (typeof value === "string") {
+  const v = unwrapText(value);
+  if (Array.isArray(v)) return v;
+  if (typeof v === "string") {
     try {
-      const parsed = JSON.parse(value);
+      const parsed = JSON.parse(v);
       return Array.isArray(parsed) ? parsed : [];
     } catch {
       return [];
@@ -58,14 +83,15 @@ export function asArray(value: unknown): any[] {
   return [];
 }
 
-/** Tolerant object coercion — accepts objects, or JSON strings that parse to objects. */
+/** Tolerant object coercion — accepts objects, JSON strings, or {text: JSON-string}. */
 export function asObject(value: unknown): Record<string, any> {
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    return value as Record<string, any>;
+  const v = unwrapText(value);
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    return v as Record<string, any>;
   }
-  if (typeof value === "string") {
+  if (typeof v === "string") {
     try {
-      const parsed = JSON.parse(value);
+      const parsed = JSON.parse(v);
       return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
     } catch {
       return {};

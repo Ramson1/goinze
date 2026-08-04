@@ -19,6 +19,38 @@ function getToken(): string | null {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
+function getRefreshToken(): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(/(?:^|; )refresh_token=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+/** Silently refresh the access token using the stored refresh token. */
+async function refreshAccessToken(): Promise<boolean> {
+  const rt = getRefreshToken();
+  if (!rt) return false;
+  try {
+    const res = await fetch(`${API_URL}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: rt }),
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    const newAccess = data?.accessToken ?? data?.data?.accessToken;
+    const newRefresh = data?.refreshToken ?? data?.data?.refreshToken;
+    if (!newAccess) return false;
+    const maxAge = data?.expiresIn ?? 900;
+    document.cookie = `access_token=${newAccess}; path=/; max-age=${maxAge}; SameSite=Lax`;
+    if (newRefresh) {
+      document.cookie = `refresh_token=${newRefresh}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Lax`;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = getToken();
   const res = await fetch(`${API_URL}${path}`, {
@@ -29,6 +61,30 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...(init?.headers ?? {}),
     },
   });
+
+  // Auto-refresh on 401 (token expired) — retry once
+  if (res.status === 401) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      const newToken = getToken();
+      const retry = await fetch(`${API_URL}${path}`, {
+        ...init,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(newToken ? { Authorization: `Bearer ${newToken}` } : {}),
+          ...(init?.headers ?? {}),
+        },
+      });
+      const text = await retry.text();
+      let body: any = null;
+      try { body = text ? JSON.parse(text) : null; } catch { body = text; }
+      if (!retry.ok) {
+        const message = (body && (body.message || body.error)) || `Request failed (${retry.status})`;
+        throw new ApiError(Array.isArray(message) ? message.join(', ') : message, retry.status);
+      }
+      return body as T;
+    }
+  }
 
   const text = await res.text();
   let body: any = null;
@@ -325,6 +381,11 @@ export interface DashboardSummary {
     activeExams: number;
     pendingPayments: number;
   };
+  staffCounts: {
+    lecturers: number;
+    nonAcademic: number;
+    administrative: number;
+  };
   revenue: number;
 }
 
@@ -344,6 +405,30 @@ export interface NameValue {
   value: number;
 }
 
+export interface RatioPoint {
+  name: string;
+  students: number;
+  staff: number;
+}
+
+export interface PaymentStatusPoint {
+  name: string;
+  count: number;
+  amount: number;
+}
+
+export interface EnrollmentTrendPoint {
+  month: string;
+  count: number;
+}
+
+export interface StaffBreakdownPoint {
+  name: string;
+  lecturers: number;
+  nonAcademic: number;
+  administrative: number;
+}
+
 export const analyticsApi = {
   dashboard: () => api.get<DashboardSummary>('/analytics/dashboard'),
   revenueByMonth: () => api.get<RevenuePoint[]>('/analytics/revenue-by-month'),
@@ -351,6 +436,13 @@ export const analyticsApi = {
   enrollmentByDepartment: () => api.get<NameValue[]>('/analytics/enrollment-by-department'),
   genderDistribution: () => api.get<NameValue[]>('/analytics/gender-distribution'),
   paymentMethods: () => api.get<NameValue[]>('/analytics/payment-methods'),
+  staffByDepartment: () => api.get<NameValue[]>('/analytics/staff-by-department'),
+  staffByCategory: () => api.get<NameValue[]>('/analytics/staff-by-category'),
+  staffBreakdown: () => api.get<StaffBreakdownPoint[]>('/analytics/staff-breakdown'),
+  studentStaffRatio: () => api.get<RatioPoint[]>('/analytics/student-staff-ratio'),
+  paymentStatusBreakdown: () => api.get<PaymentStatusPoint[]>('/analytics/payment-status-breakdown'),
+  enrollmentTrend: () => api.get<EnrollmentTrendPoint[]>('/analytics/enrollment-trend'),
+  programmeEnrollment: () => api.get<NameValue[]>('/analytics/programme-enrollment'),
 };
 
 // ---- Staff ----
@@ -370,6 +462,7 @@ export interface StaffRecord {
   employmentDate: string | null;
   qualification: string | null;
   isLecturer: boolean;
+  staffCategory: string | null;
   departmentId: string | null;
   department: { id: string; name: string; code: string } | null;
   createdAt: string;
@@ -388,6 +481,7 @@ export interface StaffInput {
   employmentType?: string;
   qualification?: string;
   isLecturer?: boolean;
+  staffCategory?: string;
 }
 
 export const staffApi = {
@@ -397,6 +491,7 @@ export const staffApi = {
     search?: string;
     departmentId?: string;
     isLecturer?: string;
+    staffCategory?: string;
   }) => {
     const q = new URLSearchParams();
     if (params?.page) q.set('page', String(params.page));
@@ -404,6 +499,7 @@ export const staffApi = {
     if (params?.search) q.set('search', params.search);
     if (params?.departmentId) q.set('departmentId', params.departmentId);
     if (params?.isLecturer) q.set('isLecturer', params.isLecturer);
+    if (params?.staffCategory) q.set('staffCategory', params.staffCategory);
     const qs = q.toString();
     return api.get<Paginated<StaffRecord>>(`/staff${qs ? `?${qs}` : ''}`);
   },
@@ -765,19 +861,34 @@ export const cmsApi = {
     api.post<GalleryItemRecord>('/website/gallery', payload),
   /** Upload a file to Cloudinary and return the hosted URL. */
   uploadMedia: async (file: File): Promise<{ url: string; publicId: string }> => {
-    const token = getToken();
-    const formData = new FormData();
-    formData.append('file', file);
-    const res = await fetch(`${API_URL}/website/upload`, {
-      method: 'POST',
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: formData,
-    });
+    async function doUpload(token: string | null) {
+      const formData = new FormData();
+      formData.append('file', file);
+      return fetch(`${API_URL}/website/upload`, {
+        method: 'POST',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: formData,
+      });
+    }
+
+    let res = await doUpload(getToken());
+
+    // Auto-refresh on 401 — retry once
+    if (res.status === 401) {
+      const refreshed = await refreshAccessToken();
+      if (refreshed) {
+        res = await doUpload(getToken());
+      }
+    }
+
     const data = await res.json();
     if (!res.ok) {
       throw new ApiError(data?.message ?? 'Upload failed', res.status);
+    }
+    if (data?.error) {
+      throw new ApiError(data.error, 400);
     }
     return data;
   },

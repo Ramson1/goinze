@@ -25,6 +25,11 @@ import {
 import { cn } from '@/lib/utils';
 
 const EMPLOYMENT_TYPES = ['Full-time', 'Part-time', 'Contract', 'Adjunct'];
+const STAFF_CATEGORIES = [
+  { value: 'ACADEMIC', label: 'Academic Staff' },
+  { value: 'NON_ACADEMIC', label: 'Non-Academic Staff' },
+  { value: 'ADMINISTRATIVE', label: 'Administrative' },
+];
 const PAGE_SIZE = 10;
 
 export default function StaffPage() {
@@ -52,6 +57,7 @@ export default function StaffPage() {
     designation: '',
     employmentType: 'Full-time',
     isLecturer: false,
+    staffCategory: '',
   });
 
   const loadStaff = useCallback(() => {
@@ -122,6 +128,7 @@ export default function StaffPage() {
         designation: form.designation.trim() || undefined,
         employmentType: form.employmentType,
         isLecturer: form.isLecturer,
+        staffCategory: form.staffCategory || undefined,
       });
       setNotice(`${form.firstName.trim()} ${form.lastName.trim()} added.`);
       setForm({
@@ -134,6 +141,7 @@ export default function StaffPage() {
         designation: '',
         employmentType: 'Full-time',
         isLecturer: false,
+        staffCategory: '',
       });
       setShowForm(false);
       loadStaff();
@@ -189,6 +197,29 @@ export default function StaffPage() {
           {s.isLecturer ? 'Lecturer' : 'Staff'}
         </span>
       ),
+    },
+    {
+      key: 'staffCategory',
+      header: 'Category',
+      render: (s) => {
+        if (!s.staffCategory) return <span className="text-gray-400">—</span>;
+        const cat = STAFF_CATEGORIES.find((c) => c.value === s.staffCategory);
+        const colors: Record<string, string> = {
+          ACADEMIC: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
+          NON_ACADEMIC: 'bg-amber-50 text-amber-700 ring-amber-600/20',
+          ADMINISTRATIVE: 'bg-purple-50 text-purple-700 ring-purple-600/20',
+        };
+        return (
+          <span
+            className={cn(
+              'inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset',
+              colors[s.staffCategory] ?? 'bg-gray-100 text-gray-600 ring-gray-500/20',
+            )}
+          >
+            {cat?.label ?? s.staffCategory}
+          </span>
+        );
+      },
     },
     {
       key: 'employmentType',
@@ -347,6 +378,21 @@ export default function StaffPage() {
               <label htmlFor="isLecturer" className="text-sm font-medium text-gray-700">
                 This staff member is a lecturer (can be assigned courses)
               </label>
+            </div>
+            <div>
+              <label className="label">Staff category</label>
+              <select
+                value={form.staffCategory}
+                onChange={(e) => setField('staffCategory', e.target.value)}
+                className="input"
+              >
+                <option value="">— Select —</option>
+                {STAFF_CATEGORIES.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="flex items-end">
               <button type="submit" disabled={saving} className="btn-primary disabled:opacity-60">

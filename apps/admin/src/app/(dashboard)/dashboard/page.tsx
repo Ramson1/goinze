@@ -3,7 +3,9 @@
 import { useEffect, useState } from 'react';
 import {
   AlertCircle,
+  Briefcase,
   ClipboardCheck,
+  GraduationCap,
   Loader2,
   UserPlus,
   Users,
@@ -188,6 +190,34 @@ export default function DashboardPage() {
               value={summary ? summary.counts.pendingPayments.toLocaleString() : '—'}
               icon={ClipboardCheck}
               iconClassName="bg-rose-500/10 text-rose-600"
+            />
+          </div>
+
+          {/* Staff breakdown cards */}
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard
+              title="Total Staff"
+              value={summary ? summary.counts.staff.toLocaleString() : '—'}
+              icon={Briefcase}
+              iconClassName="bg-teal-500/10 text-teal-600"
+            />
+            <StatCard
+              title="Lecturers"
+              value={summary ? summary.staffCounts.lecturers.toLocaleString() : '—'}
+              icon={GraduationCap}
+              iconClassName="bg-indigo-500/10 text-indigo-600"
+            />
+            <StatCard
+              title="Non-Academic Staff"
+              value={summary ? summary.staffCounts.nonAcademic.toLocaleString() : '—'}
+              icon={Users}
+              iconClassName="bg-orange-500/10 text-orange-600"
+            />
+            <StatCard
+              title="Administrative Staff"
+              value={summary ? summary.staffCounts.administrative.toLocaleString() : '—'}
+              icon={Briefcase}
+              iconClassName="bg-violet-500/10 text-violet-600"
             />
           </div>
 

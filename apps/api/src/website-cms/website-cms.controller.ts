@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -137,7 +138,7 @@ export class WebsiteCmsController {
     @UploadedFile() file: Express.Multer.File | undefined,
   ) {
     if (!file) {
-      return { error: 'No file provided' };
+      throw new BadRequestException('No file provided');
     }
     const result = await this.websiteCmsService.uploadMedia(file.buffer);
     return { url: result.url, publicId: result.publicId };

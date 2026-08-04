@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { prisma } from '@goinze/database';
 import type { PrismaClient } from '@goinze/database';
 
@@ -9,6 +9,8 @@ import type { PrismaClient } from '@goinze/database';
  */
 @Injectable()
 export class PrismaService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(PrismaService.name);
+
   /** The shared PrismaClient singleton. */
   get client(): PrismaClient {
     return prisma;
@@ -20,7 +22,20 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleInit(): Promise<void> {
-    await prisma.$connect();
+    const maxRetries = 3;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        await prisma.$connect();
+        return;
+      } catch (err) {
+        this.logger.warn(
+          `Database connection attempt ${attempt}/${maxRetries} failed: ${(err as Error).message}`,
+        );
+        if (attempt === maxRetries) throw err;
+        // Wait before retrying — Neon may need time to wake from suspend
+        await new Promise((r) => setTimeout(r, 3000 * attempt));
+      }
+    }
   }
 
   async onModuleDestroy(): Promise<void> {

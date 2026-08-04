@@ -30,8 +30,9 @@ export class StaffController {
     @Query() query: PaginationDto,
     @Query('departmentId') departmentId?: string,
     @Query('isLecturer') isLecturer?: string,
+    @Query('staffCategory') staffCategory?: string,
   ) {
-    return this.staffService.findAll(user.schoolId, query, departmentId, isLecturer);
+    return this.staffService.findAll(user.schoolId, query, departmentId, isLecturer, staffCategory);
   }
 
   /** Public staff directory for the school website (privacy-friendly fields only). */

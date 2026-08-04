@@ -152,7 +152,19 @@ export default function Footer() {
 
       <div className="border-t border-slate-800">
         <div className="mx-auto max-w-7xl px-4 py-5 text-center text-sm text-slate-500 sm:px-6 lg:px-8">
-          © {new Date().getFullYear()} Goinze International School of Medical Health Science and Technology. All rights reserved.
+          <p>&copy; {new Date().getFullYear()} Goinze International School of Medical Health Science and Technology. All rights reserved.</p>
+          <p className="mt-2 text-xs text-slate-600">
+            Designed and developed by{' '}
+            <a
+              href="https://rhemaexpertsolutions.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-brand-light hover:underline"
+            >
+              Rhema Expert Solutions
+            </a>
+            {' '}| Contact: +234 803 522 6642
+          </p>
         </div>
       </div>
     </footer>

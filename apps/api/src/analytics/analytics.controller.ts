@@ -51,4 +51,39 @@ export class AnalyticsController {
   paymentMethods(@CurrentUser() user: SessionUser) {
     return this.analyticsService.paymentMethods(user.schoolId);
   }
+
+  @Get('staff-by-department')
+  staffByDepartment(@CurrentUser() user: SessionUser) {
+    return this.analyticsService.staffByDepartment(user.schoolId);
+  }
+
+  @Get('staff-by-category')
+  staffByCategory(@CurrentUser() user: SessionUser) {
+    return this.analyticsService.staffByCategory(user.schoolId);
+  }
+
+  @Get('staff-breakdown')
+  staffBreakdown(@CurrentUser() user: SessionUser) {
+    return this.analyticsService.staffBreakdown(user.schoolId);
+  }
+
+  @Get('student-staff-ratio')
+  studentStaffRatio(@CurrentUser() user: SessionUser) {
+    return this.analyticsService.studentStaffRatio(user.schoolId);
+  }
+
+  @Get('payment-status-breakdown')
+  paymentStatusBreakdown(@CurrentUser() user: SessionUser) {
+    return this.analyticsService.paymentStatusBreakdown(user.schoolId);
+  }
+
+  @Get('enrollment-trend')
+  enrollmentTrend(@CurrentUser() user: SessionUser) {
+    return this.analyticsService.enrollmentTrend(user.schoolId);
+  }
+
+  @Get('programme-enrollment')
+  programmeEnrollment(@CurrentUser() user: SessionUser) {
+    return this.analyticsService.programmeEnrollment(user.schoolId);
+  }
 }
