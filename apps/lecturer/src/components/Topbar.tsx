@@ -1,17 +1,12 @@
 'use client';
 
-import { Bell, ChevronDown, LogOut, Settings, User } from 'lucide-react';
-import { useState } from 'react';
+import { Bell, ChevronDown, LogOut, Search, Settings, User } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { currentAcademicSession } from '@goinze/shared-utils';
 import { useLecturer } from '@/lib/lecturer-context';
-import { clearTokens } from '@/lib/api';
-
-const notifications = [
-  { id: 'n1', text: 'CSC 203 CA 2 is now live — 61 students have started.', time: '5m ago' },
-  { id: 'n2', text: 'Ngozi Umeh resubmitted "Assignment 3 — Linked Lists".', time: '1h ago' },
-  { id: 'n3', text: `Result approval for CSC 101 (${currentAcademicSession()}) is complete.`, time: 'Yesterday' },
-];
+import { clearTokens, lecturerApi, type NotificationRecord } from '@/lib/api';
+import { cn } from '@/lib/cn';
 
 function initials(first?: string | null, last?: string | null): string {
   return `${first?.[0] ?? ''}${last?.[0] ?? ''}`.toUpperCase() || 'L';
@@ -22,6 +17,16 @@ export function Topbar() {
   const { profile } = useLecturer();
   const [notifOpen, setNotifOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
+  const notifRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    lecturerApi.notifications().then(setNotifications).catch(() => undefined);
+  }, []);
+
+  const unreadCount = notifications.filter((n) => n.status !== 'READ').length;
 
   function handleSignOut() {
     clearTokens();
@@ -29,8 +34,26 @@ export function Topbar() {
     router.refresh();
   }
 
+  function handleSearch(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+    }
+  }
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) setNotifOpen(false);
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
   return (
-    <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white/90 px-6 backdrop-blur">
+    <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-4 border-b border-slate-200 bg-white/90 px-6 backdrop-blur">
+      {/* Left: Lecturer info */}
       <div>
         <p className="text-sm font-semibold text-slate-900">
           {[profile?.title, profile?.firstName, profile?.lastName]
@@ -42,9 +65,26 @@ export function Topbar() {
         </p>
       </div>
 
+      {/* Center: Search */}
+      <form
+        onSubmit={handleSearch}
+        className="relative hidden w-full max-w-xs lg:block"
+      >
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <input
+          type="search"
+          placeholder="Search courses, students…"
+          className="input pl-9 text-sm"
+          aria-label="Search"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+      </form>
+
+      {/* Right: Notifications + Avatar */}
       <div className="flex items-center gap-3">
         {/* Notifications */}
-        <div className="relative">
+        <div className="relative" ref={notifRef}>
           <button
             type="button"
             onClick={() => {
@@ -55,35 +95,61 @@ export function Topbar() {
             aria-label="Notifications"
           >
             <Bell className="h-5 w-5" />
-            <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white">
-              3
-            </span>
+            {unreadCount > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-bold text-white">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
           </button>
           {notifOpen && (
-            <div className="absolute right-0 mt-2 w-80 rounded-xl border border-slate-200 bg-white shadow-lg">
-              <div className="border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-900">
-                Notifications
+            <div className="absolute right-0 mt-2 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                <p className="text-sm font-semibold text-slate-900">Notifications</p>
+                <Link
+                  href="/notifications"
+                  onClick={() => setNotifOpen(false)}
+                  className="text-xs font-medium text-brand hover:text-brand-dark"
+                >
+                  View all
+                </Link>
               </div>
-              <ul className="divide-y divide-slate-100">
-                {notifications.map((n) => (
-                  <li key={n.id} className="px-4 py-3">
-                    <p className="text-sm text-slate-700">{n.text}</p>
-                    <p className="mt-1 text-xs text-slate-400">{n.time}</p>
+              <ul className="max-h-80 divide-y divide-slate-100 overflow-y-auto">
+                {notifications.length === 0 ? (
+                  <li className="px-4 py-6 text-center text-xs text-slate-400">
+                    No notifications yet.
                   </li>
-                ))}
+                ) : (
+                  notifications.slice(0, 5).map((n) => (
+                    <li
+                      key={n.id}
+                      className="cursor-pointer px-4 py-3 transition hover:bg-slate-50"
+                      onClick={() => {
+                        lecturerApi.markNotificationRead(n.id).catch(() => undefined);
+                        setNotifOpen(false);
+                      }}
+                    >
+                      <div className="flex items-start gap-2.5">
+                        <span
+                          className={cn(
+                            'mt-1.5 h-2 w-2 shrink-0 rounded-full',
+                            n.status === 'READ' ? 'bg-slate-300' : 'bg-brand',
+                          )}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-slate-700">{n.title}</p>
+                          <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">{n.body}</p>
+                        </div>
+                      </div>
+                    </li>
+                  ))
+                )}
               </ul>
-              <button
-                type="button"
-                className="w-full rounded-b-xl px-4 py-2.5 text-center text-xs font-semibold text-brand hover:bg-slate-50"
-              >
-                View all notifications
-              </button>
             </div>
           )}
         </div>
 
         {/* Avatar menu */}
-        <div className="relative">
+        <div className="relative" ref={menuRef}>
           <button
             type="button"
             onClick={() => {
@@ -101,27 +167,29 @@ export function Topbar() {
             <ChevronDown className="h-4 w-4 text-slate-400" />
           </button>
           {menuOpen && (
-            <div className="absolute right-0 mt-2 w-56 rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+            <div className="absolute right-0 mt-2 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
               <div className="border-b border-slate-100 px-4 py-3">
                 <p className="text-sm font-semibold text-slate-900">
                   {[profile?.title, profile?.firstName, profile?.lastName]
                     .filter(Boolean)
                     .join(' ') || 'Lecturer'}
                 </p>
-                <p className="text-xs text-slate-500">{profile?.email ?? '—'}</p>
+                <p className="mt-0.5 truncate text-xs text-slate-500">{profile?.email ?? '—'}</p>
               </div>
-              <button
-                type="button"
+              <Link
+                href="/profile"
+                onClick={() => setMenuOpen(false)}
                 className="flex w-full items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
               >
                 <User className="h-4 w-4 text-slate-400" /> My Profile
-              </button>
-              <button
-                type="button"
+              </Link>
+              <Link
+                href="/settings"
+                onClick={() => setMenuOpen(false)}
                 className="flex w-full items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
               >
                 <Settings className="h-4 w-4 text-slate-400" /> Settings
-              </button>
+              </Link>
               <button
                 type="button"
                 onClick={handleSignOut}

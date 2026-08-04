@@ -242,6 +242,17 @@ export interface Contact {
   courseCode: string;
 }
 
+// ---- Notifications ----
+
+export interface NotificationRecord {
+  id: string;
+  title: string;
+  body: string;
+  channel: string;
+  status: 'QUEUED' | 'SENT' | 'DELIVERED' | 'FAILED' | 'READ';
+  createdAt: string;
+}
+
 // ---- School events (website CMS, used by the calendar) ----
 
 export interface SchoolEvent {
@@ -356,6 +367,11 @@ export const lecturerApi = {
   markMessageRead: (id: string) =>
     api.patch<InboxMessage>(`/communication/messages/${id}/read`),
   contacts: () => api.get<Contact[]>('/lecturers/me/contacts'),
+
+  // Notifications
+  notifications: () => api.get<NotificationRecord[]>('/communication/notifications'),
+  markNotificationRead: (id: string) =>
+    api.patch<NotificationRecord>(`/communication/notifications/${id}/read`),
 
   // Profile
   updateProfile: (payload: { phone?: string; designation?: string; qualification?: string }) =>

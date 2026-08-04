@@ -8,6 +8,7 @@ import {
   ChevronDown,
   LogOut,
   Menu,
+  Search,
   Settings,
   User,
   GraduationCap,
@@ -30,6 +31,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
   const { profile } = useStudent();
   const [notifOpen, setNotifOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const notifRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -61,6 +63,13 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
     router.push('/login');
   }
 
+  function handleSearch(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+    }
+  }
+
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/90 backdrop-blur">
       <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
@@ -79,6 +88,22 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
           </div>
         </div>
 
+        {/* Center: Search */}
+        <form
+          onSubmit={handleSearch}
+          className="relative hidden w-full max-w-xs md:block"
+        >
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            type="search"
+            placeholder="Search courses, results…"
+            className="input pl-9 text-sm"
+            aria-label="Search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </form>
+
         {/* Right: notifications + avatar */}
         <div className="flex items-center gap-2 sm:gap-3">
           {/* Notifications */}
@@ -91,7 +116,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
               <Bell className="h-5 w-5" />
               {unread > 0 && (
                 <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-bold text-white">
-                  {unread}
+                  {unread > 9 ? '9+' : unread}
                 </span>
               )}
             </button>
@@ -114,8 +139,15 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
                       No notifications yet.
                     </li>
                   )}
-                  {notifications.slice(0, 4).map((n) => (
-                    <li key={n.id} className="px-4 py-3 transition hover:bg-slate-50">
+                  {notifications.slice(0, 5).map((n) => (
+                    <li
+                      key={n.id}
+                      className="cursor-pointer px-4 py-3 transition hover:bg-slate-50"
+                      onClick={() => {
+                        commApi.markNotificationRead(n.id).catch(() => undefined);
+                        setNotifOpen(false);
+                      }}
+                    >
                       <div className="flex items-start gap-2.5">
                         <span
                           className={cn(
@@ -123,7 +155,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
                             n.status === 'READ' ? 'bg-slate-300' : 'bg-brand',
                           )}
                         />
-                        <div>
+                        <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium text-slate-900">{n.title}</p>
                           <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">{n.body}</p>
                         </div>

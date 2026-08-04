@@ -932,11 +932,29 @@ export const settingsApi = {
 };
 
 export const authApi = {
+  me: () => api.get<{ id: string; email: string; firstName: string; lastName: string; role: string }>('/auth/me'),
   changePassword: (currentPassword: string, newPassword: string) =>
     api.patch<{ success: boolean }>('/auth/change-password', {
       currentPassword,
       newPassword,
     }),
+};
+
+// ---- Notifications ----
+
+export interface NotificationRecord {
+  id: string;
+  title: string;
+  body: string;
+  channel: string;
+  status: 'QUEUED' | 'SENT' | 'DELIVERED' | 'FAILED' | 'READ';
+  createdAt: string;
+}
+
+export const notificationApi = {
+  list: () => api.get<NotificationRecord[]>('/communication/notifications'),
+  markRead: (id: string) =>
+    api.patch<NotificationRecord>(`/communication/notifications/${id}/read`),
 };
 
 // ---- Security ----
