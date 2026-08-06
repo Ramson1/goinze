@@ -131,17 +131,17 @@ function IdCardFront({
   return (
     <div ref={innerRef} data-card className="flex h-[214px] w-[340px] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg" style={{ fontFamily: 'system-ui, sans-serif' }}>
       {/* Header */}
-      <div className={cn('flex items-center gap-2 bg-gradient-to-r px-3 py-1.5 text-white', accent)}>
+      <div className={cn('flex items-center gap-2 bg-gradient-to-r px-3 pt-1 pb-2 text-white', accent)}>
         {(school?.logoUrl || '/logo.png') ? (
-          <img src={school?.logoUrl || '/logo.png'} alt="" className="self-center h-7 w-7 shrink-0 rounded-full object-contain bg-white/90 p-0.5 ring-1 ring-white/30" />
+          <img src={school?.logoUrl || '/logo.png'} alt="" className="mt-auto mb-auto h-7 w-7 shrink-0 rounded-full object-contain bg-white/90 p-0.5 ring-1 ring-white/30" />
         ) : (
-          <ShieldCheck className="self-center h-5 w-5 shrink-0 text-white/80" />
+          <ShieldCheck className="mt-auto mb-auto h-5 w-5 shrink-0 text-white/80" />
         )}
-        <div className="min-w-0 flex-1">
+        <div className="mt-auto mb-auto min-w-0 flex-1">
           <p className="text-[9px] font-bold leading-[1.2]">Goinze International School</p>
           <p className="text-[7px] font-semibold leading-[1.2] opacity-90">of Medical Health Science and Technology</p>
         </div>
-        <span className={cn('self-center shrink-0 rounded-full px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-wider', badgeBg)}>
+        <span className={cn('mt-auto mb-auto inline-flex items-center justify-center shrink-0 rounded-full px-2 py-[3px] text-[7px] font-bold uppercase tracking-wider leading-none', badgeBg)}>
           {isStudent ? 'Student' : 'Staff'} ID
         </span>
       </div>
