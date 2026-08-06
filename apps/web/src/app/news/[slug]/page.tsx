@@ -117,7 +117,7 @@ export default function NewsArticlePage() {
               </p>
             ))}
           </article>
-          <CommentSection />
+          <CommentSection newsPostId={post.id} />
         </div>
       </Container>
     </>

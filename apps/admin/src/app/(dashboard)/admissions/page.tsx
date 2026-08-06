@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   AlertCircle,
   Check,
@@ -35,9 +36,12 @@ const STATUS_FILTERS = [
 const reviewable = new Set(['SUBMITTED', 'UNDER_REVIEW', 'INTERVIEW']);
 
 export default function AdmissionsPage() {
+  const searchParams = useSearchParams();
+  const initialSearch = searchParams.get('search') ?? '';
   const [rows, setRows] = useState<ApplicationRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState(initialSearch);
   const [status, setStatus] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -47,6 +51,7 @@ export default function AdmissionsPage() {
     setError(null);
     try {
       const res = await admissionsApi.list({
+        search: search || undefined,
         status: status || undefined,
         pageSize: 50,
       });
@@ -60,7 +65,7 @@ export default function AdmissionsPage() {
     } finally {
       setLoading(false);
     }
-  }, [status]);
+  }, [status, search]);
 
   useEffect(() => {
     load();

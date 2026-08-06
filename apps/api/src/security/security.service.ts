@@ -40,6 +40,7 @@ export class SecurityService {
     entity?: string;
     entityId?: string;
     metadata?: any;
+    ipAddress?: string;
   }) {
     return this.prisma.db.auditLog.create({
       data: {
@@ -49,6 +50,7 @@ export class SecurityService {
         entity: data.entity,
         entityId: data.entityId,
         metadata: data.metadata,
+        ipAddress: data.ipAddress,
       },
     });
   }

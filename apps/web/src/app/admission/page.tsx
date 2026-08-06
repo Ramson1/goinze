@@ -6,30 +6,15 @@ import PageHeader from "@/components/PageHeader";
 import Section from "@/components/Section";
 import Card from "@/components/Card";
 import AdmissionForm from "@/components/AdmissionForm";
-import { asArray, defaultFees, getBlockBody, useContentBlocks } from "@/lib/content";
+import {
+  asArray,
+  defaultAdmissionRequirements,
+  defaultFees,
+  getBlockBody,
+  useContentBlocks,
+} from "@/lib/content";
 
-const requirements = [
-  {
-    Icon: FileText,
-    title: "SSCE Credit Passes",
-    body: "Credit passes at SSCE (WAEC, NECO or GCE O/L) in no more than two sittings, including English Language, Mathematics and Biology or Health Science, as required by your chosen programme.",
-  },
-  {
-    Icon: ClipboardList,
-    title: "Entrance Examination",
-    body: "Secure the cut-off pass mark in the entrance examination and be successful at an interview conducted by the college authority.",
-  },
-  {
-    Icon: CheckCircle2,
-    title: "Certificates & Documents",
-    body: "Original certificates/results, testimonials, birth certificate or declaration of age, indigene certificate and a letter of attestation from a respected member of your community.",
-  },
-  {
-    Icon: CreditCard,
-    title: "Acceptance & Registration Fees",
-    body: "Pay the acceptance and registration fees through the designated banks and complete your registration formalities within the specified time frame.",
-  },
-];
+const reqIcons = [FileText, ClipboardList, CheckCircle2, CreditCard];
 
 export default function AdmissionPage() {
   const { blocks } = useContentBlocks();
@@ -37,6 +22,11 @@ export default function AdmissionPage() {
   const fees = (() => {
     const cms = asArray(getBlockBody(blocks, "admission.fees"));
     return cms.length > 0 ? cms : defaultFees;
+  })();
+
+  const requirements = (() => {
+    const cms = asArray(getBlockBody(blocks, "admission.requirements"));
+    return cms.length > 0 ? cms : defaultAdmissionRequirements;
   })();
 
   return (
@@ -54,15 +44,18 @@ export default function AdmissionPage() {
         subtitle="Make sure you have the following ready before starting your application."
       >
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {requirements.map(({ Icon, title, body }) => (
-            <Card key={title} hover className="p-6">
-              <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-brand">
-                <Icon className="h-5 w-5" />
-              </span>
-              <h3 className="mt-4 text-base font-bold text-slate-900">{title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-600">{body}</p>
-            </Card>
-          ))}
+          {requirements.map((req: { title: string; body: string }, i: number) => {
+            const Icon = reqIcons[i % reqIcons.length];
+            return (
+              <Card key={req.title || i} hover className="p-6">
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-brand">
+                  <Icon className="h-5 w-5" />
+                </span>
+                <h3 className="mt-4 text-base font-bold text-slate-900">{req.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">{req.body}</p>
+              </Card>
+            );
+          })}
         </div>
       </Section>
 

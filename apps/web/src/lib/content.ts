@@ -115,8 +115,8 @@ export function initialsOf(name: string): string {
 /* Rendered when the matching CMS block has not been created yet.             */
 
 export const defaultStats = [
-  { label: "Academic Departments", value: "8" },
-  { label: "Diploma & HND Programmes", value: "25+" },
+  { label: "Academic Departments", value: "4" },
+  { label: "ND Programmes", value: "4" },
   { label: "Licensing & Examining Boards", value: "6" },
   { label: "Programmes Accredited", value: "100%" },
 ];
@@ -176,8 +176,8 @@ export const defaultManagementTeam = [
 ];
 
 export const defaultContactInfo = {
-  address: "Great Lato School, Along Zuma Round, Bwari Area Council, FCT Abuja, Nigeria",
-  phone: "0810 557 6617, 0805 817 6193, 0916 331 6143",
+  address: "Along Verita University Road Zuma 1, Opposite ECAW Church, Bwari Area Council, Abuja, Nigeria",
+  phone: "0810 557 6617, 0805 817 6193, 0816 512 9613",
   email: "gonzenicmhst@gmail.com",
   hours: "Monday – Friday, 8:00 AM – 4:00 PM",
 };
@@ -203,7 +203,7 @@ export const defaultAlumniStories = [
   {
     name: "Kwame Mensah",
     graduationYear: "2019",
-    programme: "HND Public Health",
+    programme: "ND Public Health (PH)",
     currentRole: "Public Health Officer, FCT Health Services",
     story:
       "The fieldwork at Goinze was real community work, not textbook exercises. That practical grounding has defined my entire public health career.",
@@ -211,7 +211,7 @@ export const defaultAlumniStories = [
   {
     name: "Aisha Bello",
     graduationYear: "2020",
-    programme: "ND Health Information Management",
+    programme: "ND Pharmacy Technician (PT)",
     currentRole: "Health Records Officer, General Hospital Bwari",
     story:
       "Goinze prepared me thoroughly for my professional registration. I passed my licensing examination at the first sitting.",
@@ -219,10 +219,32 @@ export const defaultAlumniStories = [
   {
     name: "Tunde Bakare",
     graduationYear: "2021",
-    programme: "Diploma in Medical Laboratory Technician",
+    programme: "ND Medical Lab Technician (MLT)",
     currentRole: "Laboratory Technician, Private Diagnostics Centre",
     story:
       "The laboratory practice at the college clinic meant I started my job already confident with real samples and real patients.",
   },
 ];
+
+export const defaultAdmissionRequirements = [
+  {
+    title: "SSCE Credit Passes",
+    body: "Credit passes at SSCE (WAEC, NECO or GCE O/L) in no more than two sittings, including English Language, Mathematics and Biology or Health Science, as required by your chosen programme.",
+  },
+  {
+    title: "Entrance Examination",
+    body: "Secure the cut-off pass mark in the entrance examination and be successful at an interview conducted by the college authority.",
+  },
+  {
+    title: "Certificates & Documents",
+    body: "Original certificates/results, testimonials, birth certificate or declaration of age, indigene certificate and a letter of attestation from a respected member of your community.",
+  },
+  {
+    title: "Acceptance & Registration Fees",
+    body: "Pay the acceptance and registration fees through the designated banks and complete your registration formalities within the specified time frame.",
+  },
+];
+
+export const defaultAcademicsNote =
+  "All programmes run on a two-semester academic calendar leading to the National Diploma (ND) qualification, awarded after 3 years of structured theoretical and practical training.";
 

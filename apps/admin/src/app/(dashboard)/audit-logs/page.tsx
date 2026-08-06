@@ -3,9 +3,12 @@
 import { useEffect, useState } from 'react';
 import {
   AlertCircle,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Download,
+  Eye,
   Loader2,
   Search,
 } from 'lucide-react';
@@ -21,6 +24,63 @@ function formatWhen(value: string | null): string | null {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return null;
   return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+/** Build a human-readable summary from audit log metadata. */
+function formatMetadataSummary(action: string, metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== 'object') return null;
+  const m = metadata as Record<string, any>;
+
+  // Profile changes with old/new values
+  if (m.changes && typeof m.changes === 'object') {
+    const fields = Object.keys(m.changes);
+    if (fields.length > 0) {
+      return fields.map((f) => {
+        const c = m.changes[f];
+        if (c && typeof c === 'object' && 'old' in c) {
+          return `${f}: "${c.old}" → "${c.new}"`;
+        }
+        return f;
+      }).join(', ');
+    }
+  }
+
+  // Changed fields array
+  if (Array.isArray(m.changedFields)) {
+    return `Changed: ${m.changedFields.join(', ')}`;
+  }
+
+  // Keys array (bulk settings update)
+  if (Array.isArray(m.keys)) {
+    return `Keys: ${m.keys.join(', ')}`;
+  }
+
+  // CMS content key
+  if (m.key) {
+    return m.title ? `${m.key}${m.title ? ` — "${m.title}"` : ''}` : m.key;
+  }
+
+  // News/event created with title
+  if (m.title) {
+    return `"${m.title}"${m.category ? ` (${m.category})` : ''}`;
+  }
+
+  // Login failed reason
+  if (m.reason) {
+    return m.email ? `${m.email} — ${m.reason}` : m.reason;
+  }
+
+  // Email on login
+  if (m.email) {
+    return m.email;
+  }
+
+  // Caption/album for gallery
+  if (m.caption || m.album) {
+    return [m.caption, m.album ? `album: ${m.album}` : ''].filter(Boolean).join(', ');
+  }
+
+  return null;
 }
 
 function downloadCsv(filename: string, header: string[], rows: (string | number)[][]) {
@@ -46,6 +106,7 @@ export default function AuditLogsPage() {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   // Debounce the search input.
   useEffect(() => {
@@ -115,6 +176,19 @@ export default function AuditLogsPage() {
         ),
     },
     {
+      key: 'details',
+      header: 'Change Details',
+      render: (r) => {
+        const summary = formatMetadataSummary(r.action, r.metadata);
+        if (!summary) return <span className="text-xs text-gray-300">—</span>;
+        return (
+          <span className="max-w-xs truncate text-xs text-gray-600" title={summary}>
+            {summary}
+          </span>
+        );
+      },
+    },
+    {
       key: 'ip',
       header: 'IP Address',
       className: 'font-mono text-xs',
@@ -126,6 +200,25 @@ export default function AuditLogsPage() {
       className: 'whitespace-nowrap',
       render: (r) => formatWhen(r.createdAt) ?? '—',
     },
+    {
+      key: 'expand',
+      header: '',
+      className: 'w-10',
+      render: (r) => (
+        <button
+          type="button"
+          onClick={() => setExpandedId(expandedId === r.id ? null : r.id)}
+          className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+          title="View full metadata"
+        >
+          {expandedId === r.id ? (
+            <ChevronUp className="h-4 w-4" />
+          ) : (
+            <ChevronDown className="h-4 w-4" />
+          )}
+        </button>
+      ),
+    },
   ];
 
   const rows = data?.items ?? [];
@@ -134,12 +227,13 @@ export default function AuditLogsPage() {
   function handleExport() {
     downloadCsv(
       `audit-logs-page-${page}.csv`,
-      ['Actor', 'Action', 'Entity', 'Entity ID', 'IP Address', 'Timestamp'],
+      ['Actor', 'Action', 'Entity', 'Entity ID', 'Change Details', 'IP Address', 'Timestamp'],
       rows.map((r) => [
         r.user?.email ?? 'System',
         r.action,
         r.entity ?? '',
         r.entityId ?? '',
+        formatMetadataSummary(r.action, r.metadata) ?? '',
         r.ipAddress ?? '',
         formatWhen(r.createdAt) ?? '',
       ]),
@@ -193,6 +287,27 @@ export default function AuditLogsPage() {
               keyField="id"
               emptyMessage="No audit log entries yet. Sign-ins and password changes are recorded automatically."
             />
+
+            {/* Expanded metadata panel */}
+            {expandedId && (() => {
+              const record = rows.find((r) => r.id === expandedId);
+              if (!record) return null;
+              return (
+                <div className="border-t border-gray-100 bg-gray-50/50 px-5 py-4">
+                  <div className="mb-2 flex items-center gap-2">
+                    <Eye className="h-3.5 w-3.5 text-gray-400" />
+                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Full Metadata
+                    </span>
+                  </div>
+                  <pre className="max-h-48 overflow-auto rounded-lg bg-gray-900 p-3 text-xs leading-relaxed text-gray-100">
+                    {record.metadata
+                      ? JSON.stringify(record.metadata, null, 2)
+                      : '(no metadata recorded)'}
+                  </pre>
+                </div>
+              );
+            })()}
 
             {/* Pagination */}
             <div className="flex items-center justify-between border-t border-gray-100 px-5 py-3.5">

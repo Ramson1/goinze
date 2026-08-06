@@ -32,7 +32,20 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { authApi, notificationApi, studentsApi, staffApi, financeApi, type NotificationRecord } from '@/lib/api';
+import {
+  authApi,
+  notificationApi,
+  studentsApi,
+  staffApi,
+  financeApi,
+  academicsApi,
+  sessionsApi,
+  admissionsApi,
+  newsApi,
+  eventsApi,
+  cmsApi,
+  type NotificationRecord,
+} from '@/lib/api';
 
 // ── Navigation items (mirrors Sidebar) ──────────────────────────────
 
@@ -42,6 +55,8 @@ interface NavItem {
   icon: LucideIcon;
   group: string;
   keywords?: string[];
+  /** If set, only these roles can see this item. */
+  roles?: string[];
 }
 
 const allNavItems: NavItem[] = [
@@ -60,8 +75,8 @@ const allNavItems: NavItem[] = [
   { label: 'Website CMS', href: '/website-cms', icon: Globe, group: 'Content', keywords: ['website', 'content blocks', 'gallery'] },
   { label: 'News', href: '/news', icon: Newspaper, group: 'Content', keywords: ['articles', 'announcements'] },
   { label: 'Events', href: '/events', icon: CalendarDays, group: 'Content', keywords: ['calendar', 'activities'] },
-  { label: 'Digital ID Cards', href: '/digital-id-cards', icon: IdCard, group: 'System', keywords: ['identity', 'badges'] },
-  { label: 'Communication', href: '/communication', icon: MessageSquare, group: 'System', keywords: ['messages', 'notifications', 'announcements'] },
+  { label: 'Announcements', href: '/communication', icon: MessageSquare, group: 'Content', keywords: ['messages', 'notifications', 'notice board', 'communication'] },
+  { label: 'Digital ID Cards', href: '/digital-id-cards', icon: IdCard, group: 'System', keywords: ['identity', 'badges'], roles: ['SUPER_ADMIN'] },
   { label: 'Settings', href: '/settings', icon: Settings, group: 'System', keywords: ['preferences', 'configuration', 'school profile'] },
   { label: 'Audit Logs', href: '/audit-logs', icon: ScrollText, group: 'System', keywords: ['security', 'history', 'activity'] },
 ];
@@ -98,6 +113,7 @@ interface UserProfile {
   firstName: string;
   lastName: string;
   role: string;
+  avatarUrl?: string | null;
 }
 
 export default function Topbar({ onMenuClick }: TopbarProps) {
@@ -115,6 +131,13 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
   const [studentResults, setStudentResults] = useState<ContentResult[]>([]);
   const [staffResults, setStaffResults] = useState<ContentResult[]>([]);
   const [paymentResults, setPaymentResults] = useState<ContentResult[]>([]);
+  const [courseResults, setCourseResults] = useState<ContentResult[]>([]);
+  const [sessionResults, setSessionResults] = useState<ContentResult[]>([]);
+  const [departmentResults, setDepartmentResults] = useState<ContentResult[]>([]);
+  const [admissionResults, setAdmissionResults] = useState<ContentResult[]>([]);
+  const [newsResults, setNewsResults] = useState<ContentResult[]>([]);
+  const [eventResults, setEventResults] = useState<ContentResult[]>([]);
+  const [contentResults, setContentResults] = useState<ContentResult[]>([]);
   const [searching, setSearching] = useState(false);
 
   const searchRef = useRef<HTMLDivElement>(null);
@@ -139,12 +162,21 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
       setStudentResults([]);
       setStaffResults([]);
       setPaymentResults([]);
+      setCourseResults([]);
+      setSessionResults([]);
+      setDepartmentResults([]);
+      setAdmissionResults([]);
+      setNewsResults([]);
+      setEventResults([]);
+      setContentResults([]);
       setSearching(false);
       return;
     }
 
     // Filter navigation items
-    const matched = allNavItems.filter((item) => {
+    const matched = allNavItems
+      .filter((item) => !item.roles || (profile?.role && item.roles.includes(profile.role)))
+      .filter((item) => {
       const hay = `${item.label} ${item.group} ${(item.keywords ?? []).join(' ')}`.toLowerCase();
       return hay.includes(q);
     });
@@ -153,44 +185,155 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
     // Search content via API (parallel)
     setSearching(true);
     Promise.allSettled([
+      // Students
       studentsApi.list({ search: q, pageSize: 3 }).then((res) =>
         res.items.map((s) => ({
           id: s.id,
           label: `${s.firstName} ${s.lastName}`,
           sublabel: s.matricNumber ?? s.programme?.name ?? s.status,
-          href: `/students`,
+          href: `/students?search=${encodeURIComponent(q)}`,
         })),
       ),
+      // Staff
       staffApi.list({ search: q, pageSize: 3 }).then((res) =>
         res.items.map((s) => ({
           id: s.id,
           label: `${s.firstName} ${s.lastName}`,
           sublabel: s.designation ?? s.department?.name ?? '',
-          href: `/staff`,
+          href: `/staff?search=${encodeURIComponent(q)}`,
         })),
       ),
+      // Payments
       financeApi.payments({ search: q, pageSize: 3 }).then((res) =>
         res.items.map((p) => ({
           id: p.id,
           label: p.reference,
           sublabel: `₦${p.amount} — ${p.student?.firstName ?? ''} ${p.student?.lastName ?? ''}`.trim(),
-          href: `/payments`,
+          href: `/payments?search=${encodeURIComponent(q)}`,
         })),
       ),
-    ]).then(([stu, stf, pay]) => {
+      // Courses
+      academicsApi.courses({ search: q, pageSize: 3 }).then((res) =>
+        res.items.map((c) => ({
+          id: c.id,
+          label: `${c.code} — ${c.title}`,
+          sublabel: `${c.creditUnits} units · ${c.department?.name ?? ''}`,
+          href: `/courses?search=${encodeURIComponent(q)}`,
+        })),
+      ),
+      // Academic Sessions (client-side filter)
+      sessionsApi.list().then((sessions) =>
+        sessions
+          .filter((s) => s.name.toLowerCase().includes(q))
+          .slice(0, 3)
+          .map((s) => ({
+            id: s.id,
+            label: s.name,
+            sublabel: s.isCurrent ? 'Current session' : `${s.startDate ?? ''} - ${s.endDate ?? ''}`,
+            href: `/academic-session`,
+          })),
+      ),
+      // Departments (client-side filter)
+      academicsApi.departments().then((depts) =>
+        depts
+          .filter((d) => d.name.toLowerCase().includes(q) || d.code.toLowerCase().includes(q))
+          .slice(0, 3)
+          .map((d) => ({
+            id: d.id,
+            label: d.name,
+            sublabel: d.code,
+            href: `/departments`,
+          })),
+      ),
+      // Admissions
+      admissionsApi.list({ search: q, pageSize: 3 }).then((res) =>
+        res.items.map((a) => ({
+          id: a.id,
+          label: `${a.firstName} ${a.lastName}`,
+          sublabel: `${a.applicationNo} · ${a.status}`,
+          href: `/admissions?search=${encodeURIComponent(q)}`,
+        })),
+      ),
+      // News (client-side filter)
+      newsApi.list().then((news) =>
+        news
+          .filter((n) => n.title.toLowerCase().includes(q) || n.body.toLowerCase().includes(q))
+          .slice(0, 3)
+          .map((n) => ({
+            id: n.id,
+            label: n.title,
+            sublabel: n.category ?? 'News',
+            href: `/news`,
+          })),
+      ),
+      // Events (client-side filter)
+      eventsApi.list().then((events) =>
+        events
+          .filter((e) => e.title.toLowerCase().includes(q) || (e.description ?? '').toLowerCase().includes(q))
+          .slice(0, 3)
+          .map((e) => ({
+            id: e.id,
+            label: e.title,
+            sublabel: e.startsAt ? new Date(e.startsAt).toLocaleDateString() : '',
+            href: `/events`,
+          })),
+      ),
+      // CMS Content blocks (client-side filter)
+      cmsApi.content().then((blocks) =>
+        blocks
+          .filter((b) => b.key.toLowerCase().includes(q) || (b.title ?? '').toLowerCase().includes(q))
+          .slice(0, 3)
+          .map((b) => ({
+            id: b.id,
+            label: b.title ?? b.key,
+            sublabel: b.key,
+            href: `/website-cms`,
+          })),
+      ),
+    ]).then(([stu, stf, pay, crs, ses, dept, adm, nws, evt, cms]) => {
       setStudentResults(stu.status === 'fulfilled' ? stu.value : []);
       setStaffResults(stf.status === 'fulfilled' ? stf.value : []);
       setPaymentResults(pay.status === 'fulfilled' ? pay.value : []);
+      setCourseResults(crs.status === 'fulfilled' ? crs.value : []);
+      setSessionResults(ses.status === 'fulfilled' ? ses.value : []);
+      setDepartmentResults(dept.status === 'fulfilled' ? dept.value : []);
+      setAdmissionResults(adm.status === 'fulfilled' ? adm.value : []);
+      setNewsResults(nws.status === 'fulfilled' ? nws.value : []);
+      setEventResults(evt.status === 'fulfilled' ? evt.value : []);
+      setContentResults(cms.status === 'fulfilled' ? cms.value : []);
     }).finally(() => setSearching(false));
   }, [debouncedQuery]);
 
   // Total results count for keyboard nav
-  const totalResults = navResults.length + studentResults.length + staffResults.length + paymentResults.length;
+  const totalResults =
+    navResults.length +
+    studentResults.length +
+    staffResults.length +
+    paymentResults.length +
+    courseResults.length +
+    sessionResults.length +
+    departmentResults.length +
+    admissionResults.length +
+    newsResults.length +
+    eventResults.length +
+    contentResults.length;
 
   // Reset active index when results change
   useEffect(() => {
     setActiveIndex(0);
-  }, [navResults.length, studentResults.length, staffResults.length, paymentResults.length]);
+  }, [
+    navResults.length,
+    studentResults.length,
+    staffResults.length,
+    paymentResults.length,
+    courseResults.length,
+    sessionResults.length,
+    departmentResults.length,
+    admissionResults.length,
+    newsResults.length,
+    eventResults.length,
+    contentResults.length,
+  ]);
 
   // ── Keyboard handler ────────────────────────────────────────────
 
@@ -210,26 +353,32 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
   }
 
   function navigateToIndex(index: number) {
+    const allSections: ContentResult[][] = [
+      [], // nav results (special handling)
+      studentResults,
+      staffResults,
+      paymentResults,
+      courseResults,
+      sessionResults,
+      departmentResults,
+      admissionResults,
+      newsResults,
+      eventResults,
+      contentResults,
+    ];
+
     let i = 0;
-    // Nav results
+    // Nav results (special - use href directly)
     for (const item of navResults) {
       if (i === index) { router.push(item.href); closeSearch(); return; }
       i++;
     }
-    // Student results
-    for (const item of studentResults) {
-      if (i === index) { router.push(item.href); closeSearch(); return; }
-      i++;
-    }
-    // Staff results
-    for (const item of staffResults) {
-      if (i === index) { router.push(item.href); closeSearch(); return; }
-      i++;
-    }
-    // Payment results
-    for (const item of paymentResults) {
-      if (i === index) { router.push(item.href); closeSearch(); return; }
-      i++;
+    // All other content sections
+    for (const section of allSections.slice(1)) {
+      for (const item of section) {
+        if (i === index) { router.push(item.href); closeSearch(); return; }
+        i++;
+      }
     }
   }
 
@@ -280,12 +429,24 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
   const showDropdown = searchOpen && searchQuery.trim().length > 0;
 
   // Build a flat list for keyboard nav highlighting
-  function getGlobalIndex(section: 'nav' | 'student' | 'staff' | 'payment', localIdx: number): number {
-    let offset = 0;
-    if (section === 'student') offset = navResults.length;
-    else if (section === 'staff') offset = navResults.length + studentResults.length;
-    else if (section === 'payment') offset = navResults.length + studentResults.length + staffResults.length;
-    return offset + localIdx;
+  function getGlobalIndex(
+    section: 'nav' | 'student' | 'staff' | 'payment' | 'course' | 'session' | 'department' | 'admission' | 'news' | 'event' | 'content',
+    localIdx: number,
+  ): number {
+    const offsets: Record<string, number> = {
+      nav: 0,
+      student: navResults.length,
+      staff: navResults.length + studentResults.length,
+      payment: navResults.length + studentResults.length + staffResults.length,
+      course: navResults.length + studentResults.length + staffResults.length + paymentResults.length,
+      session: navResults.length + studentResults.length + staffResults.length + paymentResults.length + courseResults.length,
+      department: navResults.length + studentResults.length + staffResults.length + paymentResults.length + courseResults.length + sessionResults.length,
+      admission: navResults.length + studentResults.length + staffResults.length + paymentResults.length + courseResults.length + sessionResults.length + departmentResults.length,
+      news: navResults.length + studentResults.length + staffResults.length + paymentResults.length + courseResults.length + sessionResults.length + departmentResults.length + admissionResults.length,
+      event: navResults.length + studentResults.length + staffResults.length + paymentResults.length + courseResults.length + sessionResults.length + departmentResults.length + admissionResults.length + newsResults.length,
+      content: navResults.length + studentResults.length + staffResults.length + paymentResults.length + courseResults.length + sessionResults.length + departmentResults.length + admissionResults.length + newsResults.length + eventResults.length,
+    };
+    return (offsets[section] ?? 0) + localIdx;
   }
 
   return (
@@ -307,7 +468,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
           <input
             ref={inputRef}
             type="search"
-            placeholder="Search pages, students, staff, payments… (Ctrl+K)"
+            placeholder="Search pages, students, staff, courses, sessions, news… (Ctrl+K)"
             className="input pl-9 pr-16"
             aria-label="Global search"
             value={searchQuery}
@@ -468,6 +629,237 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
                     })}
                   </>
                 )}
+
+                {/* Course results */}
+                {courseResults.length > 0 && (
+                  <>
+                    <li className="mt-1 border-t border-gray-100 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                      Courses
+                    </li>
+                    {courseResults.map((item, idx) => {
+                      const globalIdx = getGlobalIndex('course', idx);
+                      const isActive = globalIdx === activeIndex;
+                      return (
+                        <li key={item.id}>
+                          <button
+                            type="button"
+                            className={cn(
+                              'flex w-full items-center gap-3 px-4 py-2 text-left transition-colors',
+                              isActive ? 'bg-brand/5 text-brand' : 'text-gray-700 hover:bg-gray-50',
+                            )}
+                            onClick={() => { router.push(item.href); closeSearch(); }}
+                            onMouseEnter={() => setActiveIndex(globalIdx)}
+                          >
+                            <BookOpen className={cn('h-4 w-4 shrink-0', isActive ? 'text-brand' : 'text-gray-400')} />
+                            <div className="min-w-0 flex-1">
+                              <span className="block text-sm font-medium">{item.label}</span>
+                              <span className="block truncate text-xs text-gray-400">{item.sublabel}</span>
+                            </div>
+                            <span className="text-[10px] text-gray-300">Course</span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </>
+                )}
+
+                {/* Session results */}
+                {sessionResults.length > 0 && (
+                  <>
+                    <li className="mt-1 border-t border-gray-100 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                      Academic Sessions
+                    </li>
+                    {sessionResults.map((item, idx) => {
+                      const globalIdx = getGlobalIndex('session', idx);
+                      const isActive = globalIdx === activeIndex;
+                      return (
+                        <li key={item.id}>
+                          <button
+                            type="button"
+                            className={cn(
+                              'flex w-full items-center gap-3 px-4 py-2 text-left transition-colors',
+                              isActive ? 'bg-brand/5 text-brand' : 'text-gray-700 hover:bg-gray-50',
+                            )}
+                            onClick={() => { router.push(item.href); closeSearch(); }}
+                            onMouseEnter={() => setActiveIndex(globalIdx)}
+                          >
+                            <Calendar className={cn('h-4 w-4 shrink-0', isActive ? 'text-brand' : 'text-gray-400')} />
+                            <div className="min-w-0 flex-1">
+                              <span className="block text-sm font-medium">{item.label}</span>
+                              <span className="block truncate text-xs text-gray-400">{item.sublabel}</span>
+                            </div>
+                            <span className="text-[10px] text-gray-300">Session</span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </>
+                )}
+
+                {/* Department results */}
+                {departmentResults.length > 0 && (
+                  <>
+                    <li className="mt-1 border-t border-gray-100 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                      Departments
+                    </li>
+                    {departmentResults.map((item, idx) => {
+                      const globalIdx = getGlobalIndex('department', idx);
+                      const isActive = globalIdx === activeIndex;
+                      return (
+                        <li key={item.id}>
+                          <button
+                            type="button"
+                            className={cn(
+                              'flex w-full items-center gap-3 px-4 py-2 text-left transition-colors',
+                              isActive ? 'bg-brand/5 text-brand' : 'text-gray-700 hover:bg-gray-50',
+                            )}
+                            onClick={() => { router.push(item.href); closeSearch(); }}
+                            onMouseEnter={() => setActiveIndex(globalIdx)}
+                          >
+                            <Building2 className={cn('h-4 w-4 shrink-0', isActive ? 'text-brand' : 'text-gray-400')} />
+                            <div className="min-w-0 flex-1">
+                              <span className="block text-sm font-medium">{item.label}</span>
+                              <span className="block truncate text-xs text-gray-400">{item.sublabel}</span>
+                            </div>
+                            <span className="text-[10px] text-gray-300">Department</span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </>
+                )}
+
+                {/* Admission results */}
+                {admissionResults.length > 0 && (
+                  <>
+                    <li className="mt-1 border-t border-gray-100 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                      Admissions
+                    </li>
+                    {admissionResults.map((item, idx) => {
+                      const globalIdx = getGlobalIndex('admission', idx);
+                      const isActive = globalIdx === activeIndex;
+                      return (
+                        <li key={item.id}>
+                          <button
+                            type="button"
+                            className={cn(
+                              'flex w-full items-center gap-3 px-4 py-2 text-left transition-colors',
+                              isActive ? 'bg-brand/5 text-brand' : 'text-gray-700 hover:bg-gray-50',
+                            )}
+                            onClick={() => { router.push(item.href); closeSearch(); }}
+                            onMouseEnter={() => setActiveIndex(globalIdx)}
+                          >
+                            <UserPlus className={cn('h-4 w-4 shrink-0', isActive ? 'text-brand' : 'text-gray-400')} />
+                            <div className="min-w-0 flex-1">
+                              <span className="block text-sm font-medium">{item.label}</span>
+                              <span className="block truncate text-xs text-gray-400">{item.sublabel}</span>
+                            </div>
+                            <span className="text-[10px] text-gray-300">Applicant</span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </>
+                )}
+
+                {/* News results */}
+                {newsResults.length > 0 && (
+                  <>
+                    <li className="mt-1 border-t border-gray-100 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                      News
+                    </li>
+                    {newsResults.map((item, idx) => {
+                      const globalIdx = getGlobalIndex('news', idx);
+                      const isActive = globalIdx === activeIndex;
+                      return (
+                        <li key={item.id}>
+                          <button
+                            type="button"
+                            className={cn(
+                              'flex w-full items-center gap-3 px-4 py-2 text-left transition-colors',
+                              isActive ? 'bg-brand/5 text-brand' : 'text-gray-700 hover:bg-gray-50',
+                            )}
+                            onClick={() => { router.push(item.href); closeSearch(); }}
+                            onMouseEnter={() => setActiveIndex(globalIdx)}
+                          >
+                            <Newspaper className={cn('h-4 w-4 shrink-0', isActive ? 'text-brand' : 'text-gray-400')} />
+                            <div className="min-w-0 flex-1">
+                              <span className="block text-sm font-medium">{item.label}</span>
+                              <span className="block truncate text-xs text-gray-400">{item.sublabel}</span>
+                            </div>
+                            <span className="text-[10px] text-gray-300">News</span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </>
+                )}
+
+                {/* Event results */}
+                {eventResults.length > 0 && (
+                  <>
+                    <li className="mt-1 border-t border-gray-100 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                      Events
+                    </li>
+                    {eventResults.map((item, idx) => {
+                      const globalIdx = getGlobalIndex('event', idx);
+                      const isActive = globalIdx === activeIndex;
+                      return (
+                        <li key={item.id}>
+                          <button
+                            type="button"
+                            className={cn(
+                              'flex w-full items-center gap-3 px-4 py-2 text-left transition-colors',
+                              isActive ? 'bg-brand/5 text-brand' : 'text-gray-700 hover:bg-gray-50',
+                            )}
+                            onClick={() => { router.push(item.href); closeSearch(); }}
+                            onMouseEnter={() => setActiveIndex(globalIdx)}
+                          >
+                            <CalendarDays className={cn('h-4 w-4 shrink-0', isActive ? 'text-brand' : 'text-gray-400')} />
+                            <div className="min-w-0 flex-1">
+                              <span className="block text-sm font-medium">{item.label}</span>
+                              <span className="block truncate text-xs text-gray-400">{item.sublabel}</span>
+                            </div>
+                            <span className="text-[10px] text-gray-300">Event</span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </>
+                )}
+
+                {/* CMS Content results */}
+                {contentResults.length > 0 && (
+                  <>
+                    <li className="mt-1 border-t border-gray-100 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                      CMS Content
+                    </li>
+                    {contentResults.map((item, idx) => {
+                      const globalIdx = getGlobalIndex('content', idx);
+                      const isActive = globalIdx === activeIndex;
+                      return (
+                        <li key={item.id}>
+                          <button
+                            type="button"
+                            className={cn(
+                              'flex w-full items-center gap-3 px-4 py-2 text-left transition-colors',
+                              isActive ? 'bg-brand/5 text-brand' : 'text-gray-700 hover:bg-gray-50',
+                            )}
+                            onClick={() => { router.push(item.href); closeSearch(); }}
+                            onMouseEnter={() => setActiveIndex(globalIdx)}
+                          >
+                            <Globe className={cn('h-4 w-4 shrink-0', isActive ? 'text-brand' : 'text-gray-400')} />
+                            <div className="min-w-0 flex-1">
+                              <span className="block text-sm font-medium">{item.label}</span>
+                              <span className="block truncate text-xs text-gray-400">{item.sublabel}</span>
+                            </div>
+                            <span className="text-[10px] text-gray-300">CMS</span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </>
+                )}
               </ul>
             )}
           </div>
@@ -546,9 +938,17 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
             className="flex items-center gap-2.5 rounded-full py-1 pl-1 pr-2 transition hover:bg-gray-100"
             aria-label="User menu"
           >
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand text-sm font-bold text-white">
-              {initials}
-            </span>
+            {profile?.avatarUrl ? (
+              <img
+                src={profile.avatarUrl}
+                alt={`${profile.firstName} ${profile.lastName}`}
+                className="h-9 w-9 rounded-full object-cover ring-2 ring-white"
+              />
+            ) : (
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand text-sm font-bold text-white">
+                {initials}
+              </span>
+            )}
             <span className="hidden text-left sm:block">
               <span className="block text-sm font-semibold leading-tight text-gray-900">
                 {profile ? `${profile.firstName} ${profile.lastName}` : 'Loading…'}

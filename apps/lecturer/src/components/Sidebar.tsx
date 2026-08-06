@@ -91,8 +91,27 @@ export function Sidebar() {
       {/* Footer */}
       <div className="border-t border-white/10 px-5 py-4">
         <p className="text-xs text-blue-100/70">{currentAcademicSession()} · First Semester</p>
-        <p className="mt-0.5 text-[11px] text-blue-100/50">
-          © {new Date().getFullYear()} Goinzeschool
+        <p className="mt-1 text-[10px] font-semibold leading-tight text-blue-200/80">
+          GOINZE INTERNATIONAL SCHOOL OF MEDICAL HEALTH SCIENCE AND TECHNOLOGY
+        </p>
+        <p className="mt-1 text-[11px] text-blue-100/50">
+          Lecturer Portal
+        </p>
+        <p className="mt-2 text-[10px] leading-tight text-blue-200/40">
+          Designed &amp; developed by{' '}
+          <a
+            href="https://rhemaexpertsolutions.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-200/60 hover:text-white"
+          >
+            Rhema Expert Solutions
+          </a>
+        </p>
+        <p className="text-[10px] text-blue-200/40">
+          <a href="tel:+2348035226642" className="text-blue-200/40 hover:text-white">
+            +234 803 522 6642
+          </a>
         </p>
       </div>
     </aside>

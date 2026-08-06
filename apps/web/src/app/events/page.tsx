@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, MapPin } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, MapPin } from "lucide-react";
 import PageHeader from "@/components/PageHeader";
 import Section from "@/components/Section";
 import Card from "@/components/Card";
@@ -18,19 +18,31 @@ function eventMonth(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", { month: "short" });
 }
 
-function eventTime(startsAt: string, endsAt: string | null) {
-  const fmt = (d: Date) =>
-    d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+function eventDateRange(startsAt: string, endsAt: string | null) {
   const start = new Date(startsAt);
-  if (!endsAt) return fmt(start);
-  return `${fmt(start)} – ${fmt(new Date(endsAt))}`;
+  const end = endsAt ? new Date(endsAt) : null;
+  const fmtDate = (d: Date) =>
+    d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  const fmtTime = (d: Date) =>
+    d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+
+  if (!end) {
+    return `${fmtDate(start)} • ${fmtTime(start)}`;
+  }
+
+  const sameDay =
+    start.getFullYear() === end.getFullYear() &&
+    start.getMonth() === end.getMonth() &&
+    start.getDate() === end.getDate();
+
+  if (sameDay) {
+    return `${fmtDate(start)} • ${fmtTime(start)} – ${fmtTime(end)}`;
+  }
+
+  return `${fmtDate(start)} – ${fmtDate(end)}`;
 }
 
-/** Build a simple month grid for the current month, highlighting event days. */
-function buildCalendar(events: EventRecord[]) {
-  const now = new Date();
-  const year = now.getFullYear();
-  const monthIndex = now.getMonth();
+function buildCalendar(year: number, monthIndex: number, events: EventRecord[]) {
   const firstWeekday = new Date(year, monthIndex, 1).getDay();
   const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
 
@@ -46,17 +58,25 @@ function buildCalendar(events: EventRecord[]) {
     ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
   ];
 
+  const now = new Date();
+  const isCurrentMonth = now.getFullYear() === year && now.getMonth() === monthIndex;
+
   return {
-    monthLabel: now.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
+    monthLabel: new Date(year, monthIndex).toLocaleDateString("en-US", {
+      month: "long",
+      year: "numeric",
+    }),
     cells,
     eventDays,
-    today: now.getDate(),
+    today: isCurrentMonth ? now.getDate() : -1,
   };
 }
 
 export default function EventsPage() {
   const [events, setEvents] = useState<EventRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [calYear, setCalYear] = useState(() => new Date().getFullYear());
+  const [calMonth, setCalMonth] = useState(() => new Date().getMonth());
 
   useEffect(() => {
     let active = true;
@@ -70,7 +90,33 @@ export default function EventsPage() {
     };
   }, []);
 
-  const calendar = useMemo(() => buildCalendar(events), [events]);
+  const calendar = useMemo(() => buildCalendar(calYear, calMonth, events), [calYear, calMonth, events]);
+
+  function goToPrevMonth() {
+    setCalMonth((m) => {
+      if (m === 0) {
+        setCalYear((y) => y - 1);
+        return 11;
+      }
+      return m - 1;
+    });
+  }
+
+  function goToNextMonth() {
+    setCalMonth((m) => {
+      if (m === 11) {
+        setCalYear((y) => y + 1);
+        return 0;
+      }
+      return m + 1;
+    });
+  }
+
+  function goToToday() {
+    const now = new Date();
+    setCalYear(now.getFullYear());
+    setCalMonth(now.getMonth());
+  }
 
   return (
     <>
@@ -111,7 +157,7 @@ export default function EventsPage() {
                       <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-500">
                         <span className="flex items-center gap-1.5">
                           <CalendarDays className="h-3.5 w-3.5 text-brand" />
-                          {eventTime(event.startsAt, event.endsAt)}
+                          {eventDateRange(event.startsAt, event.endsAt)}
                         </span>
                         {event.location && (
                           <span className="flex items-center gap-1.5">
@@ -131,9 +177,36 @@ export default function EventsPage() {
           <div className="lg:col-span-2">
             <h2 className="text-2xl font-bold text-slate-900">Calendar</h2>
             <Card className="mt-6 p-6">
-              <p className="text-center text-sm font-semibold text-brand">
-                {calendar.monthLabel}
-              </p>
+              {/* Month navigation */}
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={goToPrevMonth}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-brand"
+                  aria-label="Previous month"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </button>
+                <div className="text-center">
+                  <p className="text-sm font-semibold text-brand">{calendar.monthLabel}</p>
+                  <button
+                    type="button"
+                    onClick={goToToday}
+                    className="text-xs text-slate-400 transition hover:text-brand"
+                  >
+                    Today
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={goToNextMonth}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-brand"
+                  aria-label="Next month"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+              </div>
+
               <div className="mt-4 grid grid-cols-7 gap-1 text-center">
                 {weekdays.map((d) => (
                   <div key={d} className="py-1 text-xs font-semibold uppercase text-slate-400">

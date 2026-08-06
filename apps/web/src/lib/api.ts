@@ -129,6 +129,14 @@ export interface WebsiteContentRecord {
   updatedAt: string;
 }
 
+export interface CommentRecord {
+  id: string;
+  newsPostId: string;
+  name: string;
+  text: string;
+  createdAt: string;
+}
+
 export const websiteApi = {
   news: (schoolId?: string) =>
     api.get<NewsPostRecord[]>(
@@ -140,6 +148,10 @@ export const websiteApi = {
         schoolId ? `?schoolId=${encodeURIComponent(schoolId)}` : ""
       }`,
     ),
+  listComments: (newsPostId: string) =>
+    api.get<CommentRecord[]>(`/website/news/${newsPostId}/comments`),
+  createComment: (newsPostId: string, data: { name: string; text: string }) =>
+    api.post<CommentRecord>(`/website/news/${newsPostId}/comments`, data),
   events: (schoolId?: string) =>
     api.get<EventRecord[]>(
       `/website/events${schoolId ? `?schoolId=${encodeURIComponent(schoolId)}` : ""}`,
@@ -241,4 +253,24 @@ export const announcementsApi = {
         schoolId ? `?schoolId=${encodeURIComponent(schoolId)}` : ""
       }`,
     ),
+};
+
+// ---- Contact form ----
+
+export interface ContactMessageInput {
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+  phone?: string;
+}
+
+export interface ContactMessageResult {
+  success: boolean;
+  message: string;
+}
+
+export const contactApi = {
+  sendMessage: (input: ContactMessageInput) =>
+    api.post<ContactMessageResult>("/contact/message", input),
 };

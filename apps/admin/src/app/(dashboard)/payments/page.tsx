@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   AlertCircle,
   CheckCircle2,
@@ -65,10 +66,12 @@ function titleCase(value: string): string {
 }
 
 export default function PaymentsPage() {
+  const searchParams = useSearchParams();
+  const initialSearch = searchParams.get('search') ?? '';
   const [dashboard, setDashboard] = useState<FinanceDashboard | null>(null);
   const [payments, setPayments] = useState<Paginated<Payment> | null>(null);
   const [feeStructures, setFeeStructures] = useState<FeeStructure[]>([]);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(initialSearch);
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);

@@ -109,6 +109,7 @@ export const api = {
     request<T>(path, { method: 'PUT', body: JSON.stringify(data ?? {}) }),
   patch: <T>(path: string, data?: unknown) =>
     request<T>(path, { method: 'PATCH', body: JSON.stringify(data ?? {}) }),
+  delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
 };
 
 // ---- Admissions ----
@@ -320,6 +321,11 @@ export interface Student {
   gender: string | null;
   email: string | null;
   phone: string | null;
+  address: string | null;
+  stateOfOrigin: string | null;
+  nationality: string | null;
+  dateOfBirth: string | null;
+  passportUrl: string | null;
   status: StudentStatus;
   currentLevel: number | null;
   programmeId: string | null;
@@ -342,6 +348,11 @@ export interface StudentInput {
   departmentId?: string;
   currentLevel?: number;
   status?: StudentStatus;
+  address?: string;
+  stateOfOrigin?: string;
+  nationality?: string;
+  dateOfBirth?: string;
+  passportUrl?: string;
 }
 
 export const studentsApi = {
@@ -368,6 +379,8 @@ export const studentsApi = {
   suspend: (id: string) => api.patch<Student>(`/students/${id}/suspend`),
   graduate: (id: string) => api.patch<Student>(`/students/${id}/graduate`),
   archive: (id: string) => api.patch<Student>(`/students/${id}/archive`),
+  remove: (id: string) => request<{ deleted: boolean }>(`/students/${id}`, { method: 'DELETE' }),
+  promote: () => api.post<{ promoted: number }>('/students/promote'),
   departments: () => api.get<DepartmentRef[]>('/academics/departments'),
 };
 
@@ -456,6 +469,7 @@ export interface StaffRecord {
   gender: string | null;
   email: string | null;
   phone: string | null;
+  photoUrl: string | null;
   designation: string | null;
   salaryGrade: string | null;
   employmentType: string | null;
@@ -482,6 +496,7 @@ export interface StaffInput {
   qualification?: string;
   isLecturer?: boolean;
   staffCategory?: string;
+  photoUrl?: string;
 }
 
 export const staffApi = {
@@ -639,6 +654,14 @@ export const communicationApi = {
     audience?: string;
     pinned?: boolean;
   }) => api.post<AnnouncementRecord>('/communication/announcements', payload),
+  updateAnnouncement: (id: string, payload: {
+    title?: string;
+    body?: string;
+    audience?: string;
+    pinned?: boolean;
+  }) => api.patch<AnnouncementRecord>(`/communication/announcements/${id}`, payload),
+  deleteAnnouncement: (id: string) =>
+    api.delete<{ success: boolean }>(`/communication/announcements/${id}`),
 };
 
 // ---- News ----
@@ -666,9 +689,33 @@ export const newsApi = {
     coverUrl?: string;
     published?: boolean;
   }) => api.post<NewsRecord>('/website/news', payload),
+  update: (id: string, payload: {
+    title?: string;
+    body?: string;
+    category?: string;
+    excerpt?: string;
+    coverUrl?: string;
+    published?: boolean;
+  }) => api.patch<NewsRecord>(`/website/news/${id}`, payload),
+  delete: (id: string) => api.delete<{ success: boolean }>(`/website/news/${id}`),
   setPublished: (id: string, published: boolean) =>
     api.patch<NewsRecord>(`/website/news/${id}/publish`, { published }),
+  listComments: (newsPostId: string) =>
+    api.get<CommentRecord[]>(`/website/news/${newsPostId}/comments`),
+  createComment: (newsPostId: string, data: { name: string; text: string }) =>
+    api.post<CommentRecord>(`/website/news/${newsPostId}/comments`, data),
+  updateComment: (id: string, data: { name?: string; text?: string }) =>
+    api.patch<CommentRecord>(`/website/comments/${id}`, data),
+  deleteComment: (id: string) => api.delete<{ success: boolean }>(`/website/comments/${id}`),
 };
+
+export interface CommentRecord {
+  id: string;
+  newsPostId: string;
+  name: string;
+  text: string;
+  createdAt: string;
+}
 
 // ---- Events ----
 
@@ -692,6 +739,14 @@ export const eventsApi = {
     startsAt: string;
     endsAt?: string;
   }) => api.post<EventRecord>('/website/events', payload),
+  update: (id: string, payload: {
+    title?: string;
+    description?: string;
+    location?: string;
+    startsAt?: string;
+    endsAt?: string;
+  }) => api.patch<EventRecord>(`/website/events/${id}`, payload),
+  delete: (id: string) => api.delete<{ success: boolean }>(`/website/events/${id}`),
 };
 
 // ---- Reports ----
@@ -856,6 +911,8 @@ export const cmsApi = {
   content: () => api.get<WebsiteContentRecord[]>('/website/content'),
   upsertContent: (payload: { key: string; title?: string; body?: unknown }) =>
     api.post<WebsiteContentRecord>('/website/content', payload),
+  deleteContent: (key: string) =>
+    api.delete<WebsiteContentRecord>(`/website/content/${encodeURIComponent(key)}`),
   gallery: () => api.get<GalleryItemRecord[]>('/website/gallery'),
   addGalleryItem: (payload: { url: string; type?: string; caption?: string; album?: string }) =>
     api.post<GalleryItemRecord>('/website/gallery', payload),
@@ -932,7 +989,9 @@ export const settingsApi = {
 };
 
 export const authApi = {
-  me: () => api.get<{ id: string; email: string; firstName: string; lastName: string; role: string }>('/auth/me'),
+  me: () => api.get<{ id: string; email: string; firstName: string; lastName: string; role: string; avatarUrl?: string | null }>('/auth/me'),
+    updateProfile: (data: { firstName?: string; lastName?: string; email?: string; avatarUrl?: string }) =>
+    api.patch<{ id: string; email: string; firstName: string; lastName: string; role: string; avatarUrl?: string | null }>('/auth/me', data),
   changePassword: (currentPassword: string, newPassword: string) =>
     api.patch<{ success: boolean }>('/auth/change-password', {
       currentPassword,
@@ -979,4 +1038,38 @@ export const securityApi = {
     const qs = q.toString();
     return api.get<Paginated<AuditLogRecord>>(`/security/audit-logs${qs ? `?${qs}` : ''}`);
   },
+};
+
+// ---- Digital ID Cards ----
+
+export interface IdCardRecord {
+  id: string;
+  schoolId: string;
+  type: 'STUDENT' | 'STAFF';
+  studentId: string | null;
+  staffId: string | null;
+  cardNumber: string;
+  qrData: string;
+  barcode: string | null;
+  verificationCode: string;
+  photoUrl: string | null;
+  pdfUrl: string | null;
+  issuedAt: string;
+  expiresAt: string | null;
+  status: 'ACTIVE' | 'EXPIRED' | 'REVOKED';
+  student?: { id: string; firstName: string; lastName: string; passportUrl: string | null } | null;
+  staff?: { id: string; firstName: string; lastName: string; photoUrl: string | null } | null;
+}
+
+export const idCardsApi = {
+  list: (type?: string) =>
+    api.get<IdCardRecord[]>(`/id-cards${type ? `?type=${encodeURIComponent(type)}` : ''}`),
+  generate: (data: { type: 'STUDENT' | 'STAFF'; studentId?: string; staffId?: string }) =>
+    api.post<IdCardRecord>('/id-cards', data),
+  batchGenerate: (data: { type: 'STUDENT' | 'STAFF'; studentIds?: string[]; staffIds?: string[] }) =>
+    api.post<IdCardRecord[]>('/id-cards/batch', data),
+  statusMap: () =>
+    api.get<Record<string, IdCardRecord>>('/id-cards/status'),
+  revoke: (id: string) =>
+    api.patch<IdCardRecord>(`/id-cards/${id}/revoke`),
 };

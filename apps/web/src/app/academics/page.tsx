@@ -18,6 +18,7 @@ import {
   type FacultyRecord,
   type ProgrammeRecord,
 } from "@/lib/api";
+import { defaultAcademicsNote, getBlockBody, useContentBlocks } from "@/lib/content";
 
 const iconCycle: LucideIcon[] = [
   FlaskConical,
@@ -32,6 +33,13 @@ export default function AcademicsPage() {
   const [faculties, setFaculties] = useState<FacultyRecord[]>([]);
   const [programmes, setProgrammes] = useState<ProgrammeRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const { blocks } = useContentBlocks();
+
+  const academicsNote = (() => {
+    const cms = getBlockBody(blocks, "academics.note");
+    if (typeof cms === "string" && cms.trim()) return cms;
+    return defaultAcademicsNote;
+  })();
 
   useEffect(() => {
     let active = true;
@@ -152,9 +160,7 @@ export default function AcademicsPage() {
           <div>
             <h2 className="text-lg font-bold text-slate-900">Flexible learning pathways</h2>
             <p className="mt-1 text-sm text-slate-600">
-              Most undergraduate programmes run on a two-semester academic calendar, with
-              options for sandwich and part-time study. Postgraduate programmes offer
-              taught and research tracks to suit your goals.
+              {academicsNote}
             </p>
           </div>
         </Card>

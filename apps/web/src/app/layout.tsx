@@ -13,7 +13,7 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "Goinze International School of Medical Health Science and Technology",
   description:
-    "Goinze International School of Medical Health Science and Technology, Bwari Abuja — Motto: Learn How to Maintain a Good Health. A modern institution committed to academic excellence, research and community impact.",
+    "Goinze International School of Medical Health Science and Technology, Along Verita University Road Zuma 1, Opposite ECAW Church, Bwari Area Council, Abuja — Motto: Learn How to Maintain a Good Health. A modern institution committed to academic excellence, research and community impact.",
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },

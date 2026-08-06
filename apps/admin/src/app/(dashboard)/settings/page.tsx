@@ -5,34 +5,47 @@ import {
   AlertCircle,
   Building2,
   CheckCircle2,
-  CreditCard,
   GraduationCap,
-  KeyRound,
   Loader2,
-  Mail,
+  Pencil,
+  Plus,
   Save,
+  Trash2,
   X,
   type LucideIcon,
 } from 'lucide-react';
-import { DEFAULT_GRADE_BANDS } from '@goinze/shared-utils';
 import PageHeader from '@/components/PageHeader';
 import Card from '@/components/Card';
 import StatusBadge from '@/components/StatusBadge';
 import { cn } from '@/lib/utils';
 import {
-  authApi,
   settingsApi,
+  cmsApi,
   type SchoolProfile,
 } from '@/lib/api';
 
-type TabKey = 'profile' | 'grading' | 'payments' | 'email' | 'security';
+type TabKey = 'profile' | 'grading';
 
 const tabs: { key: TabKey; label: string; icon: LucideIcon }[] = [
   { key: 'profile', label: 'School Profile', icon: Building2 },
   { key: 'grading', label: 'Grading', icon: GraduationCap },
-  { key: 'payments', label: 'Payment Gateway', icon: CreditCard },
-  { key: 'email', label: 'Email / SMS', icon: Mail },
-  { key: 'security', label: 'Security', icon: KeyRound },
+];
+
+interface GradeBand {
+  grade: string;
+  min: number;
+  max: number;
+  point: number;
+  remark: string;
+}
+
+const DEFAULT_HIGHER_ED_GRADES: GradeBand[] = [
+  { grade: 'A', min: 70, max: 100, point: 5.0, remark: 'Distinction' },
+  { grade: 'B', min: 60, max: 69, point: 4.0, remark: 'Very Good' },
+  { grade: 'C', min: 50, max: 59, point: 3.0, remark: 'Good' },
+  { grade: 'D', min: 45, max: 49, point: 2.0, remark: 'Pass' },
+  { grade: 'E', min: 40, max: 44, point: 1.0, remark: 'Marginal Fail' },
+  { grade: 'F', min: 0, max: 39, point: 0.0, remark: 'Fail' },
 ];
 
 function Field({
@@ -83,27 +96,10 @@ export default function SettingsPage() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
-  const [website, setWebsite] = useState('');
-  const [logoUrl, setLogoUrl] = useState('');
 
-  // Gateway form
-  const [flwPublic, setFlwPublic] = useState('');
-  const [flwSecret, setFlwSecret] = useState('');
-  const [flwEnc, setFlwEnc] = useState('');
-  const [flwWebhook, setFlwWebhook] = useState('');
-
-  // Email / SMS form
-  const [smtpHost, setSmtpHost] = useState('');
-  const [smtpPort, setSmtpPort] = useState('');
-  const [smtpUser, setSmtpUser] = useState('');
-  const [smtpPass, setSmtpPass] = useState('');
-  const [smsKey, setSmsKey] = useState('');
-  const [smsSender, setSmsSender] = useState('');
-
-  // Password change form
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  // Grading form
+  const [gradeBands, setGradeBands] = useState<GradeBand[]>(DEFAULT_HIGHER_ED_GRADES);
+  const [editingGrade, setEditingGrade] = useState<number | null>(null);
 
   function flash(message: string) {
     setNotice(message);
@@ -129,25 +125,13 @@ export default function SettingsPage() {
           setEmail(prof.email ?? '');
           setPhone(prof.phone ?? '');
           setAddress(prof.address ?? '');
-          setWebsite(prof.website ?? '');
-          setLogoUrl(prof.logoUrl ?? '');
         }
 
-        const gateway = (settings['gateway.flutterwave'] ?? {}) as Record<string, string>;
-        setFlwPublic(gateway.publicKey ?? '');
-        setFlwSecret(gateway.secretKey ?? '');
-        setFlwEnc(gateway.encryptionKey ?? '');
-        setFlwWebhook(gateway.webhookHash ?? '');
-
-        const smtp = (settings['notifications.smtp'] ?? {}) as Record<string, string>;
-        setSmtpHost(smtp.host ?? '');
-        setSmtpPort(smtp.port ?? '');
-        setSmtpUser(smtp.user ?? '');
-        setSmtpPass(smtp.password ?? '');
-
-        const sms = (settings['notifications.sms'] ?? {}) as Record<string, string>;
-        setSmsKey(sms.apiKey ?? '');
-        setSmsSender(sms.senderId ?? '');
+        // Load grading bands from settings
+        const grading = (settings['grading.bands'] ?? []) as GradeBand[];
+        if (grading.length > 0) {
+          setGradeBands(grading);
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Failed to load settings.');
@@ -173,11 +157,21 @@ export default function SettingsPage() {
         email: email.trim() || undefined,
         phone: phone.trim() || undefined,
         address: address.trim() || undefined,
-        website: website.trim() || undefined,
-        logoUrl: logoUrl.trim() || undefined,
       });
       setProfile(updated);
-      flash('School profile saved.');
+
+      // Sync with Website CMS contact.info
+      await cmsApi.upsertContent({
+        key: 'contact.info',
+        body: {
+          address: address.trim(),
+          phone: phone.trim(),
+          email: email.trim(),
+          hours: '', // Keep existing hours from CMS if any
+        },
+      });
+
+      flash('School profile saved and synced with website.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save profile.');
     } finally {
@@ -185,80 +179,41 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleSaveGateway(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setSaving('gateway');
+  async function handleSaveGrading() {
+    setSaving('grading');
     setError(null);
     try {
       await settingsApi.updateMany({
-        'gateway.flutterwave': {
-          publicKey: flwPublic.trim(),
-          secretKey: flwSecret.trim(),
-          encryptionKey: flwEnc.trim(),
-          webhookHash: flwWebhook.trim(),
-        },
+        'grading.bands': gradeBands,
       });
-      flash('Payment gateway settings saved.');
+      flash('Grading scale saved successfully.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save gateway settings.');
+      setError(err instanceof Error ? err.message : 'Failed to save grading.');
     } finally {
       setSaving(null);
     }
   }
 
-  async function handleSaveChannels(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setSaving('channels');
-    setError(null);
-    try {
-      await settingsApi.updateMany({
-        'notifications.smtp': {
-          host: smtpHost.trim(),
-          port: smtpPort.trim(),
-          user: smtpUser.trim(),
-          password: smtpPass,
-        },
-        'notifications.sms': {
-          apiKey: smsKey.trim(),
-          senderId: smsSender.trim(),
-        },
-      });
-      flash('Notification channels saved.');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save channels.');
-    } finally {
-      setSaving(null);
-    }
+  // Grading CRUD helpers
+  function addGradeBand() {
+    setGradeBands([...gradeBands, { grade: '', min: 0, max: 0, point: 0, remark: '' }]);
+    setEditingGrade(gradeBands.length);
   }
 
-  async function handleChangePassword(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError(null);
-    if (newPassword.length < 8) {
-      setError('New password must be at least 8 characters.');
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setError('Password confirmation does not match.');
-      return;
-    }
-    setSaving('password');
-    try {
-      await authApi.changePassword(currentPassword, newPassword);
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-      flash('Password changed successfully.');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to change password.');
-    } finally {
-      setSaving(null);
-    }
+  function updateGradeBand(index: number, field: keyof GradeBand, value: string | number) {
+    const copy = [...gradeBands];
+    copy[index] = { ...copy[index], [field]: value };
+    setGradeBands(copy);
+  }
+
+  function deleteGradeBand(index: number) {
+    setGradeBands(gradeBands.filter((_, i) => i !== index));
+    setEditingGrade(null);
   }
 
   return (
     <>
-      <PageHeader title="Settings" subtitle="Configure school-wide preferences and integrations." />
+      <PageHeader title="Settings" subtitle="Configure school-wide preferences." />
 
       {error && (
         <div className="mb-5 flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -345,20 +300,6 @@ export default function SettingsPage() {
                     <div className="sm:col-span-2">
                       <Field id="school-address" label="Address" value={address} onChange={setAddress} />
                     </div>
-                    <Field
-                      id="school-website"
-                      label="Website"
-                      value={website}
-                      onChange={setWebsite}
-                      placeholder="https://…"
-                    />
-                    <Field
-                      id="school-logo"
-                      label="Logo URL"
-                      value={logoUrl}
-                      onChange={setLogoUrl}
-                      placeholder="https://…/logo.png"
-                    />
                     <div className="sm:col-span-2">
                       <button
                         type="submit"
@@ -375,12 +316,24 @@ export default function SettingsPage() {
             )}
 
             {tab === 'grading' && (
-              <Card title="Grading Scale" subtitle="Default 5-point scale used for result computation">
+              <Card
+                title="Grading Scale"
+                subtitle="5-point grading system for higher institution result computation"
+                action={
+                  <button
+                    type="button"
+                    onClick={addGradeBand}
+                    className="btn-secondary flex items-center gap-1.5 px-3 py-1.5 text-xs"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add Grade
+                  </button>
+                }
+              >
                 <div className="overflow-x-auto p-5">
                   <table className="min-w-full divide-y divide-gray-200 text-sm">
                     <thead className="bg-gray-50">
                       <tr>
-                        {['Grade', 'Min', 'Max', 'Point', 'Remark'].map((h) => (
+                        {['Grade', 'Min Score', 'Max Score', 'Grade Point', 'Remark', 'Actions'].map((h) => (
                           <th
                             key={h}
                             className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500"
@@ -391,168 +344,127 @@ export default function SettingsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {DEFAULT_GRADE_BANDS.map((band) => (
-                        <tr key={band.grade} className="odd:bg-white even:bg-gray-50/60">
+                      {gradeBands.map((band, i) => (
+                        <tr key={i} className="odd:bg-white even:bg-gray-50/60">
                           <td className="px-4 py-2.5">
-                            <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-brand/10 text-sm font-bold text-brand">
-                              {band.grade}
-                            </span>
+                            {editingGrade === i ? (
+                              <input
+                                value={band.grade}
+                                onChange={(e) => updateGradeBand(i, 'grade', e.target.value)}
+                                className="input w-16 px-2 py-1 text-center"
+                                maxLength={2}
+                              />
+                            ) : (
+                              <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-brand/10 text-sm font-bold text-brand">
+                                {band.grade}
+                              </span>
+                            )}
                           </td>
-                          <td className="px-4 py-2.5 text-gray-700">{band.min}</td>
-                          <td className="px-4 py-2.5 text-gray-700">{band.max}</td>
-                          <td className="px-4 py-2.5 font-semibold text-gray-900">{band.point}</td>
-                          <td className="px-4 py-2.5 text-gray-500">{band.remark}</td>
+                          <td className="px-4 py-2.5">
+                            {editingGrade === i ? (
+                              <input
+                                type="number"
+                                value={band.min}
+                                onChange={(e) => updateGradeBand(i, 'min', Number(e.target.value))}
+                                className="input w-20 px-2 py-1"
+                                min={0}
+                                max={100}
+                              />
+                            ) : (
+                              <span className="text-gray-700">{band.min}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            {editingGrade === i ? (
+                              <input
+                                type="number"
+                                value={band.max}
+                                onChange={(e) => updateGradeBand(i, 'max', Number(e.target.value))}
+                                className="input w-20 px-2 py-1"
+                                min={0}
+                                max={100}
+                              />
+                            ) : (
+                              <span className="text-gray-700">{band.max}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            {editingGrade === i ? (
+                              <input
+                                type="number"
+                                value={band.point}
+                                onChange={(e) => updateGradeBand(i, 'point', Number(e.target.value))}
+                                className="input w-20 px-2 py-1"
+                                min={0}
+                                max={5}
+                                step={0.5}
+                              />
+                            ) : (
+                              <span className="font-semibold text-gray-900">{band.point}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            {editingGrade === i ? (
+                              <input
+                                value={band.remark}
+                                onChange={(e) => updateGradeBand(i, 'remark', e.target.value)}
+                                className="input px-2 py-1"
+                              />
+                            ) : (
+                              <span className="text-gray-500">{band.remark}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <div className="flex items-center gap-1">
+                              {editingGrade === i ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingGrade(null)}
+                                  className="rounded-lg p-1.5 text-green-600 hover:bg-green-50"
+                                  title="Done editing"
+                                >
+                                  <CheckCircle2 className="h-4 w-4" />
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingGrade(i)}
+                                  className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                                  title="Edit"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => deleteGradeBand(i)}
+                                className="rounded-lg p-1.5 text-red-400 hover:bg-red-50 hover:text-red-600"
+                                title="Delete"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                  <p className="mt-4 text-xs text-gray-400">
-                    Grading bands are managed centrally via <code>@goinze/shared-utils</code>.
-                    Contact a super admin to modify.
-                  </p>
+                  <div className="mt-4 flex items-center justify-between">
+                    <p className="text-xs text-gray-400">
+                      Click the pencil icon to edit a grade band, or add new ones.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleSaveGrading}
+                      disabled={saving === 'grading'}
+                      className="btn-primary disabled:opacity-60"
+                    >
+                      <Save className="h-4 w-4" />
+                      {saving === 'grading' ? 'Saving…' : 'Save Grading Scale'}
+                    </button>
+                  </div>
                 </div>
               </Card>
-            )}
-
-            {tab === 'payments' && (
-              <Card title="Payment Gateway" subtitle="Flutterwave integration for online fee collection">
-                <form onSubmit={handleSaveGateway}>
-                  <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
-                    <Field
-                      id="flw-public"
-                      label="Public Key"
-                      value={flwPublic}
-                      onChange={setFlwPublic}
-                      placeholder="FLWPUBK-…"
-                    />
-                    <Field
-                      id="flw-secret"
-                      label="Secret Key"
-                      type="password"
-                      value={flwSecret}
-                      onChange={setFlwSecret}
-                      placeholder="FLWSECK-…"
-                    />
-                    <Field
-                      id="flw-enc"
-                      label="Encryption Key"
-                      type="password"
-                      value={flwEnc}
-                      onChange={setFlwEnc}
-                    />
-                    <Field
-                      id="flw-webhook"
-                      label="Webhook Hash"
-                      type="password"
-                      value={flwWebhook}
-                      onChange={setFlwWebhook}
-                    />
-                    <p className="text-xs text-gray-400 sm:col-span-2">
-                      Keys are stored per school for the payment service. In production, prefer
-                      provisioning secrets via environment variables on the server.
-                    </p>
-                    <div className="sm:col-span-2">
-                      <button
-                        type="submit"
-                        disabled={saving === 'gateway'}
-                        className="btn-primary disabled:opacity-60"
-                      >
-                        <Save className="h-4 w-4" />
-                        {saving === 'gateway' ? 'Saving…' : 'Save Gateway Settings'}
-                      </button>
-                    </div>
-                  </div>
-                </form>
-              </Card>
-            )}
-
-            {tab === 'email' && (
-              <Card title="Email / SMS" subtitle="Outbound notification channels">
-                <form onSubmit={handleSaveChannels}>
-                  <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
-                    <Field id="smtp-host" label="SMTP Host" value={smtpHost} onChange={setSmtpHost} />
-                    <Field id="smtp-port" label="SMTP Port" value={smtpPort} onChange={setSmtpPort} />
-                    <Field id="smtp-user" label="SMTP User" value={smtpUser} onChange={setSmtpUser} />
-                    <Field
-                      id="smtp-pass"
-                      label="SMTP Password"
-                      type="password"
-                      value={smtpPass}
-                      onChange={setSmtpPass}
-                    />
-                    <Field
-                      id="sms-key"
-                      label="SMS API Key"
-                      type="password"
-                      value={smsKey}
-                      onChange={setSmsKey}
-                    />
-                    <Field id="sms-sender" label="SMS Sender ID" value={smsSender} onChange={setSmsSender} />
-                    <div className="sm:col-span-2">
-                      <button
-                        type="submit"
-                        disabled={saving === 'channels'}
-                        className="btn-primary disabled:opacity-60"
-                      >
-                        <Save className="h-4 w-4" />
-                        {saving === 'channels' ? 'Saving…' : 'Save Channels'}
-                      </button>
-                    </div>
-                  </div>
-                </form>
-              </Card>
-            )}
-
-            {tab === 'security' && (
-              <div className="space-y-6">
-                <Card title="Change Password" subtitle="Update the password for your admin account">
-                  <form onSubmit={handleChangePassword}>
-                    <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
-                      <div className="sm:col-span-2">
-                        <Field
-                          id="current-password"
-                          label="Current Password"
-                          type="password"
-                          value={currentPassword}
-                          onChange={setCurrentPassword}
-                        />
-                      </div>
-                      <Field
-                        id="new-password"
-                        label="New Password"
-                        type="password"
-                        value={newPassword}
-                        onChange={setNewPassword}
-                      />
-                      <Field
-                        id="confirm-password"
-                        label="Confirm New Password"
-                        type="password"
-                        value={confirmPassword}
-                        onChange={setConfirmPassword}
-                      />
-                      <div className="sm:col-span-2">
-                        <button
-                          type="submit"
-                          disabled={saving === 'password'}
-                          className="btn-primary disabled:opacity-60"
-                        >
-                          <KeyRound className="h-4 w-4" />
-                          {saving === 'password' ? 'Updating…' : 'Change Password'}
-                        </button>
-                      </div>
-                    </div>
-                  </form>
-                </Card>
-
-                <Card title="Platform Security" subtitle="Managed by the platform team">
-                  <div className="p-5 text-sm leading-relaxed text-gray-500">
-                    JWT signing secrets, token lifetimes and sign-in attempt limits are configured
-                    centrally via server environment variables and apply to every school on the
-                    platform. Contact your platform administrator to adjust these policies.
-                  </div>
-                </Card>
-              </div>
             )}
           </div>
         </div>

@@ -70,20 +70,19 @@ export default function ContactPage() {
           <div>
             <h2 className="text-2xl font-bold text-slate-900">Find Us on the Map</h2>
             <p className="mt-2 text-sm text-slate-600">
-              Our main campus is located in the heart of Goinze City.
+              Our main campus is located in Bwari Area Council, Abuja.
             </p>
             <div className="mt-6 overflow-hidden rounded-xl border border-slate-200 shadow-card">
-              <div className="flex h-[420px] items-center justify-center bg-gradient-to-br from-blue-50 to-slate-100">
-                <div className="text-center">
-                  <MapPin className="mx-auto h-10 w-10 text-brand" />
-                  <p className="mt-3 text-sm font-semibold text-slate-700">
-                    Google Maps embed placeholder
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Replace with an iframe embed of the campus location.
-                  </p>
-                </div>
-              </div>
+              <iframe
+                title="School Location"
+                src="https://www.google.com/maps?q=Along+Verita+University+Road+Zuma+1,+Opposite+ECAW+Church,+Bwari+Area+Council,+Abuja,+Nigeria&output=embed"
+                width="100%"
+                height="420"
+                style={{ border: 0 }}
+                allowFullScreen
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
             </div>
           </div>
         </div>

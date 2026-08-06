@@ -50,7 +50,7 @@ export class AuthService {
   }
 
   /** Validate credentials and issue tokens. */
-  async login(dto: LoginDto): Promise<AuthTokens> {
+  async login(dto: LoginDto, ipAddress?: string): Promise<AuthTokens> {
     let user: Awaited<ReturnType<AuthService['validateUser']>>;
     try {
       user = await this.validateUser(dto.email, dto.password);
@@ -59,7 +59,8 @@ export class AuthService {
         .log({
           action: 'auth.login_failed',
           entity: 'User',
-          metadata: { email: dto.email.toLowerCase() },
+          metadata: { email: dto.email.toLowerCase(), reason: 'Invalid credentials' },
+          ipAddress,
         })
         .catch(() => undefined);
       throw err;
@@ -69,7 +70,7 @@ export class AuthService {
       data: { lastLoginAt: new Date() },
     });
     await this.prisma.db.loginHistory.create({
-      data: { userId: user.id, success: true },
+      data: { userId: user.id, success: true, ipAddress },
     });
     await this.security
       .log({
@@ -79,6 +80,7 @@ export class AuthService {
         entity: 'User',
         entityId: user.id,
         metadata: { email: user.email },
+        ipAddress,
       })
       .catch(() => undefined);
     return this.issueTokens(user);
@@ -153,6 +155,7 @@ export class AuthService {
     userId: string,
     currentPassword: string,
     newPassword: string,
+    ipAddress?: string,
   ): Promise<{ success: true }> {
     const user = await this.prisma.db.user.findUnique({ where: { id: userId } });
     if (!user) {
@@ -174,9 +177,81 @@ export class AuthService {
         action: 'auth.password_changed',
         entity: 'User',
         entityId: user.id,
+        metadata: { changedField: 'password' },
+        ipAddress,
       })
       .catch(() => undefined);
     return { success: true };
+  }
+
+  /** Update the current user's profile fields (firstName, lastName, email, avatarUrl). */
+  async updateProfile(
+    userId: string,
+    data: { firstName?: string; lastName?: string; email?: string; avatarUrl?: string },
+    ipAddress?: string,
+  ): Promise<SessionUser> {
+    const user = await this.prisma.db.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Check email uniqueness if changing
+    if (data.email && data.email !== user.email) {
+      const existing = await this.prisma.db.user.findUnique({ where: { email: data.email } });
+      if (existing) {
+        throw new ConflictException('Email is already in use');
+      }
+    }
+
+    // Track what changed
+    const changes: Record<string, { old: string; new: string }> = {};
+    if (data.firstName !== undefined && data.firstName !== user.firstName) {
+      changes.firstName = { old: user.firstName, new: data.firstName };
+    }
+    if (data.lastName !== undefined && data.lastName !== user.lastName) {
+      changes.lastName = { old: user.lastName, new: data.lastName };
+    }
+    if (data.email !== undefined && data.email !== user.email) {
+      changes.email = { old: user.email, new: data.email };
+    }
+    if (data.avatarUrl !== undefined && data.avatarUrl !== (user.avatarUrl ?? '')) {
+      changes.avatarUrl = { old: user.avatarUrl ?? '', new: data.avatarUrl };
+    }
+
+    const updated = await this.prisma.db.user.update({
+      where: { id: userId },
+      data: {
+        ...(data.firstName !== undefined && { firstName: data.firstName }),
+        ...(data.lastName !== undefined && { lastName: data.lastName }),
+        ...(data.email !== undefined && { email: data.email }),
+        ...(data.avatarUrl !== undefined && { avatarUrl: data.avatarUrl }),
+      },
+    });
+
+    // Log the changes
+    if (Object.keys(changes).length > 0) {
+      await this.security
+        .log({
+          schoolId: user.schoolId,
+          userId: user.id,
+          action: 'auth.profile_updated',
+          entity: 'User',
+          entityId: user.id,
+          metadata: { changes },
+          ipAddress,
+        })
+        .catch(() => undefined);
+    }
+
+    return {
+      id: updated.id,
+      email: updated.email,
+      firstName: updated.firstName,
+      lastName: updated.lastName,
+      role: updated.role as SessionUser['role'],
+      schoolId: updated.schoolId,
+      avatarUrl: updated.avatarUrl,
+    };
   }
 
   /** Sign an access + refresh JWT pair for a user. */

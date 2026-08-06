@@ -6,6 +6,7 @@ import Link from "next/link";
 import {
   ArrowRight,
   CalendarDays,
+  Loader2,
   MapPin,
   Megaphone,
   Quote,
@@ -61,11 +62,24 @@ function coverFor(post: NewsPostRecord) {
   return post.coverUrl ?? `https://picsum.photos/seed/${post.slug}/900/560`;
 }
 
+function LoadingSkeleton() {
+  return (
+    <div className="flex items-center justify-center py-12">
+      <Loader2 className="h-6 w-6 animate-spin text-brand" />
+      <span className="ml-2 text-sm text-slate-400">Loading…</span>
+    </div>
+  );
+}
+
 export default function HomePage() {
   const [news, setNews] = useState<NewsPostRecord[]>([]);
+  const [newsLoading, setNewsLoading] = useState(true);
   const [announcements, setAnnouncements] = useState<AnnouncementRecord[]>([]);
+  const [announcementsLoading, setAnnouncementsLoading] = useState(true);
   const [events, setEvents] = useState<EventRecord[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(true);
   const [gallery, setGallery] = useState<GalleryItemRecord[]>([]);
+  const [galleryLoading, setGalleryLoading] = useState(true);
   const { blocks } = useContentBlocks();
 
   useEffect(() => {
@@ -73,21 +87,25 @@ export default function HomePage() {
     websiteApi
       .news()
       .then((res) => active && setNews(res.slice(0, 3)))
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => active && setNewsLoading(false));
     announcementsApi
       .list()
       .then((res) => active && setAnnouncements(res.slice(0, 5)))
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => active && setAnnouncementsLoading(false));
     websiteApi
       .events()
       .then((res) => active && setEvents(res.slice(0, 3)))
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => active && setEventsLoading(false));
     websiteApi
       .gallery()
       .then((res) =>
         active && setGallery(res.filter((g) => g.type === "IMAGE").slice(0, 6)),
       )
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => active && setGalleryLoading(false));
     return () => {
       active = false;
     };
@@ -109,7 +127,7 @@ export default function HomePage() {
 
   return (
     <>
-      <HeroSlider />
+      <HeroSlider blocks={blocks} />
 
       {/* Admission CTA strip */}
       <div className="bg-gradient-to-r from-brand-dark to-brand">
@@ -139,57 +157,63 @@ export default function HomePage() {
         title="Latest News"
         subtitle="The latest stories and updates from across the university."
       >
-        {latestNews.length === 0 ? (
+        {newsLoading ? (
+          <LoadingSkeleton />
+        ) : latestNews.length === 0 ? (
           <p className="text-center text-slate-500">No news published yet — check back soon.</p>
         ) : (
-          <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-            {latestNews.map((post) => (
-              <Card key={post.id} hover className="overflow-hidden">
-                <Link href={`/news/${post.slug}`} className="group block">
-                  <div className="relative h-44 w-full overflow-hidden">
-                    <Image
-                      src={coverFor(post)}
-                      alt={post.title}
-                      fill
-                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                      className="object-cover transition-transform duration-500 group-hover:scale-105"
-                    />
-                    {post.category && (
-                      <span className="absolute left-3 top-3 rounded-full bg-brand px-3 py-1 text-xs font-semibold text-white">
-                        {post.category}
-                      </span>
-                    )}
-                  </div>
-                  <div className="p-5">
-                    <h3 className="text-lg font-bold text-slate-900 transition-colors group-hover:text-brand">
-                      {post.title}
-                    </h3>
-                    {post.excerpt && (
-                      <p className="mt-2 line-clamp-2 text-sm text-slate-600">{post.excerpt}</p>
-                    )}
-                    <p className="mt-3 text-xs text-slate-500">
-                      {formatDate(post.publishedAt ?? post.createdAt)}
-                    </p>
-                  </div>
-                </Link>
-              </Card>
-            ))}
-          </div>
+          <>
+            <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+              {latestNews.map((post) => (
+                <Card key={post.id} hover className="overflow-hidden">
+                  <Link href={`/news/${post.slug}`} className="group block">
+                    <div className="relative h-44 w-full overflow-hidden">
+                      <Image
+                        src={coverFor(post)}
+                        alt={post.title}
+                        fill
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                        className="object-cover transition-transform duration-500 group-hover:scale-105"
+                      />
+                      {post.category && (
+                        <span className="absolute left-3 top-3 rounded-full bg-brand px-3 py-1 text-xs font-semibold text-white">
+                          {post.category}
+                        </span>
+                      )}
+                    </div>
+                    <div className="p-5">
+                      <h3 className="text-lg font-bold text-slate-900 transition-colors group-hover:text-brand">
+                        {post.title}
+                      </h3>
+                      {post.excerpt && (
+                        <p className="mt-2 line-clamp-2 text-sm text-slate-600">{post.excerpt}</p>
+                      )}
+                      <p className="mt-3 text-xs text-slate-500">
+                        {formatDate(post.publishedAt ?? post.createdAt)}
+                      </p>
+                    </div>
+                  </Link>
+                </Card>
+              ))}
+            </div>
+            <div className="mt-8 text-center">
+              <Link
+                href="/news"
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand transition-colors hover:text-brand-dark"
+              >
+                View all news
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+          </>
         )}
-        <div className="mt-8 text-center">
-          <Link
-            href="/news"
-            className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand transition-colors hover:text-brand-dark"
-          >
-            View all news
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
       </Section>
 
       {/* Announcements */}
       <Section className="bg-slate-50" eyebrow="Notice Board" title="Announcements">
-        {announcements.length === 0 ? (
+        {announcementsLoading ? (
+          <LoadingSkeleton />
+        ) : announcements.length === 0 ? (
           <p className="text-center text-slate-500">No announcements right now.</p>
         ) : (
           <div className="space-y-3">
@@ -224,88 +248,96 @@ export default function HomePage() {
         title="Upcoming Events"
         subtitle="Mark your calendar for these upcoming university events."
       >
-        {upcomingEvents.length === 0 ? (
+        {eventsLoading ? (
+          <LoadingSkeleton />
+        ) : upcomingEvents.length === 0 ? (
           <p className="text-center text-slate-500">No upcoming events scheduled.</p>
         ) : (
-          <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-            {upcomingEvents.map((event) => (
-              <Card key={event.id} hover className="flex gap-5 p-6">
-                <div className="flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-xl bg-brand text-white">
-                  <span className="text-2xl font-extrabold leading-none">
-                    {eventDay(event.startsAt)}
-                  </span>
-                  <span className="text-xs font-semibold uppercase">
-                    {eventMonth(event.startsAt)}
-                  </span>
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-slate-900">{event.title}</h3>
-                  {event.description && (
-                    <p className="mt-1 line-clamp-2 text-sm text-slate-600">{event.description}</p>
-                  )}
-                  <div className="mt-3 space-y-1 text-xs text-slate-500">
-                    <p className="flex items-center gap-1.5">
-                      <CalendarDays className="h-3.5 w-3.5 text-brand" />
-                      {eventTime(event.startsAt, event.endsAt)}
-                    </p>
-                    {event.location && (
-                      <p className="flex items-center gap-1.5">
-                        <MapPin className="h-3.5 w-3.5 text-brand" />
-                        {event.location}
-                      </p>
-                    )}
+          <>
+            <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+              {upcomingEvents.map((event) => (
+                <Card key={event.id} hover className="flex gap-5 p-6">
+                  <div className="flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-xl bg-brand text-white">
+                    <span className="text-2xl font-extrabold leading-none">
+                      {eventDay(event.startsAt)}
+                    </span>
+                    <span className="text-xs font-semibold uppercase">
+                      {eventMonth(event.startsAt)}
+                    </span>
                   </div>
-                </div>
-              </Card>
-            ))}
-          </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900">{event.title}</h3>
+                    {event.description && (
+                      <p className="mt-1 line-clamp-2 text-sm text-slate-600">{event.description}</p>
+                    )}
+                    <div className="mt-3 space-y-1 text-xs text-slate-500">
+                      <p className="flex items-center gap-1.5">
+                        <CalendarDays className="h-3.5 w-3.5 text-brand" />
+                        {eventTime(event.startsAt, event.endsAt)}
+                      </p>
+                      {event.location && (
+                        <p className="flex items-center gap-1.5">
+                          <MapPin className="h-3.5 w-3.5 text-brand" />
+                          {event.location}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+            <div className="mt-8 text-center">
+              <Link
+                href="/events"
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand transition-colors hover:text-brand-dark"
+              >
+                View all events
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+          </>
         )}
-        <div className="mt-8 text-center">
-          <Link
-            href="/events"
-            className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand transition-colors hover:text-brand-dark"
-          >
-            View all events
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
       </Section>
 
       {/* Gallery preview */}
       <Section className="bg-slate-50" eyebrow="Campus Life" title="Gallery">
-        {galleryPreview.length === 0 ? (
+        {galleryLoading ? (
+          <LoadingSkeleton />
+        ) : galleryPreview.length === 0 ? (
           <p className="text-center text-slate-500">Gallery photos coming soon.</p>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {galleryPreview.map((photo) => (
-              <div key={photo.id} className="group relative overflow-hidden rounded-xl shadow-card">
-                <div className="relative h-48 w-full">
-                  <Image
-                    src={photo.url}
-                    alt={photo.caption ?? "Campus photo"}
-                    fill
-                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                    className="object-cover transition-transform duration-500 group-hover:scale-105"
-                  />
-                </div>
-                {photo.caption && (
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-900/70 to-transparent p-3 pt-8">
-                    <p className="text-sm font-medium text-white">{photo.caption}</p>
+          <>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {galleryPreview.map((photo) => (
+                <div key={photo.id} className="group relative overflow-hidden rounded-xl shadow-card">
+                  <div className="relative h-48 w-full">
+                    <Image
+                      src={photo.url}
+                      alt={photo.caption ?? "Campus photo"}
+                      fill
+                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                      className="object-cover transition-transform duration-500 group-hover:scale-105"
+                    />
                   </div>
-                )}
-              </div>
-            ))}
-          </div>
+                  {photo.caption && (
+                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-900/70 to-transparent p-3 pt-8">
+                      <p className="text-sm font-medium text-white">{photo.caption}</p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="mt-8 text-center">
+              <Link
+                href="/gallery"
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand transition-colors hover:text-brand-dark"
+              >
+                Explore the gallery
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+          </>
         )}
-        <div className="mt-8 text-center">
-          <Link
-            href="/gallery"
-            className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand transition-colors hover:text-brand-dark"
-          >
-            Explore the gallery
-            <ArrowRight className="h-4 w-4" />
-          </Link>
-        </div>
       </Section>
 
       {/* Testimonials */}

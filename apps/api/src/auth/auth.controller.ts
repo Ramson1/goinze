@@ -5,8 +5,10 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { IpAddress } from '../common/decorators/ip-address.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
 @Controller('auth')
@@ -21,8 +23,8 @@ export class AuthController {
 
   @Public()
   @Post('login')
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  login(@Body() dto: LoginDto, @IpAddress() ip: string) {
+    return this.authService.login(dto, ip);
   }
 
   @Public()
@@ -44,15 +46,27 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Patch('me')
+  updateProfile(
+    @CurrentUser() user: SessionUser,
+    @Body() dto: UpdateProfileDto,
+    @IpAddress() ip: string,
+  ) {
+    return this.authService.updateProfile(user.id, dto, ip);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Patch('change-password')
   changePassword(
     @CurrentUser() user: SessionUser,
     @Body() dto: ChangePasswordDto,
+    @IpAddress() ip: string,
   ) {
     return this.authService.changePassword(
       user.id,
       dto.currentPassword,
       dto.newPassword,
+      ip,
     );
   }
 }

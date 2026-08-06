@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   AlertCircle,
   CheckCircle2,
@@ -31,9 +32,11 @@ function semesterLabel(sem: string): string {
 }
 
 export default function CoursesPage() {
+  const searchParams = useSearchParams();
+  const initialSearch = searchParams.get('search') ?? '';
   const [courses, setCourses] = useState<Paginated<CourseRecord> | null>(null);
   const [departments, setDepartments] = useState<DepartmentFull[]>([]);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(initialSearch);
   const [deptFilter, setDeptFilter] = useState('');
   const [levelFilter, setLevelFilter] = useState('');
   const [semFilter, setSemFilter] = useState('');

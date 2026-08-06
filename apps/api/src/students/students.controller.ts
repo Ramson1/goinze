@@ -59,6 +59,12 @@ export class StudentsController {
     return this.studentsService.import(user.schoolId, dto);
   }
 
+  @Post('promote')
+  @Roles('SCHOOL_ADMIN')
+  promoteAll(@CurrentUser() user: SessionUser) {
+    return this.studentsService.promoteAll(user.schoolId);
+  }
+
   @Patch(':id')
   @Roles('SCHOOL_ADMIN', 'ADMISSION_OFFICER')
   update(@Param('id') id: string, @Body() dto: UpdateStudentDto) {

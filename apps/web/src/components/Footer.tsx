@@ -61,14 +61,14 @@ export default function Footer() {
                 className="h-9 w-9 object-contain"
               />
             </span>
-            <span className="text-lg font-bold text-white">Goinzeschool</span>
+            <span className="text-sm font-bold leading-tight text-white">Goinze International School<br />of Medical Health Science<br />& Technology</span>
           </div>
           <p className="mt-3 text-xs font-semibold uppercase tracking-wider text-blue-300">
             Motto: Learn How to Maintain a Good Health
           </p>
           <p className="mt-3 text-sm leading-relaxed text-slate-400">
-            Goinze International School of Medical Health Science and Technology,
-            Bwari Abuja, is committed to bridging the gap and creating access to
+            Along Verita University Road Zuma 1, Opposite ECAW Church,
+            Bwari Area Council, Abuja, is committed to bridging the gap and creating access to
             health knowledge down to the grass roots.
           </p>
           <div className="mt-5 flex gap-3">
@@ -116,11 +116,15 @@ export default function Footer() {
             </li>
             <li className="flex items-center gap-3">
               <Phone className="h-4 w-4 shrink-0 text-brand-light" />
-              <span>{contactInfo.phone}</span>
+              <a href={`tel:${contactInfo.phone.replace(/\s+/g, '')}`} className="transition-colors hover:text-brand-light">
+                {contactInfo.phone}
+              </a>
             </li>
             <li className="flex items-center gap-3">
               <Mail className="h-4 w-4 shrink-0 text-brand-light" />
-              <span>{contactInfo.email}</span>
+              <a href={`mailto:${contactInfo.email}`} className="transition-colors hover:text-brand-light">
+                {contactInfo.email}
+              </a>
             </li>
           </ul>
         </div>
@@ -163,7 +167,13 @@ export default function Footer() {
             >
               Rhema Expert Solutions
             </a>
-            {' '}| Contact: +234 803 522 6642
+            {' '}| Contact:{' '}
+            <a
+              href="tel:+2348035226642"
+              className="font-medium text-brand-light hover:underline"
+            >
+              +234 803 522 6642
+            </a>
           </p>
         </div>
       </div>

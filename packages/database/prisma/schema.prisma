@@ -1077,20 +1077,30 @@ model WebsiteContent {
 }
 
 model NewsPost {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   schoolId  String
-  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  school    School    @relation(fields: [schoolId], references: [id], onDelete: Cascade)
   title     String
   slug      String
   category  String?
   excerpt   String?
   body      String
   coverUrl  String?
-  published Boolean  @default(false)
+  published Boolean   @default(false)
   publishedAt DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
+  comments  Comment[]
 
   @@unique([schoolId, slug])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  newsPostId String
+  newsPost  NewsPost @relation(fields: [newsPostId], references: [id], onDelete: Cascade)
+  name      String
+  text      String
+  createdAt DateTime @default(now())
 }
 
 model Event {

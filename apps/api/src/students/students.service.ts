@@ -74,6 +74,7 @@ export class StudentsService {
         departmentId: dto.departmentId,
         currentLevel: dto.currentLevel,
         status: (dto.status as any) ?? 'APPLICANT',
+        passportUrl: dto.passportUrl,
       },
     });
   }
@@ -92,10 +93,12 @@ export class StudentsService {
         phone: dto.phone,
         address: dto.address,
         stateOfOrigin: dto.stateOfOrigin,
+        nationality: dto.nationality,
         programmeId: dto.programmeId,
         departmentId: dto.departmentId,
         currentLevel: dto.currentLevel,
         status: dto.status as any,
+        passportUrl: dto.passportUrl,
       },
     });
   }
@@ -151,5 +154,28 @@ export class StudentsService {
 
   archive(id: string) {
     return this.setStatus(id, 'ARCHIVED');
+  }
+
+  /**
+   * Promote all ACTIVE students to the next level (increment by 100).
+   * Students already at the maximum level (600) are not affected.
+   */
+  async promoteAll(schoolId: string | null): Promise<{ promoted: number }> {
+    const where: Record<string, any> = {
+      status: 'ACTIVE',
+      currentLevel: { lt: 600 },
+    };
+    if (schoolId) where.schoolId = schoolId;
+
+    const result = await this.prisma.db.student.updateMany({
+      where,
+      data: {
+        currentLevel: {
+          increment: 100,
+        },
+      },
+    });
+
+    return { promoted: result.count };
   }
 }

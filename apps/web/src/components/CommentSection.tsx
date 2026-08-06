@@ -1,56 +1,65 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { MessageCircle } from "lucide-react";
+import { websiteApi, type CommentRecord } from "@/lib/api";
 
-type Comment = {
-  id: number;
-  name: string;
-  date: string;
-  text: string;
-};
+function formatCommentDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
 
-const seedComments: Comment[] = [
-  {
-    id: 1,
-    name: "Grace O.",
-    date: "June 20, 2026",
-    text: "Wonderful news! So proud of what the university is building for students.",
-  },
-  {
-    id: 2,
-    name: "Michael T.",
-    date: "June 21, 2026",
-    text: "Looking forward to the open seminars. Will they be streamed online?",
-  },
-];
+interface CommentSectionProps {
+  newsPostId: string;
+}
 
 /**
- * Article comments UI (demo — comments are held in local state only).
+ * Article comments — persisted to the database via the API.
  */
-export default function CommentSection() {
-  const [comments, setComments] = useState<Comment[]>(seedComments);
+export default function CommentSection({ newsPostId }: CommentSectionProps) {
+  const [comments, setComments] = useState<CommentRecord[]>([]);
+  const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
   const [text, setText] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: FormEvent) => {
+  const loadComments = useCallback(async () => {
+    try {
+      const res = await websiteApi.listComments(newsPostId);
+      setComments(res);
+    } catch {
+      // Silently fail — comments are non-critical
+    } finally {
+      setLoading(false);
+    }
+  }, [newsPostId]);
+
+  useEffect(() => {
+    void loadComments();
+  }, [loadComments]);
+
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !text.trim()) return;
-    setComments((prev) => [
-      ...prev,
-      {
-        id: prev.length + 1,
+    setSubmitting(true);
+    setError(null);
+    try {
+      const newComment = await websiteApi.createComment(newsPostId, {
         name: name.trim(),
-        date: new Date().toLocaleDateString("en-US", {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-        }),
         text: text.trim(),
-      },
-    ]);
-    setName("");
-    setText("");
+      });
+      setComments((prev) => [...prev, newComment]);
+      setName("");
+      setText("");
+    } catch {
+      setError("Failed to post comment. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -60,25 +69,36 @@ export default function CommentSection() {
         Comments ({comments.length})
       </h2>
 
-      <div className="mt-6 space-y-5">
-        {comments.map((comment) => (
-          <div key={comment.id} className="rounded-xl border border-slate-100 bg-slate-50 p-5">
-            <div className="flex items-center gap-3">
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand text-sm font-bold text-white">
-                {comment.name.charAt(0).toUpperCase()}
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-slate-900">{comment.name}</p>
-                <p className="text-xs text-slate-500">{comment.date}</p>
+      {loading ? (
+        <p className="mt-6 text-sm text-slate-500">Loading comments…</p>
+      ) : comments.length === 0 ? (
+        <p className="mt-6 text-sm text-slate-500">
+          No comments yet. Be the first to share your thoughts!
+        </p>
+      ) : (
+        <div className="mt-6 space-y-5">
+          {comments.map((comment) => (
+            <div key={comment.id} className="rounded-xl border border-slate-100 bg-slate-50 p-5">
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand text-sm font-bold text-white">
+                  {comment.name.charAt(0).toUpperCase()}
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">{comment.name}</p>
+                  <p className="text-xs text-slate-500">{formatCommentDate(comment.createdAt)}</p>
+                </div>
               </div>
+              <p className="mt-3 text-sm leading-relaxed text-slate-700">{comment.text}</p>
             </div>
-            <p className="mt-3 text-sm leading-relaxed text-slate-700">{comment.text}</p>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="mt-8 rounded-xl border border-slate-100 bg-white p-6 shadow-card">
         <h3 className="text-lg font-bold text-slate-900">Leave a comment</h3>
+        {error && (
+          <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
+        )}
         <div className="mt-4 space-y-4">
           <input
             type="text"
@@ -98,9 +118,10 @@ export default function CommentSection() {
           />
           <button
             type="submit"
-            className="rounded-lg bg-brand px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-dark"
+            disabled={submitting}
+            className="rounded-lg bg-brand px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-dark disabled:opacity-60"
           >
-            Post Comment
+            {submitting ? "Posting…" : "Post Comment"}
           </button>
         </div>
       </form>

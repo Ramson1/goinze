@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -40,6 +41,21 @@ export class CommunicationController {
     @Body() data: { title: string; body: string; audience?: string; pinned?: boolean },
   ) {
     return this.communicationService.createAnnouncement(user.schoolId, data);
+  }
+
+  @Patch('announcements/:id')
+  @Roles('SCHOOL_ADMIN')
+  updateAnnouncement(
+    @Param('id') id: string,
+    @Body() data: { title?: string; body?: string; audience?: string; pinned?: boolean },
+  ) {
+    return this.communicationService.updateAnnouncement(id, data);
+  }
+
+  @Delete('announcements/:id')
+  @Roles('SCHOOL_ADMIN')
+  deleteAnnouncement(@Param('id') id: string) {
+    return this.communicationService.deleteAnnouncement(id);
   }
 
   // ---- Messages ----

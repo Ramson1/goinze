@@ -32,6 +32,26 @@ export class CommunicationService {
     });
   }
 
+  async updateAnnouncement(
+    id: string,
+    data: { title?: string; body?: string; audience?: string; pinned?: boolean },
+  ) {
+    const announcement = await this.prisma.db.announcement.findUnique({ where: { id } });
+    if (!announcement) throw new NotFoundException('Announcement not found');
+    const updateData: Record<string, any> = {};
+    if (data.title !== undefined) updateData.title = data.title;
+    if (data.body !== undefined) updateData.body = data.body;
+    if (data.audience !== undefined) updateData.audience = data.audience;
+    if (data.pinned !== undefined) updateData.pinned = data.pinned;
+    return this.prisma.db.announcement.update({ where: { id }, data: updateData });
+  }
+
+  async deleteAnnouncement(id: string) {
+    const announcement = await this.prisma.db.announcement.findUnique({ where: { id } });
+    if (!announcement) throw new NotFoundException('Announcement not found');
+    return this.prisma.db.announcement.delete({ where: { id } });
+  }
+
   // ---- Messages ----
   listMessages(userId: string) {
     return this.prisma.db.message.findMany({

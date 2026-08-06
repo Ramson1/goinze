@@ -42,7 +42,7 @@ export class IdCardsService {
         qrData: `goinzeschool://id/${verificationCode}`,
         barcode: cardNumber,
         status: 'ACTIVE',
-        expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + 4 * 365 * 24 * 60 * 60 * 1000)
       },
     });
   }
@@ -81,5 +81,94 @@ export class IdCardsService {
       where: { id },
       data: { status: 'REVOKED' },
     });
+  }
+
+  /** Batch generate ID cards for multiple students or staff. */
+  async batchGenerate(
+    schoolId: string | null,
+    data: { type: 'STUDENT' | 'STAFF'; studentIds?: string[]; staffIds?: string[] },
+  ) {
+    const code = await this.schoolCode(schoolId);
+    const results: any[] = [];
+
+    if (data.type === 'STUDENT' && data.studentIds?.length) {
+      for (const studentId of data.studentIds) {
+        // Skip if already has an active card
+        const existing = await this.prisma.db.idCard.findFirst({
+          where: { studentId, status: 'ACTIVE' },
+        });
+        if (existing) {
+          results.push(existing);
+          continue;
+        }
+        const cardNumber = generateCardNumber(code);
+        const verificationCode = generateVerificationCode();
+        const card = await this.prisma.db.idCard.create({
+          data: {
+            schoolId: schoolId ?? '',
+            type: 'STUDENT',
+            studentId,
+            cardNumber,
+            verificationCode,
+            qrData: `goinzeschool://id/${verificationCode}`,
+            barcode: cardNumber,
+            status: 'ACTIVE',
+            expiresAt: new Date(Date.now() + 4 * 365 * 24 * 60 * 60 * 1000)
+          },
+        });
+        results.push(card);
+      }
+    }
+
+    if (data.type === 'STAFF' && data.staffIds?.length) {
+      for (const staffId of data.staffIds) {
+        const existing = await this.prisma.db.idCard.findFirst({
+          where: { staffId, status: 'ACTIVE' },
+        });
+        if (existing) {
+          results.push(existing);
+          continue;
+        }
+        const cardNumber = generateCardNumber(code);
+        const verificationCode = generateVerificationCode();
+        const card = await this.prisma.db.idCard.create({
+          data: {
+            schoolId: schoolId ?? '',
+            type: 'STAFF',
+            staffId,
+            cardNumber,
+            verificationCode,
+            qrData: `goinzeschool://id/${verificationCode}`,
+            barcode: cardNumber,
+            status: 'ACTIVE',
+            expiresAt: new Date(Date.now() + 4 * 365 * 24 * 60 * 60 * 1000)
+          },
+        });
+        results.push(card);
+      }
+    }
+
+    return results;
+  }
+
+  /** Return a map of personId -> latest active card for status tracking. */
+  async getStatusMap(schoolId: string | null): Promise<Record<string, any>> {
+    const where: Record<string, any> = { status: 'ACTIVE' };
+    if (schoolId) where.schoolId = schoolId;
+
+    const cards = await this.prisma.db.idCard.findMany({
+      where,
+      include: { student: true, staff: true },
+      orderBy: { issuedAt: 'desc' },
+    });
+
+    const map: Record<string, any> = {};
+    for (const card of cards) {
+      const key = card.studentId ?? card.staffId;
+      if (key && !map[key]) {
+        map[key] = card;
+      }
+    }
+    return map;
   }
 }

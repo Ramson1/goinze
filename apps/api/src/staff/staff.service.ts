@@ -89,6 +89,7 @@ export class StaffService {
         qualification: data.qualification,
         isLecturer: Boolean(data.isLecturer),
         staffCategory: data.staffCategory || undefined,
+        photoUrl: data.photoUrl,
       },
     });
   }
@@ -111,6 +112,7 @@ export class StaffService {
         qualification: data.qualification,
         isLecturer: data.isLecturer,
         staffCategory: data.staffCategory,
+        photoUrl: data.photoUrl,
       },
     });
   }

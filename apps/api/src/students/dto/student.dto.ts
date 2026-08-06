@@ -81,6 +81,10 @@ export class CreateStudentDto {
   @IsOptional()
   @IsEnum(STUDENT_STATUSES)
   status?: (typeof STUDENT_STATUSES)[number];
+
+  @IsOptional()
+  @IsString()
+  passportUrl?: string;
 }
 
 export class UpdateStudentDto {
@@ -122,6 +126,10 @@ export class UpdateStudentDto {
 
   @IsOptional()
   @IsString()
+  nationality?: string;
+
+  @IsOptional()
+  @IsString()
   programmeId?: string;
 
   @IsOptional()
@@ -136,6 +144,10 @@ export class UpdateStudentDto {
   @IsOptional()
   @IsEnum(STUDENT_STATUSES)
   status?: (typeof STUDENT_STATUSES)[number];
+
+  @IsOptional()
+  @IsString()
+  passportUrl?: string;
 }
 
 export class ImportStudentsDto {

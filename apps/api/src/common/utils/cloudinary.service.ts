@@ -13,14 +13,20 @@ export class CloudinaryService {
   }
 
   /**
-   * Upload a buffer (or base64 data URL) to Cloudinary.
+   * Upload a buffer (binary data) or base64 data URL to Cloudinary.
+   * Buffers are automatically converted to base64 data URIs.
    * Returns the secure URL plus metadata useful for storage.
    */
   async uploadImage(
     file: Buffer | string,
     folder = 'goinzeschool',
   ): Promise<{ url: string; publicId: string; format: string; bytes: number }> {
-    const result = (await cloudinary.uploader.upload(file as any, {
+    // Cloudinary expects a file path or base64 data URI — not a raw Buffer.
+    const uploadSource = Buffer.isBuffer(file)
+      ? `data:application/octet-stream;base64,${file.toString('base64')}`
+      : file;
+
+    const result = (await cloudinary.uploader.upload(uploadSource, {
       folder,
       resource_type: 'auto',
     })) as UploadApiResponse | UploadApiErrorResponse;

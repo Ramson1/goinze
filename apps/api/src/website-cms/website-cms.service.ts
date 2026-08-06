@@ -33,6 +33,12 @@ export class WebsiteCmsService {
     });
   }
 
+  deleteContent(schoolId: string | null, key: string) {
+    return this.prisma.db.websiteContent.delete({
+      where: { schoolId_key: { schoolId: schoolId ?? '', key } },
+    });
+  }
+
   // ---- News posts ----
   listNews(schoolId: string | null, publishedOnly = false) {
     const where: Record<string, any> = {};
@@ -91,6 +97,76 @@ export class WebsiteCmsService {
     });
   }
 
+  async updateNews(
+    id: string,
+    data: {
+      title?: string;
+      body?: string;
+      category?: string;
+      excerpt?: string;
+      coverUrl?: string;
+      published?: boolean;
+    },
+  ) {
+    const post = await this.prisma.db.newsPost.findUnique({ where: { id } });
+    if (!post) throw new NotFoundException('News post not found');
+    const updateData: Record<string, any> = {};
+    if (data.title !== undefined) {
+      updateData.title = data.title;
+      updateData.slug = slugify(data.title);
+    }
+    if (data.body !== undefined) updateData.body = data.body;
+    if (data.category !== undefined) updateData.category = data.category;
+    if (data.excerpt !== undefined) updateData.excerpt = data.excerpt;
+    if (data.coverUrl !== undefined) updateData.coverUrl = data.coverUrl;
+    if (data.published !== undefined) {
+      updateData.published = data.published;
+      updateData.publishedAt = data.published ? new Date() : null;
+    }
+    return this.prisma.db.newsPost.update({ where: { id }, data: updateData });
+  }
+
+  async deleteNews(id: string) {
+    const post = await this.prisma.db.newsPost.findUnique({ where: { id } });
+    if (!post) throw new NotFoundException('News post not found');
+    return this.prisma.db.newsPost.delete({ where: { id } });
+  }
+
+  // ---- Comments ----
+  listComments(newsPostId: string) {
+    return this.prisma.db.comment.findMany({
+      where: { newsPostId },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async createComment(newsPostId: string, data: { name: string; text: string }) {
+    const post = await this.prisma.db.newsPost.findUnique({ where: { id: newsPostId } });
+    if (!post) throw new NotFoundException('News post not found');
+    return this.prisma.db.comment.create({
+      data: {
+        newsPostId,
+        name: data.name,
+        text: data.text,
+      },
+    });
+  }
+
+  async updateComment(id: string, data: { name?: string; text?: string }) {
+    const comment = await this.prisma.db.comment.findUnique({ where: { id } });
+    if (!comment) throw new NotFoundException('Comment not found');
+    const updateData: Record<string, any> = {};
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.text !== undefined) updateData.text = data.text;
+    return this.prisma.db.comment.update({ where: { id }, data: updateData });
+  }
+
+  async deleteComment(id: string) {
+    const comment = await this.prisma.db.comment.findUnique({ where: { id } });
+    if (!comment) throw new NotFoundException('Comment not found');
+    return this.prisma.db.comment.delete({ where: { id } });
+  }
+
   // ---- Events ----
   listEvents(schoolId: string | null) {
     return this.prisma.db.event.findMany({
@@ -122,6 +198,35 @@ export class WebsiteCmsService {
         coverUrl: data.coverUrl,
       },
     });
+  }
+
+  async updateEvent(
+    id: string,
+    data: {
+      title?: string;
+      description?: string;
+      location?: string;
+      startsAt?: string;
+      endsAt?: string;
+      coverUrl?: string;
+    },
+  ) {
+    const event = await this.prisma.db.event.findUnique({ where: { id } });
+    if (!event) throw new NotFoundException('Event not found');
+    const updateData: Record<string, any> = {};
+    if (data.title !== undefined) updateData.title = data.title;
+    if (data.description !== undefined) updateData.description = data.description;
+    if (data.location !== undefined) updateData.location = data.location;
+    if (data.startsAt !== undefined) updateData.startsAt = new Date(data.startsAt);
+    if (data.endsAt !== undefined) updateData.endsAt = data.endsAt ? new Date(data.endsAt) : null;
+    if (data.coverUrl !== undefined) updateData.coverUrl = data.coverUrl;
+    return this.prisma.db.event.update({ where: { id }, data: updateData });
+  }
+
+  async deleteEvent(id: string) {
+    const event = await this.prisma.db.event.findUnique({ where: { id } });
+    if (!event) throw new NotFoundException('Event not found');
+    return this.prisma.db.event.delete({ where: { id } });
   }
 
   // ---- Gallery ----

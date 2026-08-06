@@ -14,31 +14,19 @@ import {
   useContentBlocks,
 } from "@/lib/content";
 
-const pillars = [
-  {
-    Icon: Landmark,
-    title: "Our Pledge",
-    body: "We acknowledge the importance of primary health in our country and the world at large. At Goinze International School of Medical Health Science and Technology, we believe in building a nation that is well informed and not deformed, holding primary care service in high esteem.",
-  },
-  {
-    Icon: Eye,
-    title: "Our Vision",
-    body: "To bridge the gap and create access to health knowledge down to the grass roots, developing the younger generation and training them in health education, skills and techniques.",
-  },
-  {
-    Icon: Compass,
-    title: "Our Mission",
-    body: "To train and produce persons who are equipped with comprehensive theoretical knowledge and practical skills required for meaningful engagement in all areas of primary health care.",
-  },
-  {
-    Icon: Award,
-    title: "Accreditation",
-    body: "Our programmes are examined and certified by national regulatory bodies — including NBTE, CHPRBN, EHORECON, the Medical Laboratory Science Council of Nigeria and the Health Records Officers Registration Board — leading to professional registration and practice licences.",
-  },
-];
+/* ── Default content (used when CMS has no data yet) ── */
+const defaultPillars = {
+  pledge:
+    "We acknowledge the importance of primary health in our country and the world at large. At Goinze International School of Medical Health Science and Technology, we believe in building a nation that is well informed and not deformed, holding primary care service in high esteem.",
+  vision:
+    "To bridge the gap and create access to health knowledge down to the grass roots, developing the younger generation and training them in health education, skills and techniques.",
+  mission:
+    "To train and produce persons who are equipped with comprehensive theoretical knowledge and practical skills required for meaningful engagement in all areas of primary health care.",
+  accreditation:
+    "Our programmes are examined and certified by national regulatory bodies — including NBTE, CHPRBN, EHORECON, the Medical Laboratory Science Council of Nigeria and the Health Records Officers Registration Board — leading to professional registration and practice licences.",
+};
 
-// Official documents from the school's registry (public/certificates).
-const certificates = [
+const defaultCertificates = [
   {
     image: "/certificates/licence-to-operate.png",
     title: "Licence to Operate",
@@ -71,6 +59,21 @@ const certificates = [
   },
 ];
 
+const defaultCoreValues = [
+  "Primary Health Care",
+  "Excellence",
+  "Integrity",
+  "Discipline",
+  "Community",
+];
+
+const pillarIcons: Record<string, { Icon: typeof Landmark; label: string }> = {
+  pledge: { Icon: Landmark, label: "Our Pledge" },
+  vision: { Icon: Eye, label: "Our Vision" },
+  mission: { Icon: Compass, label: "Our Mission" },
+  accreditation: { Icon: Award, label: "Accreditation" },
+};
+
 export default function AboutPage() {
   const { blocks } = useContentBlocks();
 
@@ -79,26 +82,60 @@ export default function AboutPage() {
     return cms.length > 0 ? cms : defaultManagementTeam;
   })();
 
+  // Pillars from CMS (object with pledge/vision/mission/accreditation keys)
+  const pillars = (() => {
+    const cms = getBlockBody(blocks, "about.pillars");
+    if (cms && typeof cms === "object" && !Array.isArray(cms)) {
+      const obj = cms as Record<string, unknown>;
+      // Only use CMS data if at least one field has content
+      if (obj.pledge || obj.vision || obj.mission || obj.accreditation) {
+        return {
+          pledge: (obj.pledge as string) || defaultPillars.pledge,
+          vision: (obj.vision as string) || defaultPillars.vision,
+          mission: (obj.mission as string) || defaultPillars.mission,
+          accreditation: (obj.accreditation as string) || defaultPillars.accreditation,
+        };
+      }
+    }
+    return defaultPillars;
+  })();
+
+  // Certificates from CMS
+  const certificates = (() => {
+    const cms = asArray(getBlockBody(blocks, "about.certificates"));
+    return cms.length > 0 ? cms : defaultCertificates;
+  })();
+
+  // Core values from CMS
+  const coreValues = (() => {
+    const cms = asArray(getBlockBody(blocks, "about.coreValues"));
+    return cms.length > 0 ? cms : defaultCoreValues;
+  })();
+
   return (
     <>
       <PageHeader
         breadcrumb="About"
         title="About Goinze International School of Medical Health Science and Technology"
-        subtitle="Learn how to maintain a good health — training health professionals for the grass roots, Bwari, Abuja."
+        subtitle="Learn how to maintain a good health — training health professionals for the grass roots, Bwari Area Council, Abuja."
       />
 
       {/* Pledge / Vision / Mission / Accreditation */}
       <Section>
         <div className="grid gap-8 md:grid-cols-2">
-          {pillars.map(({ Icon, title, body }) => (
-            <Card key={title} hover className="p-8">
-              <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-brand">
-                <Icon className="h-6 w-6" />
-              </span>
-              <h2 className="mt-5 text-2xl font-bold text-slate-900">{title}</h2>
-              <p className="mt-3 leading-relaxed text-slate-600">{body}</p>
-            </Card>
-          ))}
+          {(Object.keys(pillarIcons) as Array<keyof typeof pillarIcons>).map((key) => {
+            const { Icon, label } = pillarIcons[key];
+            const body = pillars[key as keyof typeof pillars];
+            return (
+              <Card key={key} hover className="p-8">
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-brand">
+                  <Icon className="h-6 w-6" />
+                </span>
+                <h2 className="mt-5 text-2xl font-bold text-slate-900">{label}</h2>
+                <p className="mt-3 leading-relaxed text-slate-600">{body}</p>
+              </Card>
+            );
+          })}
         </div>
       </Section>
 
@@ -142,8 +179,8 @@ export default function AboutPage() {
         subtitle="Goinze International School of Medical Health Science and Technology is duly registered, licensed and accredited by the relevant national bodies."
       >
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {certificates.map((cert) => (
-            <Card key={cert.image} hover className="flex flex-col overflow-hidden">
+          {certificates.map((cert: { image: string; title: string; issuer: string }, idx: number) => (
+            <Card key={cert.image || idx} hover className="flex flex-col overflow-hidden">
               <a
                 href={cert.image}
                 target="_blank"
@@ -176,7 +213,7 @@ export default function AboutPage() {
         <Container className="py-12 text-center">
           <h2 className="text-2xl font-bold text-white">Our Core Values</h2>
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-            {["Primary Health Care", "Excellence", "Integrity", "Discipline", "Community"].map((value) => (
+            {coreValues.map((value: string) => (
               <span
                 key={value}
                 className="rounded-full border border-white/30 bg-white/10 px-5 py-2 text-sm font-semibold text-white"

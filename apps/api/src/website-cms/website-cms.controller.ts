@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -14,16 +15,21 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { SessionUser } from '@goinze/shared-types';
 import { WebsiteCmsService } from './website-cms.service';
+import { SecurityService } from '../security/security.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { IpAddress } from '../common/decorators/ip-address.decorator';
 
 @Controller('website')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class WebsiteCmsController {
-  constructor(private readonly websiteCmsService: WebsiteCmsService) {}
+  constructor(
+    private readonly websiteCmsService: WebsiteCmsService,
+    private readonly security: SecurityService,
+  ) {}
 
   // ---- Website content ----
   @Public()
@@ -34,11 +40,45 @@ export class WebsiteCmsController {
 
   @Post('content')
   @Roles('SCHOOL_ADMIN')
-  upsertContent(
+  async upsertContent(
     @CurrentUser() user: SessionUser,
     @Body() data: { key: string; title?: string; body?: any },
+    @IpAddress() ip: string,
   ) {
-    return this.websiteCmsService.upsertContent(user.schoolId, data);
+    const result = await this.websiteCmsService.upsertContent(user.schoolId, data);
+    this.security
+      .log({
+        schoolId: user.schoolId,
+        userId: user.id,
+        action: 'cms.content_upserted',
+        entity: 'WebsiteContent',
+        entityId: result.id,
+        metadata: { key: data.key, title: data.title },
+        ipAddress: ip,
+      })
+      .catch(() => undefined);
+    return result;
+  }
+
+  @Delete('content/:key')
+  @Roles('SCHOOL_ADMIN')
+  async deleteContent(
+    @CurrentUser() user: SessionUser,
+    @Param('key') key: string,
+    @IpAddress() ip: string,
+  ) {
+    const result = await this.websiteCmsService.deleteContent(user.schoolId, key);
+    this.security
+      .log({
+        schoolId: user.schoolId,
+        userId: user.id,
+        action: 'cms.content_deleted',
+        entity: 'WebsiteContent',
+        metadata: { key },
+        ipAddress: ip,
+      })
+      .catch(() => undefined);
+    return result;
   }
 
   // ---- News ----
@@ -71,7 +111,7 @@ export class WebsiteCmsController {
 
   @Post('news')
   @Roles('SCHOOL_ADMIN')
-  createNews(
+  async createNews(
     @CurrentUser() user: SessionUser,
     @Body()
     data: {
@@ -82,8 +122,104 @@ export class WebsiteCmsController {
       coverUrl?: string;
       published?: boolean;
     },
+    @IpAddress() ip: string,
   ) {
-    return this.websiteCmsService.createNews(user.schoolId, data);
+    const result = await this.websiteCmsService.createNews(user.schoolId, data);
+    this.security
+      .log({
+        schoolId: user.schoolId,
+        userId: user.id,
+        action: 'cms.news_created',
+        entity: 'NewsPost',
+        entityId: result.id,
+        metadata: { title: data.title, category: data.category },
+        ipAddress: ip,
+      })
+      .catch(() => undefined);
+    return result;
+  }
+
+  @Patch('news/:id')
+  @Roles('SCHOOL_ADMIN')
+  async updateNews(
+    @Param('id') id: string,
+    @Body()
+    data: {
+      title?: string;
+      body?: string;
+      category?: string;
+      excerpt?: string;
+      coverUrl?: string;
+      published?: boolean;
+    },
+    @CurrentUser() user: SessionUser,
+    @IpAddress() ip: string,
+  ) {
+    const result = await this.websiteCmsService.updateNews(id, data);
+    this.security
+      .log({
+        schoolId: user.schoolId,
+        userId: user.id,
+        action: 'cms.news_updated',
+        entity: 'NewsPost',
+        entityId: id,
+        metadata: { changedFields: Object.keys(data) },
+        ipAddress: ip,
+      })
+      .catch(() => undefined);
+    return result;
+  }
+
+  @Delete('news/:id')
+  @Roles('SCHOOL_ADMIN')
+  async deleteNews(
+    @Param('id') id: string,
+    @CurrentUser() user: SessionUser,
+    @IpAddress() ip: string,
+  ) {
+    const result = await this.websiteCmsService.deleteNews(id);
+    this.security
+      .log({
+        schoolId: user.schoolId,
+        userId: user.id,
+        action: 'cms.news_deleted',
+        entity: 'NewsPost',
+        entityId: id,
+        ipAddress: ip,
+      })
+      .catch(() => undefined);
+    return result;
+  }
+
+  // ---- Comments ----
+  @Public()
+  @Get('news/:id/comments')
+  listComments(@Param('id') newsPostId: string) {
+    return this.websiteCmsService.listComments(newsPostId);
+  }
+
+  @Public()
+  @Post('news/:id/comments')
+  createComment(
+    @Param('id') newsPostId: string,
+    @Body() data: { name: string; text: string },
+  ) {
+    return this.websiteCmsService.createComment(newsPostId, data);
+  }
+
+  @Patch('comments/:id')
+  @Roles('SCHOOL_ADMIN')
+  updateComment(
+    @Param('id') id: string,
+    @Body() data: { name?: string; text?: string },
+  ) {
+    return this.websiteCmsService.updateComment(id, data);
+  }
+
+  @Delete('comments/:id')
+  @Roles('SCHOOL_ADMIN')
+  deleteComment(@Param('id') id: string) {
+    return this.websiteCmsService.deleteComment(id);
   }
 
   // ---- Events ----
@@ -95,7 +231,7 @@ export class WebsiteCmsController {
 
   @Post('events')
   @Roles('SCHOOL_ADMIN')
-  createEvent(
+  async createEvent(
     @CurrentUser() user: SessionUser,
     @Body()
     data: {
@@ -106,8 +242,73 @@ export class WebsiteCmsController {
       endsAt?: string;
       coverUrl?: string;
     },
+    @IpAddress() ip: string,
   ) {
-    return this.websiteCmsService.createEvent(user.schoolId, data);
+    const result = await this.websiteCmsService.createEvent(user.schoolId, data);
+    this.security
+      .log({
+        schoolId: user.schoolId,
+        userId: user.id,
+        action: 'cms.event_created',
+        entity: 'Event',
+        entityId: result.id,
+        metadata: { title: data.title },
+        ipAddress: ip,
+      })
+      .catch(() => undefined);
+    return result;
+  }
+
+  @Patch('events/:id')
+  @Roles('SCHOOL_ADMIN')
+  async updateEvent(
+    @Param('id') id: string,
+    @Body()
+    data: {
+      title?: string;
+      description?: string;
+      location?: string;
+      startsAt?: string;
+      endsAt?: string;
+      coverUrl?: string;
+    },
+    @CurrentUser() user: SessionUser,
+    @IpAddress() ip: string,
+  ) {
+    const result = await this.websiteCmsService.updateEvent(id, data);
+    this.security
+      .log({
+        schoolId: user.schoolId,
+        userId: user.id,
+        action: 'cms.event_updated',
+        entity: 'Event',
+        entityId: id,
+        metadata: { changedFields: Object.keys(data) },
+        ipAddress: ip,
+      })
+      .catch(() => undefined);
+    return result;
+  }
+
+  @Delete('events/:id')
+  @Roles('SCHOOL_ADMIN')
+  async deleteEvent(
+    @Param('id') id: string,
+    @CurrentUser() user: SessionUser,
+    @IpAddress() ip: string,
+  ) {
+    const result = await this.websiteCmsService.deleteEvent(id);
+    this.security
+      .log({
+        schoolId: user.schoolId,
+        userId: user.id,
+        action: 'cms.event_deleted',
+        entity: 'Event',
+        entityId: id,
+        ipAddress: ip,
+      })
+      .catch(() => undefined);
+    return result;
   }
 
   // ---- Gallery ----
@@ -122,11 +323,24 @@ export class WebsiteCmsController {
 
   @Post('gallery')
   @Roles('SCHOOL_ADMIN')
-  createGalleryItem(
+  async createGalleryItem(
     @CurrentUser() user: SessionUser,
     @Body() data: { url: string; type?: string; caption?: string; album?: string },
+    @IpAddress() ip: string,
   ) {
-    return this.websiteCmsService.createGalleryItem(user.schoolId, data);
+    const result = await this.websiteCmsService.createGalleryItem(user.schoolId, data);
+    this.security
+      .log({
+        schoolId: user.schoolId,
+        userId: user.id,
+        action: 'cms.gallery_item_created',
+        entity: 'GalleryItem',
+        entityId: result.id,
+        metadata: { caption: data.caption, album: data.album },
+        ipAddress: ip,
+      })
+      .catch(() => undefined);
+    return result;
   }
 
   // ---- Media upload ----

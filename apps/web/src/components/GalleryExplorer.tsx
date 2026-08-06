@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
+import { X } from "lucide-react";
 import { websiteApi, type GalleryItemRecord } from "@/lib/api";
 
 /**
@@ -11,6 +12,7 @@ export default function GalleryExplorer() {
   const [photos, setPhotos] = useState<GalleryItemRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [album, setAlbum] = useState<string>("All");
+  const [lightbox, setLightbox] = useState<GalleryItemRecord | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -33,6 +35,20 @@ export default function GalleryExplorer() {
   }, [photos]);
 
   const filtered = album === "All" ? photos : photos.filter((p) => p.album === album);
+
+  // Close lightbox on Escape
+  useEffect(() => {
+    if (!lightbox) return;
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setLightbox(null);
+    }
+    document.addEventListener("keydown", handleKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", handleKey);
+      document.body.style.overflow = "";
+    };
+  }, [lightbox]);
 
   if (loading) {
     return <p className="py-16 text-center text-slate-500">Loading gallery…</p>;
@@ -66,7 +82,11 @@ export default function GalleryExplorer() {
             key={photo.id}
             className="group relative overflow-hidden rounded-xl shadow-card transition-shadow hover:shadow-card-hover"
           >
-            <div className="relative h-56 w-full">
+            <button
+              type="button"
+              onClick={() => setLightbox(photo)}
+              className="relative block h-56 w-full cursor-zoom-in"
+            >
               <Image
                 src={photo.url}
                 alt={photo.caption ?? "Campus photo"}
@@ -74,10 +94,10 @@ export default function GalleryExplorer() {
                 sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
                 className="object-cover transition-transform duration-500 group-hover:scale-105"
               />
-            </div>
+            </button>
             <figcaption className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-900/80 to-transparent p-4 pt-8">
               {photo.album && (
-                <span className="text-xs font-semibold uppercase tracking-wider text-brand-light">
+                <span className="text-xs font-semibold uppercase tracking-wider text-amber-400">
                   {photo.album}
                 </span>
               )}
@@ -86,6 +106,49 @@ export default function GalleryExplorer() {
           </figure>
         ))}
       </div>
+
+      {/* Lightbox modal */}
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+          onClick={() => setLightbox(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setLightbox(null)}
+            className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+            aria-label="Close"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          <div
+            className="relative max-h-[85vh] max-w-[90vw]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Image
+              src={lightbox.url}
+              alt={lightbox.caption ?? "Campus photo"}
+              width={1200}
+              height={800}
+              sizes="90vw"
+              className="max-h-[85vh] w-auto object-contain"
+              priority
+            />
+            {(lightbox.caption || lightbox.album) && (
+              <div className="absolute inset-x-0 bottom-0 rounded-b-lg bg-gradient-to-t from-black/70 to-transparent px-5 py-4 pt-10">
+                {lightbox.album && (
+                  <span className="text-xs font-semibold uppercase tracking-wider text-amber-400">
+                    {lightbox.album}
+                  </span>
+                )}
+                {lightbox.caption && (
+                  <p className="text-sm font-medium text-white">{lightbox.caption}</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

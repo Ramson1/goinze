@@ -12,10 +12,12 @@ import {
   Eye,
   EyeOff,
   Loader2,
+  Camera,
+  Upload,
 } from 'lucide-react';
 import Card from '@/components/Card';
 import PageHeader from '@/components/PageHeader';
-import { authApi } from '@/lib/api';
+import { authApi, cmsApi } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
 interface UserProfile {
@@ -44,7 +46,7 @@ export default function ProfilePage() {
 
   // Edit mode
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState({ firstName: '', lastName: '' });
+  const [draft, setDraft] = useState({ firstName: '', lastName: '', email: '' });
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
@@ -54,19 +56,23 @@ export default function ProfilePage() {
   const [pwLoading, setPwLoading] = useState(false);
   const [pwMsg, setPwMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
+  // Avatar upload
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+
   useEffect(() => {
     authApi
       .me()
       .then((data) => {
         setProfile(data as UserProfile);
-        setDraft({ firstName: data.firstName, lastName: data.lastName });
+        setDraft({ firstName: data.firstName, lastName: data.lastName, email: data.email });
       })
       .catch(() => undefined)
       .finally(() => setLoading(false));
   }, []);
 
   function startEdit() {
-    if (profile) setDraft({ firstName: profile.firstName, lastName: profile.lastName });
+    if (profile) setDraft({ firstName: profile.firstName, lastName: profile.lastName, email: profile.email });
     setEditing(true);
     setSaveMsg(null);
   }
@@ -81,11 +87,21 @@ export default function ProfilePage() {
     setSaving(true);
     setSaveMsg(null);
     try {
-      // The /auth/me endpoint is read-only; in a future iteration a PATCH /auth/me will persist changes.
-      // For now we update the local state to reflect the draft.
-      setProfile((p) => (p ? { ...p, firstName: draft.firstName, lastName: draft.lastName } : p));
+      const updated = await authApi.updateProfile({
+        firstName: draft.firstName,
+        lastName: draft.lastName,
+        email: draft.email,
+      });
+      setProfile({
+        ...profile,
+        firstName: updated.firstName,
+        lastName: updated.lastName,
+        email: updated.email,
+      });
       setEditing(false);
       setSaveMsg('Profile updated successfully.');
+    } catch (err: any) {
+      setSaveMsg(err?.message ?? 'Failed to update profile.');
     } finally {
       setSaving(false);
     }
@@ -111,6 +127,35 @@ export default function ProfilePage() {
       setPwMsg({ type: 'err', text: err?.message ?? 'Failed to change password.' });
     } finally {
       setPwLoading(false);
+    }
+  }
+
+  async function handleAvatarUpload(file: File) {
+    if (!profile) return;
+    setAvatarUploading(true);
+    setAvatarError(null);
+    try {
+      const result = await cmsApi.uploadMedia(file);
+      const updated = await authApi.updateProfile({ avatarUrl: result.url });
+      setProfile({ ...profile, avatarUrl: updated.avatarUrl });
+    } catch (err: any) {
+      setAvatarError(err?.message ?? 'Failed to upload photo.');
+    } finally {
+      setAvatarUploading(false);
+    }
+  }
+
+  async function handleRemoveAvatar() {
+    if (!profile) return;
+    setAvatarUploading(true);
+    setAvatarError(null);
+    try {
+      const updated = await authApi.updateProfile({ avatarUrl: '' as any });
+      setProfile({ ...profile, avatarUrl: null });
+    } catch (err: any) {
+      setAvatarError(err?.message ?? 'Failed to remove photo.');
+    } finally {
+      setAvatarUploading(false);
     }
   }
 
@@ -142,24 +187,78 @@ export default function ProfilePage() {
       {/* Identity banner */}
       <Card className="mb-6 overflow-hidden">
         <div className="h-24 bg-gradient-to-r from-blue-900 via-blue-700 to-blue-900" />
-        <div className="flex flex-col gap-4 px-6 pb-6 sm:flex-row sm:items-end sm:justify-between">
-          <div className="-mt-10 flex items-end gap-4">
-            <span className="flex h-20 w-20 items-center justify-center rounded-2xl bg-brand text-2xl font-bold text-white ring-4 ring-white">
-              {initials}
-            </span>
-            <div className="pb-1">
+        <div className="flex flex-col gap-4 px-6 pb-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="-mt-10 flex items-center gap-4">
+            <div className="relative">
+              {profile.avatarUrl ? (
+                <img
+                  src={profile.avatarUrl}
+                  alt={`${profile.firstName} ${profile.lastName}`}
+                  className="h-20 w-20 shrink-0 rounded-2xl object-cover ring-4 ring-white"
+                />
+              ) : (
+                <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-brand text-2xl font-bold text-white ring-4 ring-white">
+                  {initials}
+                </span>
+              )}
+              <label
+                className={cn(
+                  'absolute -bottom-1 -right-1 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full bg-white shadow-md ring-1 ring-gray-200 transition hover:bg-gray-50',
+                  avatarUploading && 'pointer-events-none opacity-60',
+                )}
+                title="Upload profile photo"
+              >
+                {avatarUploading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-brand" />
+                ) : (
+                  <Camera className="h-3.5 w-3.5 text-brand" />
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    if (file.size > 5 * 1024 * 1024) {
+                      setAvatarError('Image must be under 5 MB.');
+                      e.target.value = '';
+                      return;
+                    }
+                    await handleAvatarUpload(file);
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+            </div>
+            <div className="pt-10">
               <h2 className="text-lg font-bold text-gray-900">
                 {profile.firstName} {profile.lastName}
               </h2>
               <p className="text-sm text-gray-500">{profile.email}</p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2 pb-1">
+          <div className="flex flex-wrap gap-2">
+            {profile.avatarUrl && (
+              <button
+                type="button"
+                onClick={handleRemoveAvatar}
+                disabled={avatarUploading}
+                className="rounded-full border border-red-200 px-3 py-1 text-xs font-semibold text-red-500 transition hover:bg-red-50 disabled:opacity-50"
+              >
+                Remove photo
+              </button>
+            )}
             <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-brand">
               {formatRole(profile.role)}
             </span>
           </div>
         </div>
+        {avatarError && (
+          <div className="mx-6 mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-xs text-red-600">
+            {avatarError}
+          </div>
+        )}
       </Card>
 
       <div className="space-y-6">
@@ -234,7 +333,16 @@ export default function ProfilePage() {
               <dt className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-gray-400">
                 <Mail className="h-3 w-3" /> Email
               </dt>
-              <dd className="mt-1 text-sm font-medium text-gray-800">{dash(profile.email)}</dd>
+              {editing ? (
+                <input
+                  value={draft.email}
+                  onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))}
+                  type="email"
+                  className="input mt-1.5"
+                />
+              ) : (
+                <dd className="mt-1 text-sm font-medium text-gray-800">{dash(profile.email)}</dd>
+              )}
             </div>
             <div>
               <dt className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-gray-400">

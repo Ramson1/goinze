@@ -22,7 +22,7 @@ export class IdCardsController {
   constructor(private readonly idCardsService: IdCardsService) {}
 
   @Post()
-  @Roles('SCHOOL_ADMIN')
+  @Roles('SUPER_ADMIN', 'SCHOOL_ADMIN')
   generate(
     @CurrentUser() user: SessionUser,
     @Body() data: { type: 'STUDENT' | 'STAFF'; studentId?: string; staffId?: string },
@@ -30,8 +30,23 @@ export class IdCardsController {
     return this.idCardsService.generate(user.schoolId, data);
   }
 
+  @Post('batch')
+  @Roles('SUPER_ADMIN', 'SCHOOL_ADMIN')
+  batchGenerate(
+    @CurrentUser() user: SessionUser,
+    @Body() data: { type: 'STUDENT' | 'STAFF'; studentIds?: string[]; staffIds?: string[] },
+  ) {
+    return this.idCardsService.batchGenerate(user.schoolId, data);
+  }
+
+  @Get('status')
+  @Roles('SUPER_ADMIN', 'SCHOOL_ADMIN')
+  statusMap(@CurrentUser() user: SessionUser) {
+    return this.idCardsService.getStatusMap(user.schoolId);
+  }
+
   @Get()
-  @Roles('SCHOOL_ADMIN')
+  @Roles('SUPER_ADMIN', 'SCHOOL_ADMIN')
   list(
     @CurrentUser() user: SessionUser,
     @Query('type') type?: string,
@@ -47,7 +62,7 @@ export class IdCardsController {
   }
 
   @Patch(':id/revoke')
-  @Roles('SCHOOL_ADMIN')
+  @Roles('SUPER_ADMIN', 'SCHOOL_ADMIN')
   revoke(@Param('id') id: string) {
     return this.idCardsService.revoke(id);
   }

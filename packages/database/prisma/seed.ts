@@ -117,14 +117,10 @@ async function main() {
   });
 
   const DEPARTMENTS: Array<{ code: string; name: string }> = [
-    { code: 'PUB', name: 'Public Health' },
-    { code: 'CHT', name: 'Community Health' },
-    { code: 'EVH', name: 'Environmental Health' },
-    { code: 'HIM', name: 'Health Information Management' },
+    { code: 'CHEW', name: 'Community Health' },
     { code: 'MLT', name: 'Medical Laboratory Technician' },
-    { code: 'PCT', name: 'Pharmaceutical Technology' },
-    { code: 'DHT', name: 'Dental Health Technology' },
-    { code: 'GNS', name: 'General Studies' },
+    { code: 'PH', name: 'Public Health' },
+    { code: 'PT', name: 'Pharmacy Technician' },
   ];
 
   const deptIds = new Map<string, string>();
@@ -149,34 +145,10 @@ async function main() {
     degreeType: string;
     durationYears: number;
   }> = [
-    // Public Health
-    { dept: 'PUB', code: 'HND-PUB', name: 'Higher National Diploma in Public Health', degreeType: 'HND', durationYears: 2 },
-    { dept: 'PUB', code: 'PREHND-PUB', name: 'Pre-HND in Public Health (Abridgement)', degreeType: 'Pre-HND', durationYears: 1 },
-    { dept: 'PUB', code: 'DHND-PUB', name: 'Direct HND in Public Health', degreeType: 'DHND', durationYears: 4 },
-    { dept: 'PUB', code: 'PD-PUB', name: 'Professional Diploma in Public Health', degreeType: 'Diploma', durationYears: 2 },
-    { dept: 'PUB', code: 'DIP-PHT', name: 'Diploma in Public Health Technician', degreeType: 'Diploma', durationYears: 3 },
-    { dept: 'PUB', code: 'PHA', name: 'Public Health Assistant', degreeType: 'Certificate', durationYears: 2 },
-    // Community Health
-    { dept: 'CHT', code: 'HND-CHT', name: 'Higher National Diploma in Community Health', degreeType: 'HND', durationYears: 2 },
-    { dept: 'CHT', code: 'PREHND-CHT', name: 'Pre-HND in Community Health (Abridgement)', degreeType: 'Pre-HND', durationYears: 1 },
-    { dept: 'CHT', code: 'DHND-CHT', name: 'Direct HND in Community Health', degreeType: 'DHND', durationYears: 5 },
-    { dept: 'CHT', code: 'ND-CHT', name: 'National Diploma in Community Health', degreeType: 'ND', durationYears: 3 },
-    { dept: 'CHT', code: 'DIP-CHEW', name: 'Diploma in Community Health (CHEW)', degreeType: 'Diploma', durationYears: 3 },
-    { dept: 'CHT', code: 'JCHEW', name: 'Junior Community Health Extension Workers (JCHEW)', degreeType: 'Certificate', durationYears: 2 },
-    // Environmental Health
-    { dept: 'EVH', code: 'HND-EVH', name: 'Higher National Diploma in Environmental Health', degreeType: 'HND', durationYears: 2 },
-    { dept: 'EVH', code: 'ND-EVH', name: 'National Diploma in Environmental Health Technology', degreeType: 'ND', durationYears: 2 },
-    // Health Information Management
-    { dept: 'HIM', code: 'ND-HIM', name: 'National Diploma in Health Information Management', degreeType: 'ND', durationYears: 2 },
-    { dept: 'HIM', code: 'PD-HIM', name: 'Professional Diploma / HIM Technician in Health Information Management', degreeType: 'Diploma', durationYears: 3 },
-    // Medical Laboratory Technician
-    { dept: 'MLT', code: 'DIP-MLT', name: 'Diploma in Medical Laboratory Technician (MLT)', degreeType: 'Diploma', durationYears: 3 },
-    // Pharmaceutical Technology
-    { dept: 'PCT', code: 'ND-PCT', name: 'National Diploma in Pharmaceutical Technology', degreeType: 'ND', durationYears: 2 },
-    // Dental Health Technology
-    { dept: 'DHT', code: 'ND-DHT', name: 'National Diploma in Dental Health Technology', degreeType: 'ND', durationYears: 4 },
-    // Remedial Studies
-    { dept: 'GNS', code: 'REMS', name: 'Remedial Studies (REMS)', degreeType: 'Remedial', durationYears: 1 },
+    { dept: 'CHEW', code: 'ND-CHEW', name: 'National Diploma in Community Health (CHEW)', degreeType: 'ND', durationYears: 3 },
+    { dept: 'MLT', code: 'ND-MLT', name: 'National Diploma in Medical Lab Technician (MLT)', degreeType: 'ND', durationYears: 3 },
+    { dept: 'PH', code: 'ND-PH', name: 'National Diploma in Public Health (PH)', degreeType: 'ND', durationYears: 3 },
+    { dept: 'PT', code: 'ND-PT', name: 'National Diploma in Pharmacy Technician (PT)', degreeType: 'ND', durationYears: 3 },
   ];
 
   console.log(`Seeding ${PROGRAMMES.length} programmes...`);

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
+import { cn } from '@/lib/utils';
 
 function getCookie(name: string): string | null {
   if (typeof document === 'undefined') return null;
@@ -33,8 +34,10 @@ export default function DashboardLayout({
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
   const [roleError, setRoleError] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<string>('');
 
   useEffect(() => {
     const token = getCookie('access_token');
@@ -51,6 +54,7 @@ export default function DashboardLayout({
       setTimeout(() => router.replace('/login'), 2500);
       return;
     }
+    setUserRole(role);
     setAuthChecked(true);
   }, [router, pathname]);
 
@@ -76,8 +80,14 @@ export default function DashboardLayout({
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className="flex min-w-0 flex-1 flex-col lg:pl-64">
+      <Sidebar
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        userRole={userRole}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
+      />
+      <div className={cn('flex min-w-0 flex-1 flex-col transition-all duration-200', sidebarCollapsed ? 'lg:pl-[68px]' : 'lg:pl-64')}>
         <Topbar onMenuClick={() => setSidebarOpen(true)} />
         <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
       </div>

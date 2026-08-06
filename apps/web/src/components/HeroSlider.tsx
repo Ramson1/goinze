@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { asArray, getBlockBody } from "@/lib/content";
+import type { WebsiteContentRecord } from "@/lib/api";
 
 type Slide = {
   image: string;
@@ -13,14 +15,14 @@ type Slide = {
   cta: { label: string; href: string };
 };
 
-const slides: Slide[] = [
+const defaultSlides: Slide[] = [
   // Campus buildings
   {
     image: "/hero/building-1.png",
     eyebrow: "Welcome",
     title: "Goinze International School of Medical Health Science and Technology",
     subtitle:
-      "Learn how to maintain a good health — training health professionals who take primary health care down to the grass roots, from our campus in Bwari, Abuja.",
+      "Learn how to maintain a good health — training health professionals who take primary health care down to the grass roots, from our campus along Verita University Road Zuma 1, Bwari Area Council, Abuja.",
     cta: { label: "Apply Now", href: "/admission" },
   },
   {
@@ -102,8 +104,8 @@ const slides: Slide[] = [
     eyebrow: "Pharmacology Laboratory",
     title: "The Science Behind Every Safe Medicine",
     subtitle:
-      "Pharmaceutical Technology students gain hands-on experience in drug preparation, dosage and safe dispensing practice.",
-    cta: { label: "Pharmaceutical Technology", href: "/academics" },
+      "Pharmacy Technician students gain hands-on experience in drug preparation, dosage and safe dispensing practice.",
+    cta: { label: "Pharmacy Technician", href: "/academics" },
   },
   {
     image: "/hero/physiology-lab.png",
@@ -115,10 +117,31 @@ const slides: Slide[] = [
   },
 ];
 
-export default function HeroSlider() {
+interface HeroSliderProps {
+  blocks?: WebsiteContentRecord[];
+}
+
+export default function HeroSlider({ blocks }: HeroSliderProps) {
+  // Build slides from CMS blocks, falling back to defaults
+  const slides: Slide[] = (() => {
+    if (blocks) {
+      const cms = asArray(getBlockBody(blocks, "hero.slides"));
+      if (cms.length > 0) {
+        return cms.map((s: any) => ({
+          image: s.image ?? "",
+          eyebrow: s.eyebrow ?? "",
+          title: s.title ?? "",
+          subtitle: s.subtitle ?? "",
+          cta: { label: s.ctaLabel ?? "", href: s.ctaHref ?? "/" },
+        }));
+      }
+    }
+    return defaultSlides;
+  })();
+
   const [index, setIndex] = useState(0);
 
-  const next = useCallback(() => setIndex((i) => (i + 1) % slides.length), []);
+  const next = useCallback(() => setIndex((i) => (i + 1) % slides.length), [slides.length]);
   const prev = () => setIndex((i) => (i - 1 + slides.length) % slides.length);
 
   useEffect(() => {
