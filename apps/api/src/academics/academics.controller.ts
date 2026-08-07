@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -112,6 +113,21 @@ export class AcademicsController {
     @Param('id') id: string,
   ) {
     return this.academicsService.activateSession(user.schoolId, id);
+  }
+
+  @Patch('sessions/:id')
+  @Roles('SCHOOL_ADMIN')
+  updateSession(
+    @Param('id') id: string,
+    @Body() data: Record<string, any>,
+  ) {
+    return this.academicsService.updateSession(id, data);
+  }
+
+  @Delete('sessions/:id')
+  @Roles('SCHOOL_ADMIN')
+  deleteSession(@Param('id') id: string) {
+    return this.academicsService.deleteSession(id);
   }
 
   // ---- Courses ----

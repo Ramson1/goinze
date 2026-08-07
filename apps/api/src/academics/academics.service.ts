@@ -119,6 +119,30 @@ export class AcademicsService {
     });
   }
 
+  async updateSession(id: string, data: Record<string, any>) {
+    const session = await this.prisma.db.academicSession.findUnique({ where: { id } });
+    if (!session) throw new NotFoundException('Session not found');
+    // If marking this session as current, unset all others for the same school
+    if (data.isCurrent === true) {
+      await this.prisma.db.academicSession.updateMany({
+        where: { schoolId: session.schoolId },
+        data: { isCurrent: false },
+      });
+    }
+    const updateData: Record<string, any> = {};
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.startDate !== undefined) updateData.startDate = data.startDate ? new Date(data.startDate) : null;
+    if (data.endDate !== undefined) updateData.endDate = data.endDate ? new Date(data.endDate) : null;
+    if (data.isCurrent !== undefined) updateData.isCurrent = Boolean(data.isCurrent);
+    return this.prisma.db.academicSession.update({ where: { id }, data: updateData });
+  }
+
+  async deleteSession(id: string) {
+    const session = await this.prisma.db.academicSession.findUnique({ where: { id } });
+    if (!session) throw new NotFoundException('Session not found');
+    return this.prisma.db.academicSession.delete({ where: { id } });
+  }
+
   // ---- Courses ----
   async listCourses(
     schoolId: string | null,

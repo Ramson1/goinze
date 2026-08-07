@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, ClipboardList, CreditCard, FileText } from "lucide-react";
+import { CheckCircle2, ClipboardList, CreditCard, Download, FileText } from "lucide-react";
 import { currentAcademicSession } from "@goinze/shared-utils";
 import PageHeader from "@/components/PageHeader";
 import Section from "@/components/Section";
@@ -22,6 +22,12 @@ export default function AdmissionPage() {
   const fees = (() => {
     const cms = asArray(getBlockBody(blocks, "admission.fees"));
     return cms.length > 0 ? cms : defaultFees;
+  })();
+
+  const feeScheduleDoc = (() => {
+    const body = getBlockBody(blocks, "admission.feeSchedule");
+    if (body && typeof body === "object" && "url" in body) return body as { url: string; name: string };
+    return null;
   })();
 
   const requirements = (() => {
@@ -95,6 +101,20 @@ export default function AdmissionPage() {
           * Tuition and other session/semester fees are as approved by the college —
           contact the Bursary for the current schedule. There is no refund of fees once paid.
         </p>
+
+        {/* Uploaded fee schedule document */}
+        {feeScheduleDoc && (
+          <a
+            href={feeScheduleDoc.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-4 inline-flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-5 py-3 text-sm font-medium text-brand transition hover:bg-blue-100"
+          >
+            <FileText className="h-5 w-5" />
+            <span>Download Schedule of Fees</span>
+            <Download className="h-4 w-4" />
+          </a>
+        )}
       </Section>
 
       {/* Application form */}
@@ -105,7 +125,7 @@ export default function AdmissionPage() {
         id="apply"
       >
         <Card className="p-8">
-          <AdmissionForm />
+          <AdmissionForm blocks={blocks} />
         </Card>
       </Section>
     </>

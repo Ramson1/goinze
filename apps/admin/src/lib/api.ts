@@ -119,15 +119,45 @@ export interface ApplicationRecord {
   applicationNo: string;
   firstName: string;
   lastName: string;
+  middleName: string | null;
   email: string;
   phone: string | null;
+  gender: string | null;
+  dateOfBirth: string | null;
   status: string;
   acceptanceFeePaid: boolean;
   admissionLetterUrl: string | null;
   createdAt: string;
   programmeId: string | null;
   departmentId: string | null;
+  // Extended personal information
+  maritalStatus: string | null;
+  stateOfOrigin: string | null;
+  localGovernment: string | null;
+  postalAddress: string | null;
+  homeAddress: string | null;
+  guardianName: string | null;
+  guardianPhone: string | null;
+  guardianGsm: string | null;
+  medicalHistory: string | null;
+  // Course choices
+  firstChoice: string | null;
+  secondChoice: string | null;
+  thirdChoice: string | null;
+  // Structured table data
+  educationData: {
+    schools?: Array<{ schoolName: string; from: string; to: string; certificate: string }>;
+    olevelResults?: Array<{ examination: string; centreNo: string; subject: string; grade: string; year: string }>;
+    alevelResults?: Array<{ institution: string; from: string; to: string; programme: string; qualification: string }>;
+    employmentRecords?: Array<{ employer: string; position: string; from: string; to: string }>;
+  } | null;
+  // Declaration
+  declarationName: string | null;
+  declarationDate: string | null;
+  declarationAgreed: boolean;
+  // Related records
   student: { id: string; matricNumber: string | null; status: string } | null;
+  documents: Array<{ id: string; name: string; url: string; type: string; createdAt: string }>;
 }
 
 export interface Paginated<T> {
@@ -148,6 +178,7 @@ export const admissionsApi = {
     const qs = q.toString();
     return api.get<Paginated<ApplicationRecord>>(`/admissions${qs ? `?${qs}` : ''}`);
   },
+  get: (id: string) => api.get<ApplicationRecord>(`/admissions/${id}`),
   approve: (id: string) => api.patch<ApplicationRecord>(`/admissions/${id}/approve`),
   reject: (id: string) =>
     api.patch<ApplicationRecord>(`/admissions/${id}/review`, { status: 'REJECTED' }),
@@ -632,6 +663,14 @@ export const sessionsApi = {
   }) => api.post<AcademicSessionRecord>('/academics/sessions', payload),
   activate: (id: string) =>
     api.patch<AcademicSessionRecord>(`/academics/sessions/${id}/activate`),
+  update: (id: string, payload: {
+    name?: string;
+    startDate?: string;
+    endDate?: string;
+    isCurrent?: boolean;
+  }) => api.patch<AcademicSessionRecord>(`/academics/sessions/${id}`, payload),
+  remove: (id: string) =>
+    api.delete<{ deleted: boolean }>(`/academics/sessions/${id}`),
 };
 
 // ---- Communication ----

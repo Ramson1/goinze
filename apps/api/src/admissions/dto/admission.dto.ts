@@ -4,6 +4,8 @@ import {
   IsEnum,
   IsOptional,
   IsString,
+  IsBoolean,
+  IsObject,
 } from 'class-validator';
 
 const GENDERS = ['MALE', 'FEMALE', 'OTHER'] as const;
@@ -58,6 +60,74 @@ export class ApplyDto {
   @IsOptional()
   @IsString()
   departmentId?: string;
+
+  // Extended personal information
+  @IsOptional()
+  @IsString()
+  maritalStatus?: string;
+
+  @IsOptional()
+  @IsString()
+  stateOfOrigin?: string;
+
+  @IsOptional()
+  @IsString()
+  localGovernment?: string;
+
+  @IsOptional()
+  @IsString()
+  postalAddress?: string;
+
+  @IsOptional()
+  @IsString()
+  homeAddress?: string;
+
+  @IsOptional()
+  @IsString()
+  guardianName?: string;
+
+  @IsOptional()
+  @IsString()
+  guardianPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  guardianGsm?: string;
+
+  @IsOptional()
+  @IsString()
+  medicalHistory?: string;
+
+  // Course choices
+  @IsOptional()
+  @IsString()
+  firstChoice?: string;
+
+  @IsOptional()
+  @IsString()
+  secondChoice?: string;
+
+  @IsOptional()
+  @IsString()
+  thirdChoice?: string;
+
+  // Structured table data
+  @IsOptional()
+  @IsObject()
+  educationData?: Record<string, any>;
+
+  // Declaration
+  @IsOptional()
+  @IsString()
+  declarationName?: string;
+
+  @IsOptional()
+  @IsDateString()
+  declarationDate?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  declarationAgreed?: boolean;
 }
 
 export class ReviewApplicationDto {

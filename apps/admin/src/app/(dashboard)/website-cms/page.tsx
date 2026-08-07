@@ -7,10 +7,13 @@ import {
   ChevronDown,
   ChevronUp,
   Database,
+  Download,
   ExternalLink,
+  FileText,
   Globe,
   GraduationCap,
   Image as ImageIcon,
+  Loader2,
   Mail,
   MapPin,
   Phone,
@@ -34,7 +37,7 @@ import {
 } from '@/lib/api';
 
 type Tab = 'content' | 'gallery';
-type ContentSection = 'stats' | 'testimonials' | 'management' | 'contact' | 'fees' | 'pillars' | 'certificates' | 'coreValues' | 'alumni' | 'admissionReqs' | 'academicsNote' | 'hero';
+type ContentSection = 'stats' | 'testimonials' | 'management' | 'contact' | 'fees' | 'pillars' | 'certificates' | 'coreValues' | 'alumni' | 'admissionReqs' | 'admissionProgrammes' | 'academicsNote' | 'hero';
 
 const WEB_URL = process.env.NEXT_PUBLIC_WEB_URL ?? 'http://localhost:3000';
 
@@ -44,10 +47,12 @@ interface TestimonialItem { name: string; role: string; quote: string }
 interface TeamItem { name: string; role: string; bio: string; photo: string }
 interface ContactData { address: string; phone: string; email: string; hours: string }
 interface FeeItem { item: string; amount: string }
+interface FeeScheduleDoc { url: string; name: string }
 interface PillarsData { pledge: string; vision: string; mission: string; accreditation: string }
 interface CertificateItem { title: string; image: string; issuer: string }
 interface AlumniStoryItem { name: string; graduationYear: string; programme: string; currentRole: string; story: string }
 interface AdmissionReqItem { title: string; body: string }
+interface AdmissionProgrammeItem { name: string; duration: string }
 interface HeroSlideItem { image: string; eyebrow: string; title: string; subtitle: string; ctaLabel: string; ctaHref: string }
 
 /* ──── Helpers ──── */
@@ -103,6 +108,9 @@ export default function WebsiteCmsPage() {
   const [contact, setContact] = useState<ContactData>({ address: '', phone: '', email: '', hours: '' });
   /* Fees state */
   const [fees, setFees] = useState<FeeItem[]>([]);
+  const [feeScheduleDoc, setFeeScheduleDoc] = useState<FeeScheduleDoc | null>(null);
+  const [feeDocFile, setFeeDocFile] = useState<File | null>(null);
+  const [feeDocUploading, setFeeDocUploading] = useState(false);
   /* About pillars state */
   const [pillars, setPillars] = useState<PillarsData>({ pledge: '', vision: '', mission: '', accreditation: '' });
   /* Certificates state */
@@ -113,6 +121,8 @@ export default function WebsiteCmsPage() {
   const [alumniStories, setAlumniStories] = useState<AlumniStoryItem[]>([]);
   /* Admission requirements state */
   const [admissionReqs, setAdmissionReqs] = useState<AdmissionReqItem[]>([]);
+  /* Admission programmes state */
+  const [admissionProgrammes, setAdmissionProgrammes] = useState<AdmissionProgrammeItem[]>([]);
   /* Academics learning pathways note */
   const [academicsNote, setAcademicsNote] = useState('');
   /* Hero slider state */
@@ -157,11 +167,13 @@ export default function WebsiteCmsPage() {
       setTeam(parseBody<TeamItem[]>(find('about.management')?.body, []));
       setContact(parseBody<ContactData>(find('contact.info')?.body, { address: '', phone: '', email: '', hours: '' }));
       setFees(parseBody<FeeItem[]>(find('admission.fees')?.body, []));
+      setFeeScheduleDoc(parseBody<FeeScheduleDoc | null>(find('admission.feeSchedule')?.body, null));
       setPillars(parseBody<PillarsData>(find('about.pillars')?.body, { pledge: '', vision: '', mission: '', accreditation: '' }));
       setCertificates(parseBody<CertificateItem[]>(find('about.certificates')?.body, []));
       setCoreValues(parseBody<string[]>(find('about.coreValues')?.body, []));
       setAlumniStories(parseBody<AlumniStoryItem[]>(find('alumni.stories')?.body, []));
       setAdmissionReqs(parseBody<AdmissionReqItem[]>(find('admission.requirements')?.body, []));
+      setAdmissionProgrammes(parseBody<AdmissionProgrammeItem[]>(find('admission.programmes')?.body, []));
       setAcademicsNote(parseBody<string>(find('academics.note')?.body, ''));
       setHeroSlides(parseBody<HeroSlideItem[]>(find('hero.slides')?.body, []));
     } catch (e) {
@@ -184,6 +196,40 @@ export default function WebsiteCmsPage() {
       setSuccessMsg('Saved successfully.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function uploadFeeScheduleDoc() {
+    if (!feeDocFile) return;
+    setFeeDocUploading(true);
+    setError(null);
+    try {
+      const result = await cmsApi.uploadMedia(feeDocFile);
+      const doc: FeeScheduleDoc = { url: result.url, name: feeDocFile.name };
+      setFeeScheduleDoc(doc);
+      setFeeDocFile(null);
+      await cmsApi.upsertContent({ key: 'admission.feeSchedule', body: doc });
+      await load();
+      setSuccessMsg('Fee schedule document uploaded.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to upload document.');
+    } finally {
+      setFeeDocUploading(false);
+    }
+  }
+
+  async function removeFeeScheduleDoc() {
+    if (!feeScheduleDoc) return;
+    setBusy('delete');
+    try {
+      await cmsApi.upsertContent({ key: 'admission.feeSchedule', body: null });
+      setFeeScheduleDoc(null);
+      await load();
+      setSuccessMsg('Fee schedule document removed.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove document.');
     } finally {
       setBusy(null);
     }
@@ -444,30 +490,49 @@ export default function WebsiteCmsPage() {
               {/* ── 5. Fee Structure ── */}
               <Card
                 title="Fee Structure"
-                subtitle="Fee items displayed on the Admission page"
+                subtitle="Fee items and schedule document displayed on the Admission page"
                 action={
                   <button type="button" onClick={() => setActiveSection('fees')} className="btn-secondary px-3 py-1.5 text-xs">
-                    {fees.length === 0 ? <><Plus className="h-3.5 w-3.5" /> Add</> : <><Pencil className="h-3.5 w-3.5" /> Edit</>}
+                    {fees.length === 0 && !feeScheduleDoc ? <><Plus className="h-3.5 w-3.5" /> Add</> : <><Pencil className="h-3.5 w-3.5" /> Edit</>}
                   </button>
                 }
               >
-                {fees.length === 0 ? (
+                {fees.length === 0 && !feeScheduleDoc ? (
                   <p className="px-5 py-8 text-center text-sm text-gray-400">No fee structure configured yet. Using website defaults.</p>
                 ) : (
-                  <div className="overflow-hidden rounded-t-xl">
-                    <table className="w-full text-left text-sm">
-                      <thead className="bg-gray-50 text-xs font-semibold uppercase tracking-wider text-gray-500">
-                        <tr><th className="px-5 py-3">Item</th><th className="px-5 py-3 text-right">Amount</th></tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {fees.map((f, i) => (
-                          <tr key={i} className="bg-white hover:bg-gray-50/50">
-                            <td className="px-5 py-3 text-gray-800">{f.item}</td>
-                            <td className="px-5 py-3 text-right font-semibold text-brand">{f.amount}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div className="divide-y divide-gray-100">
+                    {fees.length > 0 && (
+                      <div className="overflow-hidden">
+                        <table className="w-full text-left text-sm">
+                          <thead className="bg-gray-50 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                            <tr><th className="px-5 py-3">Item</th><th className="px-5 py-3 text-right">Amount</th></tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {fees.map((f, i) => (
+                              <tr key={i} className="bg-white hover:bg-gray-50/50">
+                                <td className="px-5 py-3 text-gray-800">{f.item}</td>
+                                <td className="px-5 py-3 text-right font-semibold text-brand">{f.amount}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                    {feeScheduleDoc && (
+                      <div className="flex items-center gap-3 px-5 py-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-brand">
+                          <FileText className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-gray-800">{feeScheduleDoc.name}</p>
+                          <p className="text-xs text-gray-400">Schedule of Fees Document</p>
+                        </div>
+                        <a href={feeScheduleDoc.url} target="_blank" rel="noopener noreferrer"
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-brand">
+                          <Download className="h-4 w-4" />
+                        </a>
+                      </div>
+                    )}
                   </div>
                 )}
               </Card>
@@ -599,6 +664,33 @@ export default function WebsiteCmsPage() {
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-gray-900">{r.title}</p>
                           <p className="mt-0.5 line-clamp-2 text-xs text-gray-500">{r.body}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+
+              {/* ── 10b. Admission Programmes ── */}
+              <Card
+                title="Programmes of Interest"
+                subtitle="Programme options displayed in the Admission page application form"
+                action={
+                  <button type="button" onClick={() => setActiveSection('admissionProgrammes')} className="btn-secondary px-3 py-1.5 text-xs">
+                    {admissionProgrammes.length === 0 ? <><Plus className="h-3.5 w-3.5" /> Add</> : <><Pencil className="h-3.5 w-3.5" /> Edit</>}
+                  </button>
+                }
+              >
+                {admissionProgrammes.length === 0 ? (
+                  <p className="px-5 py-8 text-center text-sm text-gray-400">No programmes configured yet. Using website defaults.</p>
+                ) : (
+                  <div className="divide-y divide-gray-100">
+                    {admissionProgrammes.map((p, i) => (
+                      <div key={i} className="flex items-center gap-4 px-5 py-3">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-xs font-bold text-brand">{i + 1}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-gray-900">{p.name}</p>
+                          <p className="text-xs text-gray-500">{p.duration}</p>
                         </div>
                       </div>
                     ))}
@@ -821,32 +913,73 @@ export default function WebsiteCmsPage() {
       {activeSection === 'fees' && (
         <SectionModal
           title="Fee Structure"
-          description="Each fee item has a description and an amount. Displayed on the Admission page."
-          onClose={() => setActiveSection(null)}
+          description="Manage fee line items and upload the Schedule of Fees document for the Admission page."
+          onClose={() => { setActiveSection(null); setFeeDocFile(null); }}
           onSave={() => saveSection('admission.fees', fees)}
           busy={busy === 'save'}
         >
-          <div className="space-y-3">
-            {fees.map((f, i) => (
-              <div key={i} className="flex items-center gap-3">
-                <div className="flex-[3]">
-                  <input value={f.item} onChange={(e) => { const c = [...fees]; c[i] = { ...f, item: e.target.value }; setFees(c); }}
-                    placeholder="Fee item description" className="input" />
-                </div>
-                <div className="flex-[1]">
-                  <input value={f.amount} onChange={(e) => { const c = [...fees]; c[i] = { ...f, amount: e.target.value }; setFees(c); }}
-                    placeholder="Amount" className="input text-right font-semibold" />
-                </div>
-                <button type="button" onClick={() => setFees(fees.filter((_, j) => j !== i))}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600">
-                  <Trash2 className="h-4 w-4" />
+          <div className="space-y-5">
+            {/* Fee line items */}
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">Fee Items</p>
+              <div className="space-y-3">
+                {fees.map((f, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <div className="flex-[3]">
+                      <input value={f.item} onChange={(e) => { const c = [...fees]; c[i] = { ...f, item: e.target.value }; setFees(c); }}
+                        placeholder="Fee item description" className="input" />
+                    </div>
+                    <div className="flex-[1]">
+                      <input value={f.amount} onChange={(e) => { const c = [...fees]; c[i] = { ...f, amount: e.target.value }; setFees(c); }}
+                        placeholder="Amount" className="input text-right font-semibold" />
+                    </div>
+                    <button type="button" onClick={() => setFees(fees.filter((_, j) => j !== i))}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+                <button type="button" onClick={() => setFees([...fees, { item: '', amount: '' }])}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 py-2.5 text-sm font-medium text-gray-500 hover:border-brand hover:text-brand">
+                  <Plus className="h-4 w-4" /> Add Fee Item
                 </button>
               </div>
-            ))}
-            <button type="button" onClick={() => setFees([...fees, { item: '', amount: '' }])}
-              className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 py-2.5 text-sm font-medium text-gray-500 hover:border-brand hover:text-brand">
-              <Plus className="h-4 w-4" /> Add Fee Item
-            </button>
+            </div>
+
+            {/* Schedule of Fees document upload */}
+            <div className="border-t border-gray-200 pt-5">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">Schedule of Fees Document</p>
+              <p className="mb-3 text-xs text-gray-400">Upload a PDF or image of the full fee schedule. This will be displayed on the Admission page.</p>
+
+              {feeScheduleDoc && (
+                <div className="mb-3 flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+                  <FileText className="h-5 w-5 shrink-0 text-brand" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-gray-800">{feeScheduleDoc.name}</p>
+                  </div>
+                  <a href={feeScheduleDoc.url} target="_blank" rel="noopener noreferrer"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-gray-400 hover:text-brand">
+                    <Download className="h-4 w-4" />
+                  </a>
+                  <button type="button" onClick={removeFeeScheduleDoc} disabled={busy === 'delete'}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-red-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50">
+                    {busy === 'delete' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  </button>
+                </div>
+              )}
+
+              <div className="flex items-center gap-3">
+                <input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp"
+                  onChange={(e) => setFeeDocFile(e.target.files?.[0] ?? null)}
+                  className="input file:mr-3 file:rounded-md file:border-0 file:bg-brand file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-brand-dark" />
+                <button type="button" onClick={uploadFeeScheduleDoc} disabled={!feeDocFile || feeDocUploading}
+                  className="btn-secondary shrink-0 disabled:opacity-50">
+                  {feeDocUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  Upload
+                </button>
+              </div>
+              {feeDocFile && <p className="mt-1 text-xs text-gray-400">{feeDocFile.name}</p>}
+            </div>
           </div>
         </SectionModal>
       )}
@@ -1044,6 +1177,40 @@ export default function WebsiteCmsPage() {
             <button type="button" onClick={() => setAdmissionReqs([...admissionReqs, { title: '', body: '' }])}
               className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 py-2.5 text-sm font-medium text-gray-500 hover:border-brand hover:text-brand">
               <Plus className="h-4 w-4" /> Add Requirement
+            </button>
+          </div>
+        </SectionModal>
+      )}
+
+      {/* ── Admission Programmes Modal ── */}
+      {activeSection === 'admissionProgrammes' && (
+        <SectionModal
+          title="Programmes of Interest"
+          description="Each programme has a name and duration. Displayed as options in the Admission page application form."
+          onClose={() => setActiveSection(null)}
+          onSave={() => saveSection('admission.programmes', admissionProgrammes)}
+          busy={busy === 'save'}
+        >
+          <div className="space-y-3">
+            {admissionProgrammes.map((p, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <div className="flex-[3]">
+                  <input value={p.name} onChange={(e) => { const c = [...admissionProgrammes]; c[i] = { ...p, name: e.target.value }; setAdmissionProgrammes(c); }}
+                    placeholder="Programme name" className="input" />
+                </div>
+                <div className="flex-[1]">
+                  <input value={p.duration} onChange={(e) => { const c = [...admissionProgrammes]; c[i] = { ...p, duration: e.target.value }; setAdmissionProgrammes(c); }}
+                    placeholder="Duration" className="input" />
+                </div>
+                <button type="button" onClick={() => setAdmissionProgrammes(admissionProgrammes.filter((_, j) => j !== i))}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+            <button type="button" onClick={() => setAdmissionProgrammes([...admissionProgrammes, { name: '', duration: '' }])}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 py-2.5 text-sm font-medium text-gray-500 hover:border-brand hover:text-brand">
+              <Plus className="h-4 w-4" /> Add Programme
             </button>
           </div>
         </SectionModal>

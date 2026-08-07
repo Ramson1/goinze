@@ -56,6 +56,31 @@ export interface ApplyInput {
   dateOfBirth?: string;
   programmeId?: string;
   departmentId?: string;
+  // Extended personal information
+  maritalStatus?: string;
+  stateOfOrigin?: string;
+  localGovernment?: string;
+  postalAddress?: string;
+  homeAddress?: string;
+  guardianName?: string;
+  guardianPhone?: string;
+  guardianGsm?: string;
+  medicalHistory?: string;
+  // Course choices
+  firstChoice?: string;
+  secondChoice?: string;
+  thirdChoice?: string;
+  // Structured table data
+  educationData?: {
+    schools?: Array<{ schoolName: string; from: string; to: string; certificate: string }>;
+    olevelResults?: Array<{ examination: string; centreNo: string; subject: string; grade: string; year: string }>;
+    alevelResults?: Array<{ institution: string; from: string; to: string; programme: string; qualification: string }>;
+    employmentRecords?: Array<{ employer: string; position: string; from: string; to: string }>;
+  };
+  // Declaration
+  declarationName?: string;
+  declarationDate?: string;
+  declarationAgreed?: boolean;
 }
 
 export interface ApplyResult {
@@ -84,6 +109,20 @@ export const admissionsApi = {
         applicationNo,
       )}&email=${encodeURIComponent(email)}`,
     ),
+  uploadDocument: async (applicationId: string, file: File, type: string) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('type', type);
+    const res = await fetch(`${API_URL}/admissions/${applicationId}/documents`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'Document upload failed');
+    }
+    return res.json();
+  },
 };
 
 // ---- Website CMS (news / events / gallery / content) ----

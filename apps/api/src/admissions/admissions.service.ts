@@ -36,6 +36,26 @@ export class AdmissionsService {
         dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
         programmeId: dto.programmeId || undefined,
         departmentId: dto.departmentId || undefined,
+        // Extended personal information
+        maritalStatus: dto.maritalStatus || undefined,
+        stateOfOrigin: dto.stateOfOrigin || undefined,
+        localGovernment: dto.localGovernment || undefined,
+        postalAddress: dto.postalAddress || undefined,
+        homeAddress: dto.homeAddress || undefined,
+        guardianName: dto.guardianName || undefined,
+        guardianPhone: dto.guardianPhone || undefined,
+        guardianGsm: dto.guardianGsm || undefined,
+        medicalHistory: dto.medicalHistory || undefined,
+        // Course choices
+        firstChoice: dto.firstChoice || undefined,
+        secondChoice: dto.secondChoice || undefined,
+        thirdChoice: dto.thirdChoice || undefined,
+        // Structured table data
+        educationData: dto.educationData ?? undefined,
+        // Declaration
+        declarationName: dto.declarationName || undefined,
+        declarationDate: dto.declarationDate ? new Date(dto.declarationDate) : undefined,
+        declarationAgreed: dto.declarationAgreed ?? false,
         status: 'SUBMITTED',
       },
       include: { documents: false },

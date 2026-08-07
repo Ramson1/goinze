@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -6,8 +7,11 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import type { SessionUser } from '@goinze/shared-types';
 import { AdmissionsService } from './admissions.service';
 import { ApplyDto, ReviewApplicationDto } from './dto/admission.dto';
@@ -17,11 +21,17 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { CloudinaryService } from '../common/utils/cloudinary.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Controller('admissions')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AdmissionsController {
-  constructor(private readonly admissionsService: AdmissionsService) {}
+  constructor(
+    private readonly admissionsService: AdmissionsService,
+    private readonly cloudinary: CloudinaryService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   /** Public application form submission. */
   @Public()
@@ -80,5 +90,31 @@ export class AdmissionsController {
   @Roles('SCHOOL_ADMIN', 'ADMISSION_OFFICER')
   generateLetter(@Param('id') id: string) {
     return this.admissionsService.generateLetter(id);
+  }
+
+  /** Public document upload for applications — uploads to Cloudinary and links to the application. */
+  @Public()
+  @Post(':id/documents')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
+  async uploadApplicationDocument(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Body() body: { type?: string },
+  ) {
+    if (!file) throw new BadRequestException('No file provided.');
+    const application = await this.admissionsService.findOne(id);
+    const result = await this.cloudinary.uploadImage(file.buffer, 'goinzeschool/applications');
+    const document = await this.prisma.db.document.create({
+      data: {
+        schoolId: application.schoolId,
+        name: file.originalname,
+        url: result.url,
+        type: (body.type as any) ?? 'OTHER',
+        mimeType: file.mimetype,
+        sizeBytes: file.size,
+        applicationId: id,
+      },
+    });
+    return document;
   }
 }

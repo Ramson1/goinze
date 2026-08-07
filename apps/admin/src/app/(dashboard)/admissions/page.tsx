@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import {
   AlertCircle,
   Check,
+  Eye,
   FileText,
   Loader2,
   RefreshCw,
@@ -45,6 +46,7 @@ export default function AdmissionsPage() {
   const [status, setStatus] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [viewingApplication, setViewingApplication] = useState<ApplicationRecord | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -224,6 +226,21 @@ export default function AdmissionsPage() {
               </a>
             )}
 
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const full = await admissionsApi.get(r.id);
+                  setViewingApplication(full);
+                } catch (err) {
+                  setNotice(err instanceof ApiError ? err.message : 'Failed to load application details.');
+                }
+              }}
+              className="btn-secondary inline-flex items-center gap-1 px-2.5 py-1.5 text-xs"
+            >
+              <Eye className="h-3.5 w-3.5" /> Details
+            </button>
+
             {busy && <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />}
           </div>
         );
@@ -285,6 +302,256 @@ export default function AdmissionsPage() {
           />
         )}
       </Card>
+
+      {/* Application Detail Modal */}
+      {viewingApplication && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4">
+          <div className="my-8 w-full max-w-5xl rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b px-6 py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Application Details</h2>
+                <p className="text-sm text-gray-500">{viewingApplication.applicationNo}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingApplication(null)}
+                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="max-h-[calc(100vh-12rem)] overflow-y-auto px-6 py-5">
+              {/* Personal Information */}
+              <section className="mb-6">
+                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Personal Information</h3>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm md:grid-cols-3">
+                  <Field label="Surname" value={viewingApplication.lastName} />
+                  <Field label="Other Names" value={`${viewingApplication.firstName} ${viewingApplication.middleName ?? ''}`} />
+                  <Field label="Date of Birth" value={viewingApplication.dateOfBirth ? new Date(viewingApplication.dateOfBirth).toLocaleDateString() : null} />
+                  <Field label="Sex" value={viewingApplication.gender} />
+                  <Field label="Marital Status" value={viewingApplication.maritalStatus} />
+                  <Field label="State of Origin" value={viewingApplication.stateOfOrigin} />
+                  <Field label="Local Government" value={viewingApplication.localGovernment} />
+                  <Field label="GSM Number" value={viewingApplication.phone} />
+                  <Field label="Email" value={viewingApplication.email} />
+                  <Field label="Postal Address" value={viewingApplication.postalAddress} />
+                  <Field label="Home Address" value={viewingApplication.homeAddress} />
+                  <Field label="Guardian/Sponsor" value={viewingApplication.guardianName} />
+                  <Field label="Guardian Phone" value={viewingApplication.guardianPhone} />
+                  <Field label="Guardian GSM" value={viewingApplication.guardianGsm} />
+                  <Field label="Medical History" value={viewingApplication.medicalHistory} />
+                </div>
+              </section>
+
+              {/* Programme Choices */}
+              <section className="mb-6">
+                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Programme Choices</h3>
+                <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-3">
+                  <Field label="First Choice" value={viewingApplication.firstChoice} />
+                  <Field label="Second Choice" value={viewingApplication.secondChoice} />
+                  <Field label="Third Choice" value={viewingApplication.thirdChoice} />
+                </div>
+              </section>
+
+              {/* Schools Attended */}
+              {viewingApplication.educationData?.schools && viewingApplication.educationData.schools.length > 0 && (
+                <section className="mb-6">
+                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Schools Attended</h3>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200 text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium text-gray-500">School Name</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-500">From</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-500">To</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-500">Certificate</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {viewingApplication.educationData.schools.map((s, i) => (
+                          <tr key={i}>
+                            <td className="px-3 py-2">{s.schoolName}</td>
+                            <td className="px-3 py-2">{s.from}</td>
+                            <td className="px-3 py-2">{s.to}</td>
+                            <td className="px-3 py-2">{s.certificate}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
+
+              {/* O'Level Results */}
+              {viewingApplication.educationData?.olevelResults && viewingApplication.educationData.olevelResults.length > 0 && (
+                <section className="mb-6">
+                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">O' Level Results</h3>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200 text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium text-gray-500">Examination</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-500">Centre No.</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-500">Subject</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-500">Grade</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-500">Year</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {viewingApplication.educationData.olevelResults.map((r, i) => (
+                          <tr key={i}>
+                            <td className="px-3 py-2">{r.examination}</td>
+                            <td className="px-3 py-2">{r.centreNo}</td>
+                            <td className="px-3 py-2">{r.subject}</td>
+                            <td className="px-3 py-2">{r.grade}</td>
+                            <td className="px-3 py-2">{r.year}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
+
+              {/* A'Level Results */}
+              {viewingApplication.educationData?.alevelResults && viewingApplication.educationData.alevelResults.length > 0 && (
+                <section className="mb-6">
+                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">A' Level Results</h3>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200 text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium text-gray-500">Institution</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-500">From</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-500">To</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-500">Programme</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-500">Qualification</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {viewingApplication.educationData.alevelResults.map((r, i) => (
+                          <tr key={i}>
+                            <td className="px-3 py-2">{r.institution}</td>
+                            <td className="px-3 py-2">{r.from}</td>
+                            <td className="px-3 py-2">{r.to}</td>
+                            <td className="px-3 py-2">{r.programme}</td>
+                            <td className="px-3 py-2">{r.qualification}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
+
+              {/* Employment Records */}
+              {viewingApplication.educationData?.employmentRecords && viewingApplication.educationData.employmentRecords.length > 0 && (
+                <section className="mb-6">
+                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Employment Records</h3>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200 text-sm">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium text-gray-500">Employer</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-500">Position</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-500">From</th>
+                          <th className="px-3 py-2 text-left font-medium text-gray-500">To</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {viewingApplication.educationData.employmentRecords.map((r, i) => (
+                          <tr key={i}>
+                            <td className="px-3 py-2">{r.employer}</td>
+                            <td className="px-3 py-2">{r.position}</td>
+                            <td className="px-3 py-2">{r.from}</td>
+                            <td className="px-3 py-2">{r.to}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
+
+              {/* Uploaded Documents */}
+              {viewingApplication.documents && viewingApplication.documents.length > 0 && (
+                <section className="mb-6">
+                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Uploaded Documents</h3>
+                  <div className="grid grid-cols-1 gap-2 text-sm md:grid-cols-2">
+                    {viewingApplication.documents.map((doc) => (
+                      <a
+                        key={doc.id}
+                        href={doc.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-2 rounded-lg border px-3 py-2 text-blue-600 hover:bg-blue-50"
+                      >
+                        <FileText className="h-4 w-4 shrink-0" />
+                        <span className="truncate">{doc.name}</span>
+                        <span className="ml-auto text-xs text-gray-400">{doc.type}</span>
+                      </a>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Declaration */}
+              <section className="mb-6">
+                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Declaration</h3>
+                <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-3">
+                  <Field label="Agreed" value={viewingApplication.declarationAgreed ? 'Yes' : 'No'} />
+                  <Field label="Signed By" value={viewingApplication.declarationName} />
+                  <Field label="Date" value={viewingApplication.declarationDate ? new Date(viewingApplication.declarationDate).toLocaleDateString() : null} />
+                </div>
+              </section>
+
+              {/* Office Use Only */}
+              <section className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-amber-700">Office Use Only — Verification Checklist</h3>
+                <div className="space-y-2 text-sm">
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" className="rounded border-gray-300" />
+                    <span>Supporting documents reviewed (if submitted)</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" className="rounded border-gray-300" />
+                    <span>Documents agree with form information</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" className="rounded border-gray-300" />
+                    <span>Cashier's receipt attached</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" className="rounded border-gray-300" />
+                    <span>Approved course of study</span>
+                  </label>
+                </div>
+              </section>
+            </div>
+
+            <div className="flex justify-end border-t px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setViewingApplication(null)}
+                className="btn-secondary px-4 py-2 text-sm"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
+  );
+}
+
+function Field({ label, value }: { label: string; value: string | null | boolean }) {
+  const display = typeof value === 'boolean' ? (value ? 'Yes' : 'No') : value;
+  return (
+    <div>
+      <dt className="text-xs font-medium text-gray-500">{label}</dt>
+      <dd className="mt-0.5 text-gray-900">{display || <span className="text-gray-300">—</span>}</dd>
+    </div>
   );
 }

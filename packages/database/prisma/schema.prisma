@@ -206,6 +206,11 @@ enum DocumentType {
   ADMISSION_LETTER
   TRANSCRIPT
   CERTIFICATE
+  PASSPORT_PHOTO
+  TESTIMONIAL
+  GOOD_CONDUCT
+  INGENIUNE_FORM
+  NAME_CHANGE
   OTHER
 }
 
@@ -1018,6 +1023,26 @@ model Application {
   dateOfBirth   DateTime?
   programmeId   String?
   departmentId  String?
+  // Extended personal information
+  maritalStatus       String?
+  stateOfOrigin       String?
+  localGovernment     String?
+  postalAddress       String?
+  homeAddress         String?
+  guardianName        String?
+  guardianPhone       String?
+  guardianGsm         String?
+  medicalHistory      String?
+  // Course choices
+  firstChoice         String?
+  secondChoice        String?
+  thirdChoice         String?
+  // Structured table data (schools, O-level, A-level, employment)
+  educationData       Json?
+  // Declaration
+  declarationName     String?
+  declarationDate     DateTime?
+  declarationAgreed   Boolean         @default(false)
   status        ApplicationStatus @default(DRAFT)
   score         Decimal?          @db.Decimal(5, 2)
   interviewDate DateTime?
