@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@goinze/shared-utils": "workspace:*",
+    "flutterwave-react-v3": "^1.3.3",
     "lucide-react": "^0.454.0",
     "next": "15.5.4",
     "react": "^19.0.0",

@@ -1,11 +1,14 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import * as crypto from 'crypto';
 import type { Paginated } from '@goinze/shared-types';
-import { generatePaymentRef } from '@goinze/shared-utils';
+import { generatePaymentRef, generateReceiptNumber, generateVerificationCode } from '@goinze/shared-utils';
 import { PrismaService } from '../prisma/prisma.service';
 import { paginated } from '../common/utils/pagination.util';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -20,6 +23,8 @@ import {
 
 @Injectable()
 export class FinanceService {
+  private readonly logger = new Logger(FinanceService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly gateway: FlutterwaveGateway,
@@ -93,9 +98,18 @@ export class FinanceService {
       customerEmail = student?.email ?? undefined;
       resolvedSchoolId = resolvedSchoolId ?? student?.schoolId ?? null;
     }
+
+    // Fall back to resolving the school from the slug (website admission flow)
+    if (!resolvedSchoolId && dto.schoolSlug) {
+      const school = await this.prisma.db.school.findFirst({
+        where: { slug: dto.schoolSlug },
+      });
+      resolvedSchoolId = school?.id ?? null;
+    }
+
     if (!resolvedSchoolId) {
       throw new BadRequestException(
-        'Unable to resolve a school for this payment. Provide an applicationId or studentId.',
+        'Unable to resolve a school for this payment. Provide an applicationId, studentId, or schoolSlug.',
       );
     }
 
@@ -110,19 +124,20 @@ export class FinanceService {
         currency: dto.currency ?? 'NGN',
         gateway: (dto.gateway as any) ?? 'FLUTTERWAVE',
         status: 'PENDING',
+        metadata: dto.purpose ? { purpose: dto.purpose } : undefined,
       },
     });
 
     const redirectUrl =
       dto.redirectUrl ??
-      this.config.get<string>('WEB_APP_URL', 'http://localhost:3000');
+      `${this.config.get<string>('WEB_APP_URL', 'http://localhost:3000')}/payment/callback`;
 
     const { checkoutUrl, live } = await this.gateway.initialize({
       txRef: reference,
       amount: Number(dto.amount),
       currency: dto.currency ?? 'NGN',
       email: customerEmail ?? 'applicant@goinzeschool.com',
-      redirectUrl: `${redirectUrl}/payment/callback`,
+      redirectUrl,
       title: 'Goinzeschool Payment',
       description: `Payment ${reference}`,
     });
@@ -139,7 +154,14 @@ export class FinanceService {
       where: { reference: dto.reference },
     });
     if (!payment) throw new NotFoundException('Payment not found');
-    if (payment.status === 'SUCCESS') return payment;
+
+    // Already verified — return existing data with receipt
+    if (payment.status === 'SUCCESS') {
+      const existingReceipt = await this.prisma.db.receipt.findUnique({
+        where: { paymentId: payment.id },
+      });
+      return { ...payment, receipt: existingReceipt };
+    }
 
     const result = await this.gateway.verify(dto.reference);
     if (result.status !== 'successful') {
@@ -148,32 +170,62 @@ export class FinanceService {
       );
     }
 
-    const updated = await this.prisma.db.payment.update({
-      where: { id: payment.id },
-      data: {
-        status: 'SUCCESS',
-        gatewayRef: result.flwRef || dto.gatewayRef,
-        paidAt: new Date(),
-      },
-    });
+    // Use a transaction to prevent duplicate processing from concurrent webhooks
+    const updated = await this.prisma.db.$transaction(async (tx) => {
+      // Re-check status inside transaction (optimistic locking)
+      const fresh = await tx.payment.findUnique({ where: { id: payment.id } });
+      if (fresh?.status === 'SUCCESS') {
+        return { ...fresh, alreadyProcessed: true };
+      }
 
-    // Credit the student ledger when applicable.
-    if (payment.studentId) {
-      await this.prisma.db.ledgerEntry.create({
+      const pay = await tx.payment.update({
+        where: { id: payment.id },
         data: {
-          studentId: payment.studentId,
-          paymentId: payment.id,
-          credit: Number(payment.amount),
-          balance: Number(payment.amount),
-          narration: `Payment ${payment.reference}`,
+          status: 'SUCCESS',
+          gatewayRef: result.flwRef || dto.gatewayRef,
+          paidAt: new Date(),
         },
       });
-    }
 
-    // Acceptance-fee flow: mark paid and auto-admit if already approved.
-    if (payment.applicationId) {
-      await this.onAcceptanceFeePaid(payment.applicationId);
-    }
+      // Credit the student ledger when applicable
+      if (pay.studentId) {
+        await tx.ledgerEntry.create({
+          data: {
+            studentId: pay.studentId,
+            paymentId: pay.id,
+            credit: Number(pay.amount),
+            balance: Number(pay.amount),
+            narration: `Payment ${pay.reference}`,
+          },
+        });
+      }
+
+      // Application form fee flow
+      const purpose = (pay.metadata as any)?.purpose;
+      if (pay.applicationId && (purpose === 'APPLICATION_FORM' || purpose === 'ENTRANCE_EXAM')) {
+        await tx.application.update({
+          where: { id: pay.applicationId },
+          data: { applicationFormFeePaid: true },
+        });
+      }
+
+      // Acceptance-fee flow
+      if (pay.applicationId && purpose !== 'APPLICATION_FORM' && purpose !== 'ENTRANCE_EXAM') {
+        await this.onAcceptanceFeePaid(pay.applicationId, tx);
+      }
+
+      // Auto-generate receipt
+      const receipt = await tx.receipt.create({
+        data: {
+          paymentId: pay.id,
+          receiptNumber: generateReceiptNumber(),
+          verificationCode: generateVerificationCode(),
+          qrData: `goinzeschool://receipt/${generateVerificationCode()}`,
+        },
+      });
+
+      return { ...pay, receipt };
+    });
 
     return updated;
   }
@@ -182,19 +234,20 @@ export class FinanceService {
    * Handle a successful acceptance-fee payment for an application:
    * flag it paid, then finalize admission if the application is approved.
    */
-  private async onAcceptanceFeePaid(applicationId: string) {
-    const application = await this.prisma.db.application.update({
+  private async onAcceptanceFeePaid(applicationId: string, tx?: any) {
+    const db = tx ?? this.prisma.db;
+    const application = await db.application.update({
       where: { id: applicationId },
       data: { acceptanceFeePaid: true },
     });
 
     if (application.status === 'APPROVED' && application.studentId) {
-      await this.prisma.db.$transaction([
-        this.prisma.db.student.update({
+      await Promise.all([
+        db.student.update({
           where: { id: application.studentId },
           data: { status: 'ACTIVE' },
         }),
-        this.prisma.db.application.update({
+        db.application.update({
           where: { id: applicationId },
           data: { status: 'ADMITTED' },
         }),
@@ -203,7 +256,26 @@ export class FinanceService {
   }
 
   /** Process a Flutterwave webhook event (charge.completed). */
-  async handleWebhook(payload: any) {
+  async handleWebhook(payload: any, signature?: string) {
+    // Verify webhook signature if FLUTTERWAVE_WEBHOOK_HASH is configured
+    const webhookHash = this.gateway.webhookHash;
+    if (webhookHash) {
+      if (!signature) {
+        this.logger.warn('Webhook received without verifi-hash header');
+        throw new UnauthorizedException('Missing webhook signature');
+      }
+      // Flutterwave sends a SHA256 hash of the payload as the verifi-hash
+      const expectedHash = crypto
+        .createHash('sha256')
+        .update(JSON.stringify(payload))
+        .digest('hex');
+      // Also check against the configured secret hash
+      if (signature !== webhookHash && signature !== expectedHash) {
+        this.logger.warn('Webhook signature mismatch');
+        throw new UnauthorizedException('Invalid webhook signature');
+      }
+    }
+
     const txRef: string | undefined =
       payload?.data?.tx_ref ?? payload?.tx_ref ?? payload?.data?.txRef;
     if (!txRef) return { ignored: true };
@@ -216,6 +288,25 @@ export class FinanceService {
     }
     await this.verifyPayment({ reference: txRef });
     return { processed: true, reference: txRef };
+  }
+
+  // ---- Application fees (pre-submission) ----
+
+  /** Return the configured APPLICATION_FORM and ENTRANCE_EXAM fee structures. */
+  async getApplicationFees(schoolId: string | null) {
+    const fees = await this.prisma.db.feeStructure.findMany({
+      where: {
+        ...(schoolId ? { schoolId } : {}),
+        type: { in: ['APPLICATION_FORM', 'ENTRANCE_EXAM'] },
+      },
+      orderBy: { type: 'asc' },
+    });
+    return fees.map((f) => ({
+      id: f.id,
+      type: f.type,
+      name: f.name,
+      amount: Number(f.amount),
+    }));
   }
 
   // ---- Refunds ----

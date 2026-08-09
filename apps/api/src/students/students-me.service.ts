@@ -143,7 +143,30 @@ export class StudentsMeService {
       }),
     ]);
 
-    const items = structures.map((f) => {
+    // Define display order: Portal Access first, then by type priority
+    const typeOrder: Record<string, number> = {
+      PORTAL_ACCESS: 0,
+      SCHOOL: 1,
+      LIBRARY: 2,
+      MEDICAL: 3,
+      SPORTS_WEAR: 4,
+      MATRICULATION: 5,
+      HOSTEL: 6,
+      GRADUATION: 7,
+      ACCEPTANCE: 8,
+      OTHER: 9,
+    };
+
+    const sorted = [...structures].sort((a, b) => {
+      const oa = typeOrder[a.type] ?? 9;
+      const ob = typeOrder[b.type] ?? 9;
+      if (oa !== ob) return oa - ob;
+      if (a.programmeId && !b.programmeId) return 1;
+      if (!a.programmeId && b.programmeId) return -1;
+      return a.name.localeCompare(b.name);
+    });
+
+    const items = sorted.map((f) => {
       const paid = payments.find(
         (p) => p.feeStructureId === f.id && p.status === 'SUCCESS',
       );
@@ -155,6 +178,7 @@ export class StudentsMeService {
         status: paid ? ('PAID' as const) : ('PENDING' as const),
         ref: paid?.reference ?? null,
         paidAt: paid?.paidAt ?? null,
+        isOptional: !f.isMandatory,
       };
     });
 

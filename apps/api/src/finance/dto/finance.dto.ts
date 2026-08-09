@@ -17,6 +17,11 @@ const FEE_TYPES = [
   'HOSTEL',
   'LIBRARY',
   'GRADUATION',
+  'APPLICATION_FORM',
+  'ENTRANCE_EXAM',
+  'PORTAL_ACCESS',
+  'SPORTS_WEAR',
+  'MATRICULATION',
   'OTHER',
 ] as const;
 
@@ -77,6 +82,16 @@ export class InitPaymentDto {
   @IsOptional()
   @IsString()
   redirectUrl?: string;
+
+  /** Purpose of payment — distinguishes application-form fees from acceptance fees. */
+  @IsOptional()
+  @IsString()
+  purpose?: string;
+
+  /** School slug — used to resolve the school when no applicationId/studentId is provided. */
+  @IsOptional()
+  @IsString()
+  schoolSlug?: string;
 
   @Type(() => Number)
   @IsNumber()

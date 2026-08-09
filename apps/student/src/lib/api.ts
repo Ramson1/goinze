@@ -253,6 +253,50 @@ export const studentApi = {
     api.post<SubmitRegistrationResponse>('/students/me/course-registration', payload),
 };
 
+// ---- Finance (student-scoped) ----
+
+export interface InitPaymentResult {
+  payment: { id: string; reference: string; amount: string; status: string };
+  reference: string;
+  checkoutUrl: string;
+  live: boolean;
+}
+
+export interface ReceiptData {
+  id: string;
+  receiptNumber: string;
+  verificationCode: string;
+  createdAt: string;
+}
+
+export interface VerifyPaymentResult {
+  id: string;
+  status: string;
+  reference: string;
+  amount: string;
+  paidAt: string | null;
+  receipt?: ReceiptData;
+}
+
+export interface FlutterwaveConfig {
+  publicKey: string;
+  isConfigured: boolean;
+}
+
+export const financeApi = {
+  /** Fetch Flutterwave public key and config from the API. */
+  getFlutterwaveConfig: () => api.get<FlutterwaveConfig>('/finance/flutterwave-config'),
+  initPayment: (data: {
+    feeStructureId?: string;
+    amount: number;
+    customerEmail?: string;
+    redirectUrl?: string;
+    purpose?: string;
+  }) => api.post<InitPaymentResult>('/finance/payments/init', data),
+  verifyPayment: (reference: string) =>
+    api.post<VerifyPaymentResult>('/finance/payments/verify', { reference }),
+};
+
 // ---- Communication ----
 
 export interface NotificationRecord {

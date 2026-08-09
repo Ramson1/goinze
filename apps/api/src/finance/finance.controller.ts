@@ -2,14 +2,17 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   Param,
   Post,
   Query,
   Req,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import type { SessionUser } from '@goinze/shared-types';
 import { FinanceService } from './finance.service';
+import { FlutterwaveGateway } from './flutterwave.gateway';
 import {
   CreateFeeStructureDto,
   InitPaymentDto,
@@ -27,7 +30,10 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 @Controller('finance')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class FinanceController {
-  constructor(private readonly financeService: FinanceService) {}
+  constructor(
+    private readonly financeService: FinanceService,
+    private readonly gateway: FlutterwaveGateway,
+  ) {}
 
   // ---- Fee structures ----
   @Get('fee-structures')
@@ -43,6 +49,24 @@ export class FinanceController {
     @Body() dto: CreateFeeStructureDto,
   ) {
     return this.financeService.createFeeStructure(user.schoolId, dto);
+  }
+
+  // ---- Application fees (pre-submission, public) ----
+  @Public()
+  @Get('application-fees')
+  applicationFees(@Query('schoolSlug') schoolSlug?: string) {
+    // Resolve schoolId from slug if provided; otherwise return all.
+    return this.financeService.getApplicationFees(null);
+  }
+
+  /** Public endpoint to expose Flutterwave config (public key) to frontend. */
+  @Public()
+  @Get('flutterwave-config')
+  flutterwaveConfig() {
+    return {
+      publicKey: this.gateway.publicKey || '',
+      isConfigured: this.gateway.isConfigured,
+    };
   }
 
   // ---- Payments ----
@@ -74,8 +98,11 @@ export class FinanceController {
   /** Flutterwave webhook (charge.completed). */
   @Public()
   @Post('payments/webhook')
-  webhook(@Req() req: Request) {
-    return this.financeService.handleWebhook(req.body);
+  async webhook(
+    @Body() payload: any,
+    @Headers('verifi-hash') signature?: string,
+  ) {
+    return this.financeService.handleWebhook(payload, signature);
   }
 
   // ---- Refunds ----

@@ -1,9 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import {
   CheckCircle2,
-  Download,
+  CreditCard,
   Loader2,
   Plus,
   Search,
@@ -13,11 +13,14 @@ import {
 } from "lucide-react";
 import {
   admissionsApi,
+  financeApi,
   ApiError,
+  type ApplicationFee,
   type ApplyResult,
   type TrackResult,
   type WebsiteContentRecord,
 } from "@/lib/api";
+import PaymentModal, { type FlutterwaveResponse } from "@/components/PaymentModal";
 import { asArray, getBlockBody } from "@/lib/content";
 
 /* ─── helpers ─── */
@@ -55,9 +58,9 @@ const DOC_TYPES = [
 ] as const;
 
 const defaultProgrammes = [
-  { name: "National Diploma in Community Health (CHEW)", duration: "3 Years" },
-  { name: "National Diploma in Medical Lab Technician (MLT)", duration: "3 Years" },
-  { name: "National Diploma in Public Health (PH)", duration: "3 Years" },
+  { name: "National Diploma in Community Health Extension Workers (CHEW)", duration: "3 Years" },
+  { name: "National Diploma in Medical Laboratory Technology (MLT)", duration: "3 Years" },
+  { name: "National Diploma in Public Health Technology (PHT)", duration: "3 Years" },
   { name: "National Diploma in Pharmacy Technician (PT)", duration: "3 Years" },
 ];
 
@@ -123,6 +126,23 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
   const [result, setResult] = useState<ApplyResult | null>(null);
   const [uploadProgress, setUploadProgress] = useState("");
 
+  // Payment flow
+  const [appFees, setAppFees] = useState<ApplicationFee[]>([]);
+  const [paymentVerified, setPaymentVerified] = useState(false);
+  const [paying, setPaying] = useState(false);
+
+  // Inline payment modal state
+  const [modalOpen, setModalOpen] = useState(false);
+  const [payingTxRef, setPayingTxRef] = useState("");
+  const [verifying, setVerifying] = useState(false);
+  const [flutterwaveKey, setFlutterwaveKey] = useState("");
+
+  // Load application fees and Flutterwave config on mount
+  useEffect(() => {
+    financeApi.getApplicationFees().then(setAppFees).catch(() => {});
+    financeApi.getFlutterwaveConfig().then(cfg => setFlutterwaveKey(cfg.publicKey)).catch(() => {});
+  }, []);
+
   // Tracking
   const [trackNo, setTrackNo] = useState("");
   const [trackEmail, setTrackEmail] = useState("");
@@ -147,8 +167,57 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!declaredAgreed) { setError("You must agree to the declaration before submitting."); return; }
-    setSubmitting(true); setError(null);
 
+    // If payment already verified, submit the application directly
+    if (paymentVerified) {
+      await submitApplication();
+      return;
+    }
+
+    // Step 1: Initiate payment server-side to get txRef
+    setPaying(true); setError(null);
+    try {
+      const totalAmount = appFees.reduce((sum, f) => sum + f.amount, 0) || 20000;
+      const res = await financeApi.initPayment({
+        schoolSlug: "goinze-demo",
+        amount: totalAmount,
+        customerEmail: email,
+        purpose: "APPLICATION_FORM",
+      });
+      setPayingTxRef(res.reference);
+      setModalOpen(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Unable to initiate payment. Please try again.");
+    } finally {
+      setPaying(false);
+    }
+  }
+
+  /* ── Handle payment success from modal ── */
+  async function handlePaymentSuccess(response: FlutterwaveResponse) {
+    setModalOpen(false);
+    setVerifying(true); setError(null);
+    try {
+      await financeApi.verifyPayment(response.tx_ref);
+      setPaymentVerified(true);
+      // Auto-submit the application after verification
+      await submitApplication();
+    } catch (err) {
+      setError("Payment verification failed. Please contact support with your transaction reference.");
+    } finally {
+      setVerifying(false);
+    }
+  }
+
+  /* ── Handle payment error from modal ── */
+  function handlePaymentError(msg: string) {
+    setError(msg);
+    setModalOpen(false);
+  }
+
+  /* ── Submit the actual application form ── */
+  async function submitApplication() {
+    setSubmitting(true); setError(null);
     try {
       const names = splitName(`${surname} ${otherNames}`);
       const res = await admissionsApi.apply({
@@ -414,14 +483,64 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
           {error && <p className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm text-rose-600">{error}</p>}
           {uploadProgress && <p className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm text-blue-700"><Loader2 className="h-4 w-4 animate-spin" />{uploadProgress}</p>}
 
+          {/* ── Payment summary (shown before payment is made) ── */}
+          {!paymentVerified && appFees.length > 0 && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <h4 className="flex items-center gap-2 text-sm font-bold text-amber-800">
+                <CreditCard className="h-4 w-4" /> Payment Required
+              </h4>
+              <p className="mt-1 text-xs text-amber-700">You must pay the application fees before your form can be submitted.</p>
+              <ul className="mt-3 space-y-1 text-sm">
+                {appFees.map((f) => (
+                  <li key={f.id} className="flex justify-between text-amber-900">
+                    <span>{f.name}</span>
+                    <span className="font-semibold">₦{f.amount.toLocaleString()}</span>
+                  </li>
+                ))}
+                <li className="flex justify-between border-t border-amber-300 pt-1 font-bold text-amber-900">
+                  <span>Total</span>
+                  <span>₦{appFees.reduce((s, f) => s + f.amount, 0).toLocaleString()}</span>
+                </li>
+              </ul>
+            </div>
+          )}
+          {paymentVerified && (
+            <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-700">
+              <CheckCircle2 className="h-4 w-4" /> Payment verified — your application will now be submitted.
+            </div>
+          )}
+
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-slate-500">Your application is submitted securely to the admissions office.</p>
-            <button type="submit" disabled={submitting} className="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60">
-              {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-              {submitting ? "Submitting…" : "Submit Application"}
+            <button type="submit" disabled={submitting || paying || verifying} className="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60">
+              {(submitting || paying || verifying) && <Loader2 className="h-4 w-4 animate-spin" />}
+              {verifying ? "Verifying Payment…" : paying ? "Initiating Payment…" : submitting ? "Submitting…" : paymentVerified ? "Submit Application" : `Pay ₦${(appFees.reduce((s, f) => s + f.amount, 0) || 20000).toLocaleString()} & Submit`}
             </button>
           </div>
         </form>
+      )}
+
+      {/* ── Inline Payment Modal ── */}
+      <PaymentModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        amount={appFees.reduce((s, f) => s + f.amount, 0) || 20000}
+        email={email}
+        txRef={payingTxRef}
+        publicKey={flutterwaveKey}
+        onSuccess={handlePaymentSuccess}
+        onError={handlePaymentError}
+      />
+
+      {/* ── Verifying overlay ── */}
+      {verifying && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="rounded-xl bg-white p-8 text-center shadow-2xl">
+            <Loader2 className="mx-auto h-10 w-10 animate-spin text-brand" />
+            <p className="mt-4 text-sm font-medium text-slate-700">Verifying your payment…</p>
+            <p className="mt-1 text-xs text-slate-500">Please wait, this takes a few seconds.</p>
+          </div>
+        </div>
       )}
 
       {/* ── Status Tracking ── */}

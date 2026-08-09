@@ -94,6 +94,11 @@ enum FeeType {
   HOSTEL
   LIBRARY
   GRADUATION
+  APPLICATION_FORM
+  ENTRANCE_EXAM
+  PORTAL_ACCESS
+  SPORTS_WEAR
+  MATRICULATION
   OTHER
 }
 
@@ -1049,6 +1054,7 @@ model Application {
   reviewedBy    String?
   admissionLetterUrl String?
   acceptanceFeePaid Boolean       @default(false)
+  applicationFormFeePaid Boolean @default(false)
   studentId     String?           @unique
   student       Student?          @relation(fields: [studentId], references: [id], onDelete: SetNull)
   createdAt     DateTime          @default(now())

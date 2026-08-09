@@ -43,6 +43,21 @@ export class FlutterwaveGateway {
     return this.config.get<string>('FLUTTERWAVE_SECRET_KEY') || undefined;
   }
 
+  /** Public key for client-side checkout (served to frontend). */
+  get publicKey(): string | undefined {
+    return this.config.get<string>('FLUTTERWAVE_PUBLIC_KEY') || undefined;
+  }
+
+  /** Encryption key for enhanced payload security (optional). */
+  get encryptionKey(): string | undefined {
+    return this.config.get<string>('FLUTTERWAVE_ENCRYPTION_KEY') || undefined;
+  }
+
+  /** Webhook hash for signature verification. */
+  get webhookHash(): string | undefined {
+    return this.config.get<string>('FLUTTERWAVE_WEBHOOK_HASH') || undefined;
+  }
+
   get isConfigured(): boolean {
     return Boolean(this.secretKey);
   }

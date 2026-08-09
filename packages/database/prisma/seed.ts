@@ -117,10 +117,10 @@ async function main() {
   });
 
   const DEPARTMENTS: Array<{ code: string; name: string }> = [
-    { code: 'CHEW', name: 'Community Health' },
-    { code: 'MLT', name: 'Medical Laboratory Technician' },
-    { code: 'PH', name: 'Public Health' },
-    { code: 'PT', name: 'Pharmacy Technician' },
+    { code: 'CHEW', name: 'Community Health Extension Workers (CHEW)' },
+    { code: 'MLT', name: 'Medical Laboratory Technology (MLT)' },
+    { code: 'PHT', name: 'Public Health Technology (PHT)' },
+    { code: 'PT', name: 'Pharmacy Technician (PT)' },
   ];
 
   const deptIds = new Map<string, string>();
@@ -145,15 +145,16 @@ async function main() {
     degreeType: string;
     durationYears: number;
   }> = [
-    { dept: 'CHEW', code: 'ND-CHEW', name: 'National Diploma in Community Health (CHEW)', degreeType: 'ND', durationYears: 3 },
-    { dept: 'MLT', code: 'ND-MLT', name: 'National Diploma in Medical Lab Technician (MLT)', degreeType: 'ND', durationYears: 3 },
-    { dept: 'PH', code: 'ND-PH', name: 'National Diploma in Public Health (PH)', degreeType: 'ND', durationYears: 3 },
+    { dept: 'CHEW', code: 'ND-CHEW', name: 'National Diploma in Community Health Extension Workers (CHEW)', degreeType: 'ND', durationYears: 3 },
+    { dept: 'MLT', code: 'ND-MLT', name: 'National Diploma in Medical Laboratory Technology (MLT)', degreeType: 'ND', durationYears: 3 },
+    { dept: 'PHT', code: 'ND-PHT', name: 'National Diploma in Public Health Technology (PHT)', degreeType: 'ND', durationYears: 3 },
     { dept: 'PT', code: 'ND-PT', name: 'National Diploma in Pharmacy Technician (PT)', degreeType: 'ND', durationYears: 3 },
   ];
 
   console.log(`Seeding ${PROGRAMMES.length} programmes...`);
+  const programmeIds = new Map<string, string>();
   for (const p of PROGRAMMES) {
-    await prisma.programme.upsert({
+    const record = await prisma.programme.upsert({
       where: { schoolId_code: { schoolId: school.id, code: p.code } },
       update: { name: p.name },
       create: {
@@ -163,6 +164,83 @@ async function main() {
         code: p.code,
         degreeType: p.degreeType,
         durationYears: p.durationYears,
+      },
+    });
+    programmeIds.set(p.dept, record.id);
+  }
+
+  // ── Fee structures ──
+  console.log('Seeding fee structures...');
+
+  // Pre-admission fees (not programme-specific)
+  const PRE_ADMISSION_FEES = [
+    { name: 'Application Form Fee', type: 'APPLICATION_FORM', amount: 15000 },
+    { name: 'Entrance Exam Fee', type: 'ENTRANCE_EXAM', amount: 5000 },
+    { name: 'Admission Letter / Acceptance Fee', type: 'ACCEPTANCE', amount: 31500 },
+  ];
+  for (const f of PRE_ADMISSION_FEES) {
+    await prisma.feeStructure.upsert({
+      where: { id: `fee-${f.type.toLowerCase()}` },
+      update: { amount: f.amount },
+      create: {
+        id: `fee-${f.type.toLowerCase()}`,
+        schoolId: school.id,
+        name: f.name,
+        type: f.type as any,
+        amount: f.amount,
+        isMandatory: true,
+      },
+    });
+  }
+
+  // Per-programme fees
+  const PER_PROGRAMME_FEES: Array<{ name: string; amounts: Record<string, number> }> = [
+    { name: 'Tuition Fee', amounts: { CHEW: 70000, MLT: 80000, PHT: 75000, PT: 80000 } },
+    { name: 'Administrative Charges', amounts: { CHEW: 25000, MLT: 25000, PHT: 25000, PT: 25000 } },
+    { name: 'Library / E-Library Fee', amounts: { CHEW: 25000, MLT: 28000, PHT: 25000, PT: 28000 } },
+    { name: 'Furniture Fee', amounts: { CHEW: 23000, MLT: 25000, PHT: 25000, PT: 25000 } },
+    { name: 'Uniform Fee', amounts: { CHEW: 25000, MLT: 28000, PHT: 25000, PT: 25000 } },
+  ];
+
+  for (const fee of PER_PROGRAMME_FEES) {
+    for (const [dept, amount] of Object.entries(fee.amounts)) {
+      const progId = programmeIds.get(dept);
+      if (!progId) continue;
+      const id = `fee-${dept.toLowerCase()}-${fee.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+      await prisma.feeStructure.upsert({
+        where: { id },
+        update: { amount },
+        create: {
+          id,
+          schoolId: school.id,
+          name: fee.name,
+          type: 'SCHOOL',
+          amount,
+          programmeId: progId,
+          isMandatory: true,
+        },
+      });
+    }
+  }
+
+  // Universal fees (not programme-specific)
+  const UNIVERSAL_FEES = [
+    { name: 'Portal Access Fee', type: 'PORTAL_ACCESS', amount: 10000, mandatory: true },
+    { name: 'Sports Wear', type: 'SPORTS_WEAR', amount: 25500, mandatory: true },
+    { name: 'Matriculation / ID Card', type: 'MATRICULATION', amount: 25500, mandatory: true },
+    { name: 'Hostel / Accommodation', type: 'HOSTEL', amount: 50000, mandatory: false },
+  ];
+  for (const f of UNIVERSAL_FEES) {
+    await prisma.feeStructure.upsert({
+      where: { id: `fee-${f.type.toLowerCase()}` },
+      update: { amount: f.amount },
+      create: {
+        id: `fee-${f.type.toLowerCase()}`,
+        schoolId: school.id,
+        name: f.name,
+        type: f.type as any,
+        amount: f.amount,
+        isMandatory: f.mandatory,
       },
     });
   }
