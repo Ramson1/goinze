@@ -59,7 +59,6 @@ export default function AdmissionsPage() {
   const [verification, setVerification] = useState({
     verificationDocumentsReviewed: false,
     verificationDocumentsMatch: false,
-    verificationReceiptAttached: false,
     verificationCourseApproved: false,
   });
   const [savingVerification, setSavingVerification] = useState(false);
@@ -267,7 +266,6 @@ export default function AdmissionsPage() {
                   setVerification({
                     verificationDocumentsReviewed: full.verificationDocumentsReviewed ?? false,
                     verificationDocumentsMatch: full.verificationDocumentsMatch ?? false,
-                    verificationReceiptAttached: full.verificationReceiptAttached ?? false,
                     verificationCourseApproved: full.verificationCourseApproved ?? false,
                   });
                 } catch (err) {
@@ -567,16 +565,6 @@ export default function AdmissionsPage() {
                       disabled={savingVerification}
                     />
                     <span>Documents agree with form information</span>
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      className="rounded border-gray-300"
-                      checked={verification.verificationReceiptAttached}
-                      onChange={(e) => handleVerificationChange('verificationReceiptAttached', e.target.checked)}
-                      disabled={savingVerification}
-                    />
-                    <span>Cashier's receipt attached</span>
                   </label>
                   <label className="flex items-center gap-2">
                     <input

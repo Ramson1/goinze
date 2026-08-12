@@ -8,11 +8,12 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  FileText,
   Loader2,
   Receipt,
   Search,
-  Undo2,
   Wallet,
+  X,
 } from 'lucide-react';
 import { formatNaira } from '@goinze/shared-utils';
 import PageHeader from '@/components/PageHeader';
@@ -22,28 +23,16 @@ import DataTable, { type Column } from '@/components/DataTable';
 import StatusBadge from '@/components/StatusBadge';
 import {
   financeApi,
+  studentsApi,
+  type FeeStructure,
   type FinanceDashboard,
   type Paginated,
   type Payment,
+  type Student,
+  type StudentPayment,
 } from '@/lib/api';
 
 /* ── Helpers ── */
-function getCookie(name: string): string | null {
-  if (typeof document === 'undefined') return null;
-  const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]+)'));
-  return match ? decodeURIComponent(match[1]) : null;
-}
-
-function decodeRoleFromToken(token: string): string | null {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-    const payload = JSON.parse(atob(parts[1]));
-    return payload.role ?? null;
-  } catch {
-    return null;
-  }
-}
 
 const STATUS_FILTERS = ['', 'PENDING', 'SUCCESS', 'REFUNDED', 'FAILED'];
 const PAGE_SIZE = 10;
@@ -88,17 +77,14 @@ export default function PaymentsPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [refundingId, setRefundingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
-  // Check user role on mount
-  useEffect(() => {
-    const token = getCookie('access_token');
-    const role = token ? decodeRoleFromToken(token) : null;
-    setIsSuperAdmin(role === 'SUPER_ADMIN');
-  }, []);
+  // Student payments modal
+  const [studentPaymentsModal, setStudentPaymentsModal] = useState<Student | null>(null);
+  const [studentPaymentsLoading, setStudentPaymentsLoading] = useState(false);
+  const [studentPaymentsLoadingId, setStudentPaymentsLoadingId] = useState<string | null>(null);
+  const [feeStructures, setFeeStructures] = useState<FeeStructure[]>([]);
 
   const loadDashboard = useCallback(() => {
     financeApi
@@ -130,20 +116,22 @@ export default function PaymentsPage() {
     setPage(1);
   }, [search, statusFilter]);
 
-  async function refund(p: Payment) {
-    if (!window.confirm(`Refund ${formatNaira(Number(p.amount))} for ${p.reference}?`)) return;
-    setRefundingId(p.id);
-    setError(null);
-    setNotice(null);
+  async function openStudentPayments(studentId: string) {
+    setStudentPaymentsLoadingId(studentId);
+    setStudentPaymentsLoading(true);
     try {
-      await financeApi.refund(p.id, 'Refunded by admin');
-      setNotice(`Payment ${p.reference} refunded.`);
-      loadPayments();
-      loadDashboard();
+      const [student, fees] = await Promise.all([
+        studentsApi.get(studentId),
+        financeApi.feeStructures().catch(() => [] as FeeStructure[]),
+      ]);
+      setStudentPaymentsModal(student);
+      setFeeStructures(fees);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Refund failed.');
+      setError(err instanceof Error ? err.message : 'Failed to load student payments.');
+      setStudentPaymentsModal(null);
     } finally {
-      setRefundingId(null);
+      setStudentPaymentsLoading(false);
+      setStudentPaymentsLoadingId(null);
     }
   }
 
@@ -155,10 +143,31 @@ export default function PaymentsPage() {
       render: (p) =>
         p.student ? (
           <div>
-            <p className="font-medium text-gray-900">
-              {p.student.firstName} {p.student.lastName}
-            </p>
-            <p className="font-mono text-xs text-gray-400">{p.student.matricNumber ?? '—'}</p>
+            <div className="flex items-center gap-2">
+              <div>
+                <p className="font-medium text-gray-900">
+                  {p.student.firstName} {p.student.lastName}
+                </p>
+                <p className="font-mono text-xs text-gray-400">{p.student.matricNumber ?? '—'}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => openStudentPayments(p.student!.id)}
+              disabled={studentPaymentsLoadingId === p.student!.id}
+              title="View all payments for this student"
+              className="mt-1 inline-flex items-center gap-1 rounded-md border border-teal-200 bg-teal-50 px-2 py-1 text-xs font-medium text-teal-700 hover:bg-teal-100 disabled:opacity-50"
+            >
+              {studentPaymentsLoadingId === p.student!.id ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…
+                </>
+              ) : (
+                <>
+                  <FileText className="h-3.5 w-3.5" /> View Record
+                </>
+              )}
+            </button>
           </div>
         ) : (
           <span className="text-gray-400">Applicant</span>
@@ -183,28 +192,6 @@ export default function PaymentsPage() {
       render: (p) => formatDate(p.paidAt ?? p.createdAt),
     },
     { key: 'status', header: 'Status', render: (p) => <StatusBadge status={p.status} /> },
-    {
-      key: 'actions',
-      header: 'Action',
-      render: (p) =>
-        p.status === 'SUCCESS' && isSuperAdmin ? (
-          <button
-            type="button"
-            onClick={() => refund(p)}
-            disabled={refundingId === p.id}
-            className="btn-secondary inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-rose-600 hover:bg-rose-50 disabled:opacity-50"
-          >
-            {refundingId === p.id ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Undo2 className="h-3.5 w-3.5" />
-            )}
-            Refund
-          </button>
-        ) : (
-          <span className="text-xs text-gray-400">—</span>
-        ),
-    },
   ];
 
   const totalPages = payments?.totalPages ?? 1;
@@ -230,7 +217,7 @@ export default function PaymentsPage() {
       )}
 
       {/* Summary cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <StatCard
           title="Total Collected"
           value={dashboard ? formatNaira(dashboard.totalCollected) : '—'}
@@ -242,14 +229,6 @@ export default function PaymentsPage() {
           delta={dashboard ? `${dashboard.pendingCount} awaiting payment` : undefined}
           icon={Clock}
           iconClassName="bg-amber-500/10 text-amber-600"
-        />
-        <StatCard
-          title="Refunded"
-          value={dashboard ? formatNaira(dashboard.refundedAmount) : '—'}
-          delta={dashboard ? `${dashboard.refundedCount} refunded` : undefined}
-          trend="down"
-          icon={Undo2}
-          iconClassName="bg-rose-500/10 text-rose-600"
         />
         <StatCard
           title="Transactions"
@@ -330,6 +309,221 @@ export default function PaymentsPage() {
           </>
         )}
       </Card>
+
+      {/* Student Payments Modal */}
+      {studentPaymentsModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setStudentPaymentsModal(null)}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-6 py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Student Payment Record</h2>
+                <p className="text-xs text-gray-500">
+                  {studentPaymentsModal.firstName} {studentPaymentsModal.lastName}
+                  {studentPaymentsModal.matricNumber ? ` — ${studentPaymentsModal.matricNumber}` : ''}
+                  {studentPaymentsModal.department?.name ? ` — ${studentPaymentsModal.department.name}` : ''}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setStudentPaymentsModal(null)}
+                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="px-6 py-5">
+              {studentPaymentsLoading ? (
+                <div className="flex items-center justify-center gap-2 py-12 text-sm text-gray-400">
+                  <Loader2 className="h-5 w-5 animate-spin" /> Loading payment record…
+                </div>
+              ) : (
+                <>
+                  {/* Payment History */}
+                  <section className="mb-8">
+                    <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Payment History</h3>
+                    {studentPaymentsModal.payments && studentPaymentsModal.payments.length > 0 ? (
+                      <div className="overflow-x-auto rounded-lg border border-gray-200">
+                        <table className="w-full text-left text-sm">
+                          <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+                            <tr>
+                              <th className="px-3 py-2">Date</th>
+                              <th className="px-3 py-2">Fee Type</th>
+                              <th className="px-3 py-2">Reference</th>
+                              <th className="px-3 py-2 text-right">Amount</th>
+                              <th className="px-3 py-2 text-center">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {studentPaymentsModal.payments.map((p: StudentPayment) => (
+                              <tr key={p.id} className="hover:bg-gray-50">
+                                <td className="whitespace-nowrap px-3 py-2 text-xs">
+                                  {p.paidAt ? new Date(p.paidAt).toLocaleDateString() : new Date(p.createdAt).toLocaleDateString()}
+                                </td>
+                                <td className="px-3 py-2">{p.feeStructure?.name ?? p.feeStructure?.type ?? '—'}</td>
+                                <td className="px-3 py-2 font-mono text-xs text-gray-500">{p.reference}</td>
+                                <td className="px-3 py-2 text-right font-semibold">₦{Number(p.amount).toLocaleString()}</td>
+                                <td className="px-3 py-2 text-center">
+                                  <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                                    p.status === 'SUCCESS' ? 'bg-green-100 text-green-700' :
+                                    p.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
+                                    p.status === 'REFUNDED' ? 'bg-gray-100 text-gray-600' :
+                                    'bg-red-100 text-red-700'
+                                  }`}>{p.status}</span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-400">No payments recorded yet.</p>
+                    )}
+                  </section>
+
+                  {/* Fee Breakdown */}
+                  <section>
+                    <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Fee Breakdown</h3>
+                    {(() => {
+                      const successfulPayments = (studentPaymentsModal.payments ?? []).filter((p: StudentPayment) => p.status === 'SUCCESS');
+                      // Show fees mandatory for all students + fees specific to this student's department
+                      const mandatoryFees = feeStructures.filter((f) =>
+                        f.isMandatory && (!f.departmentId || f.departmentId === studentPaymentsModal.departmentId)
+                      );
+
+                      // Build a map of which fees have been paid
+                      const paidFeeIds = new Set<string>();
+                      successfulPayments.forEach((p: StudentPayment) => {
+                        if (p.feeStructure?.id) {
+                          paidFeeIds.add(p.feeStructure.id);
+                        }
+                      });
+
+                      const paidItems = mandatoryFees.filter((f) => paidFeeIds.has(f.id));
+                      const unpaidItems = mandatoryFees.filter((f) => !paidFeeIds.has(f.id));
+                      const totalPaid = successfulPayments.reduce((sum: number, p: StudentPayment) => sum + Number(p.amount), 0);
+                      const totalExpected = mandatoryFees.reduce((sum, f) => sum + Number(f.amount), 0);
+                      const outstanding = totalExpected - totalPaid;
+
+                      return (
+                        <>
+                          {/* Summary Cards */}
+                          <div className="mb-4 grid grid-cols-3 gap-4">
+                            <div className="rounded-lg border border-gray-200 p-4 text-center">
+                              <p className="text-xs text-gray-500">Total Expected</p>
+                              <p className="mt-1 text-xl font-bold text-gray-900">₦{totalExpected.toLocaleString()}</p>
+                            </div>
+                            <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-center">
+                              <p className="text-xs text-green-600">Total Paid</p>
+                              <p className="mt-1 text-xl font-bold text-green-700">₦{totalPaid.toLocaleString()}</p>
+                            </div>
+                            <div className={`rounded-lg border p-4 text-center ${outstanding > 0 ? 'border-red-200 bg-red-50' : 'border-green-200 bg-green-50'}`}>
+                              <p className={`text-xs ${outstanding > 0 ? 'text-red-600' : 'text-green-600'}`}>{outstanding > 0 ? 'Outstanding' : 'Fully Paid'}</p>
+                              <p className={`mt-1 text-xl font-bold ${outstanding > 0 ? 'text-red-700' : 'text-green-700'}`}>₦{Math.abs(outstanding).toLocaleString()}</p>
+                            </div>
+                          </div>
+
+                          {/* Paid Fees */}
+                          {paidItems.length > 0 && (
+                            <div className="mb-4">
+                              <h4 className="mb-2 flex items-center gap-2 text-sm font-medium text-green-700">
+                                <CheckCircle2 className="h-4 w-4" /> Paid Fees
+                              </h4>
+                              <div className="overflow-x-auto rounded-lg border border-green-200">
+                                <table className="w-full text-left text-sm">
+                                  <thead className="bg-green-50 text-xs uppercase tracking-wide text-green-700">
+                                    <tr>
+                                      <th className="px-3 py-2">Fee Name</th>
+                                      <th className="px-3 py-2">Type</th>
+                                      <th className="px-3 py-2 text-right">Amount</th>
+                                      <th className="px-3 py-2 text-center">Status</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-green-100">
+                                    {paidItems.map((f) => (
+                                      <tr key={f.id} className="hover:bg-green-50">
+                                        <td className="px-3 py-2 font-medium">{f.name}</td>
+                                        <td className="px-3 py-2 text-xs text-gray-600">{f.type}</td>
+                                        <td className="px-3 py-2 text-right font-semibold text-green-700">₦{Number(f.amount).toLocaleString()}</td>
+                                        <td className="px-3 py-2 text-center">
+                                          <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                                            <CheckCircle2 className="h-3 w-3" /> Paid
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Unpaid Fees */}
+                          {unpaidItems.length > 0 && (
+                            <div>
+                              <h4 className="mb-2 flex items-center gap-2 text-sm font-medium text-red-700">
+                                <AlertCircle className="h-4 w-4" /> Unpaid Fees
+                              </h4>
+                              <div className="overflow-x-auto rounded-lg border border-red-200">
+                                <table className="w-full text-left text-sm">
+                                  <thead className="bg-red-50 text-xs uppercase tracking-wide text-red-700">
+                                    <tr>
+                                      <th className="px-3 py-2">Fee Name</th>
+                                      <th className="px-3 py-2">Type</th>
+                                      <th className="px-3 py-2 text-right">Amount</th>
+                                      <th className="px-3 py-2 text-center">Status</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-red-100">
+                                    {unpaidItems.map((f) => (
+                                      <tr key={f.id} className="hover:bg-red-50">
+                                        <td className="px-3 py-2 font-medium">{f.name}</td>
+                                        <td className="px-3 py-2 text-xs text-gray-600">{f.type}</td>
+                                        <td className="px-3 py-2 text-right font-semibold text-red-700">₦{Number(f.amount).toLocaleString()}</td>
+                                        <td className="px-3 py-2 text-center">
+                                          <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+                                            <AlertCircle className="h-3 w-3" /> Unpaid
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
+
+                          {paidItems.length === 0 && unpaidItems.length === 0 && (
+                            <p className="text-sm text-gray-400">No mandatory fees configured.</p>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </section>
+                </>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-end border-t border-gray-100 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setStudentPaymentsModal(null)}
+                className="btn-secondary px-4 py-2 text-sm"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -9,6 +9,9 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsUp,
+  Clipboard,
+  ClipboardCheck,
+  FileText,
   Filter,
   GraduationCap,
   Key,
@@ -28,10 +31,14 @@ import DataTable, { type Column } from '@/components/DataTable';
 import StatusBadge from '@/components/StatusBadge';
 import {
   cmsApi,
+  financeApi,
   studentsApi,
   type DepartmentRef,
+  type FeeStructure,
   type Paginated,
   type Student,
+  type StudentPayment,
+  type StudentResult,
   type StudentStatus,
 } from '@/lib/api';
 
@@ -119,6 +126,12 @@ export default function StudentsPage() {
   const [resettingPassword, setResettingPassword] = useState(false);
   const [newTempPassword, setNewTempPassword] = useState<string | null>(null);
 
+  // Academic record modal
+  const [recordStudent, setRecordStudent] = useState<Student | null>(null);
+  const [recordLoading, setRecordLoading] = useState(false);
+  const [feeStructures, setFeeStructures] = useState<FeeStructure[]>([]);
+  const [copiedPw, setCopiedPw] = useState<string | null>(null);
+
   const loadStudents = useCallback(() => {
     setLoading(true);
     setError(null);
@@ -195,6 +208,29 @@ export default function StudentsPage() {
     } finally {
       setResettingPassword(false);
     }
+  }
+
+  async function openRecord(student: Student) {
+    setRecordStudent(student);
+    setRecordLoading(true);
+    try {
+      const [full, fees] = await Promise.all([
+        studentsApi.get(student.id),
+        financeApi.feeStructures().catch(() => [] as FeeStructure[]),
+      ]);
+      setRecordStudent(full);
+      setFeeStructures(fees);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load student record.');
+    } finally {
+      setRecordLoading(false);
+    }
+  }
+
+  function copyPassword(pw: string) {
+    navigator.clipboard.writeText(pw);
+    setCopiedPw(pw);
+    setTimeout(() => setCopiedPw(null), 2000);
   }
 
   function setField(key: keyof typeof form, value: string) {
@@ -392,83 +428,117 @@ export default function StudentsPage() {
     },
     { key: 'status', header: 'Status', render: (s) => <StatusBadge status={s.status} /> },
     {
+      key: 'tempPassword',
+      header: 'Password',
+      className: 'font-mono text-xs whitespace-nowrap',
+      render: (s) =>
+        s.tempPassword ? (
+          <button
+            type="button"
+            onClick={() => copyPassword(s.tempPassword!)}
+            className="inline-flex items-center gap-1 rounded bg-purple-50 px-1.5 py-0.5 text-purple-700 hover:bg-purple-100"
+            title="Click to copy"
+          >
+            {copiedPw === s.tempPassword ? <ClipboardCheck className="h-3 w-3" /> : <Clipboard className="h-3 w-3" />}
+            {s.tempPassword}
+          </button>
+        ) : (
+          <span className="text-gray-400">—</span>
+        ),
+    },
+    {
       key: 'actions',
       header: 'Actions',
       render: (s) => {
         const busy = actingId === s.id;
         return (
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-col gap-1">
             {busy ? (
               <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
             ) : (
               <>
-                <button
-                  type="button"
-                  onClick={() => openEditModal(s)}
-                  title="Edit"
-                  className="btn-secondary px-2 py-1.5 text-xs text-indigo-600 hover:bg-indigo-50"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleResetPassword(s)}
-                  disabled={resettingPassword}
-                  title="Reset Password"
-                  className="btn-secondary px-2 py-1.5 text-xs text-purple-600 hover:bg-purple-50 disabled:opacity-50"
-                >
-                  {resettingPassword && actingId === s.id ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Key className="h-3.5 w-3.5" />
-                  )}
-                </button>
-                {s.status === 'ACTIVE' && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => runAction(s, 'suspend')}
-                      title="Suspend"
-                      className="btn-secondary px-2 py-1.5 text-xs text-amber-600 hover:bg-amber-50"
-                    >
-                      <UserX className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => runAction(s, 'graduate')}
-                      title="Graduate"
-                      className="btn-secondary px-2 py-1.5 text-xs text-blue-600 hover:bg-blue-50"
-                    >
-                      <GraduationCap className="h-3.5 w-3.5" />
-                    </button>
-                  </>
-                )}
-                {s.status === 'SUSPENDED' && (
+                {/* Row 1 */}
+                <div className="flex items-center gap-1.5">
                   <button
                     type="button"
-                    onClick={() => runAction(s, 'reactivate')}
-                    title="Reactivate"
-                    className="btn-secondary px-2 py-1.5 text-xs text-emerald-600 hover:bg-emerald-50"
+                    onClick={() => openRecord(s)}
+                    title="View full academic record"
+                    className="btn-secondary flex items-center gap-1 px-2 py-1.5 text-xs text-teal-600 hover:bg-teal-50"
                   >
-                    <RotateCcw className="h-3.5 w-3.5" />
+                    <FileText className="h-3.5 w-3.5" /> Record
                   </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => runAction(s, 'archive')}
-                  title="Archive"
-                  className="btn-secondary px-2 py-1.5 text-xs text-rose-600 hover:bg-rose-50"
-                >
-                  <Archive className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => deleteStudent(s)}
-                  title="Delete"
-                  className="btn-secondary px-2 py-1.5 text-xs text-red-600 hover:bg-red-50"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => openEditModal(s)}
+                    title="Edit"
+                    className="btn-secondary flex items-center gap-1 px-2 py-1.5 text-xs text-indigo-600 hover:bg-indigo-50"
+                  >
+                    <Pencil className="h-3.5 w-3.5" /> Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleResetPassword(s)}
+                    disabled={resettingPassword}
+                    title="Reset Password"
+                    className="btn-secondary flex items-center gap-1 px-2 py-1.5 text-xs text-purple-600 hover:bg-purple-50 disabled:opacity-50"
+                  >
+                    {resettingPassword && actingId === s.id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Key className="h-3.5 w-3.5" />
+                    )}
+                    Reset password
+                  </button>
+                </div>
+                {/* Row 2 */}
+                <div className="flex items-center gap-1.5">
+                  {s.status === 'ACTIVE' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => runAction(s, 'suspend')}
+                        title="Suspend"
+                        className="btn-secondary flex items-center gap-1 px-2 py-1.5 text-xs text-amber-600 hover:bg-amber-50"
+                      >
+                        <UserX className="h-3.5 w-3.5" /> Suspend
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => runAction(s, 'graduate')}
+                        title="Graduate"
+                        className="btn-secondary flex items-center gap-1 px-2 py-1.5 text-xs text-blue-600 hover:bg-blue-50"
+                      >
+                        <GraduationCap className="h-3.5 w-3.5" /> Graduate
+                      </button>
+                    </>
+                  )}
+                  {s.status === 'SUSPENDED' && (
+                    <button
+                      type="button"
+                      onClick={() => runAction(s, 'reactivate')}
+                      title="Reactivate"
+                      className="btn-secondary flex items-center gap-1 px-2 py-1.5 text-xs text-emerald-600 hover:bg-emerald-50"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" /> Reactivate
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => runAction(s, 'archive')}
+                    title="Archive"
+                    className="btn-secondary flex items-center gap-1 px-2 py-1.5 text-xs text-rose-600 hover:bg-rose-50"
+                  >
+                    <Archive className="h-3.5 w-3.5" /> Archive
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteStudent(s)}
+                    title="Delete"
+                    className="btn-secondary flex items-center gap-1 px-2 py-1.5 text-xs text-red-600 hover:bg-red-50"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> Delete
+                  </button>
+                </div>
               </>
             )}
           </div>
@@ -1009,6 +1079,273 @@ export default function StudentsPage() {
                   Close
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Academic Record Modal */}
+      {recordStudent && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setRecordStudent(null)}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-6 py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Student Academic Record</h2>
+                <p className="text-xs text-gray-500">
+                  {recordStudent.firstName} {recordStudent.lastName}
+                  {recordStudent.matricNumber ? ` — ${recordStudent.matricNumber}` : ''}
+                  {recordStudent.department?.name ? ` — ${recordStudent.department.name}` : ''}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRecordStudent(null)}
+                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="px-6 py-5">
+              {recordLoading ? (
+                <div className="flex items-center justify-center gap-2 py-12 text-sm text-gray-400">
+                  <Loader2 className="h-5 w-5 animate-spin" /> Loading record…
+                </div>
+              ) : (
+                <>
+                  {/* Results Section */}
+                  <section className="mb-8">
+                    <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Academic Results</h3>
+                    {recordStudent.results && recordStudent.results.length > 0 ? (
+                      <div className="overflow-x-auto rounded-lg border border-gray-200">
+                        <table className="w-full text-left text-sm">
+                          <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+                            <tr>
+                              <th className="px-3 py-2">Session</th>
+                              <th className="px-3 py-2">Semester</th>
+                              <th className="px-3 py-2">Code</th>
+                              <th className="px-3 py-2">Title</th>
+                              <th className="px-3 py-2 text-center">Units</th>
+                              <th className="px-3 py-2 text-center">CA</th>
+                              <th className="px-3 py-2 text-center">Exam</th>
+                              <th className="px-3 py-2 text-center">Total</th>
+                              <th className="px-3 py-2 text-center">Grade</th>
+                              <th className="px-3 py-2 text-center">GP</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {recordStudent.results.map((r: StudentResult) => (
+                              <tr key={r.id} className="hover:bg-gray-50">
+                                <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">{r.session?.name ?? '—'}</td>
+                                <td className="px-3 py-2">{r.semester === 'FIRST' ? '1st' : r.semester === 'SECOND' ? '2nd' : r.semester}</td>
+                                <td className="px-3 py-2 font-mono text-xs font-medium">{r.course?.code ?? '—'}</td>
+                                <td className="px-3 py-2">{r.course?.title ?? '—'}</td>
+                                <td className="px-3 py-2 text-center">{r.course?.creditUnits ?? '—'}</td>
+                                <td className="px-3 py-2 text-center">{Number(r.caScore).toFixed(0)}</td>
+                                <td className="px-3 py-2 text-center">{Number(r.examScore).toFixed(0)}</td>
+                                <td className="px-3 py-2 text-center font-semibold">{Number(r.totalScore).toFixed(0)}</td>
+                                <td className="px-3 py-2 text-center">
+                                  <span className={`inline-block rounded px-1.5 py-0.5 text-xs font-bold ${
+                                    r.grade === 'A' ? 'bg-green-100 text-green-700' :
+                                    r.grade === 'B' ? 'bg-blue-100 text-blue-700' :
+                                    r.grade === 'C' ? 'bg-yellow-100 text-yellow-700' :
+                                    r.grade === 'D' ? 'bg-orange-100 text-orange-700' :
+                                    r.grade === 'F' ? 'bg-red-100 text-red-700' :
+                                    'bg-gray-100 text-gray-600'
+                                  }`}>{r.grade ?? '—'}</span>
+                                </td>
+                                <td className="px-3 py-2 text-center">{Number(r.gradePoint).toFixed(2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-400">No results recorded yet.</p>
+                    )}
+                  </section>
+
+                  {/* Payments Section */}
+                  <section className="mb-8">
+                    <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Payment History</h3>
+                    {recordStudent.payments && recordStudent.payments.length > 0 ? (
+                      <div className="overflow-x-auto rounded-lg border border-gray-200">
+                        <table className="w-full text-left text-sm">
+                          <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+                            <tr>
+                              <th className="px-3 py-2">Date</th>
+                              <th className="px-3 py-2">Fee Type</th>
+                              <th className="px-3 py-2">Reference</th>
+                              <th className="px-3 py-2 text-right">Amount</th>
+                              <th className="px-3 py-2 text-center">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {recordStudent.payments.map((p: StudentPayment) => (
+                              <tr key={p.id} className="hover:bg-gray-50">
+                                <td className="whitespace-nowrap px-3 py-2 text-xs">{p.paidAt ? new Date(p.paidAt).toLocaleDateString() : new Date(p.createdAt).toLocaleDateString()}</td>
+                                <td className="px-3 py-2">{p.feeStructure?.name ?? p.feeStructure?.type ?? '—'}</td>
+                                <td className="px-3 py-2 font-mono text-xs text-gray-500">{p.reference}</td>
+                                <td className="px-3 py-2 text-right font-semibold">₦{Number(p.amount).toLocaleString()}</td>
+                                <td className="px-3 py-2 text-center">
+                                  <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                                    p.status === 'SUCCESS' ? 'bg-green-100 text-green-700' :
+                                    p.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
+                                    p.status === 'REFUNDED' ? 'bg-gray-100 text-gray-600' :
+                                    'bg-red-100 text-red-700'
+                                  }`}>{p.status}</span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-400">No payments recorded yet.</p>
+                    )}
+                  </section>
+
+                  {/* Fee Breakdown */}
+                  <section>
+                    <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Fee Breakdown</h3>
+                    {(() => {
+                      const successfulPayments = (recordStudent.payments ?? []).filter((p: StudentPayment) => p.status === 'SUCCESS');
+                      // Show fees mandatory for all students + fees specific to this student's department
+                      const mandatoryFees = feeStructures.filter((f) =>
+                        f.isMandatory && (!f.departmentId || f.departmentId === recordStudent.departmentId)
+                      );
+
+                      // Build a map of which fees have been paid
+                      const paidFeeIds = new Set<string>();
+                      const paidAmounts = new Map<string, number>();
+                      successfulPayments.forEach((p: StudentPayment) => {
+                        if (p.feeStructure?.id) {
+                          paidFeeIds.add(p.feeStructure.id);
+                          paidAmounts.set(p.feeStructure.id, (paidAmounts.get(p.feeStructure.id) ?? 0) + Number(p.amount));
+                        }
+                      });
+
+                      const paidItems = mandatoryFees.filter((f) => paidFeeIds.has(f.id));
+                      const unpaidItems = mandatoryFees.filter((f) => !paidFeeIds.has(f.id));
+                      const totalPaid = successfulPayments.reduce((sum: number, p: StudentPayment) => sum + Number(p.amount), 0);
+                      const totalExpected = mandatoryFees.reduce((sum, f) => sum + Number(f.amount), 0);
+                      const outstanding = totalExpected - totalPaid;
+
+                      return (
+                        <>
+                          {/* Summary Cards */}
+                          <div className="mb-4 grid grid-cols-3 gap-4">
+                            <div className="rounded-lg border border-gray-200 p-4 text-center">
+                              <p className="text-xs text-gray-500">Total Expected</p>
+                              <p className="mt-1 text-xl font-bold text-gray-900">₦{totalExpected.toLocaleString()}</p>
+                            </div>
+                            <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-center">
+                              <p className="text-xs text-green-600">Total Paid</p>
+                              <p className="mt-1 text-xl font-bold text-green-700">₦{totalPaid.toLocaleString()}</p>
+                            </div>
+                            <div className={`rounded-lg border p-4 text-center ${outstanding > 0 ? 'border-red-200 bg-red-50' : 'border-green-200 bg-green-50'}`}>
+                              <p className={`text-xs ${outstanding > 0 ? 'text-red-600' : 'text-green-600'}`}>{outstanding > 0 ? 'Outstanding' : 'Fully Paid'}</p>
+                              <p className={`mt-1 text-xl font-bold ${outstanding > 0 ? 'text-red-700' : 'text-green-700'}`}>₦{Math.abs(outstanding).toLocaleString()}</p>
+                            </div>
+                          </div>
+
+                          {/* Paid Fees */}
+                          {paidItems.length > 0 && (
+                            <div className="mb-4">
+                              <h4 className="mb-2 flex items-center gap-2 text-sm font-medium text-green-700">
+                                <CheckCircle2 className="h-4 w-4" /> Paid Fees
+                              </h4>
+                              <div className="overflow-x-auto rounded-lg border border-green-200">
+                                <table className="w-full text-left text-sm">
+                                  <thead className="bg-green-50 text-xs uppercase tracking-wide text-green-700">
+                                    <tr>
+                                      <th className="px-3 py-2">Fee Name</th>
+                                      <th className="px-3 py-2">Type</th>
+                                      <th className="px-3 py-2 text-right">Amount</th>
+                                      <th className="px-3 py-2 text-center">Status</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-green-100">
+                                    {paidItems.map((f) => (
+                                      <tr key={f.id} className="hover:bg-green-50">
+                                        <td className="px-3 py-2 font-medium">{f.name}</td>
+                                        <td className="px-3 py-2 text-xs text-gray-600">{f.type}</td>
+                                        <td className="px-3 py-2 text-right font-semibold text-green-700">₦{Number(f.amount).toLocaleString()}</td>
+                                        <td className="px-3 py-2 text-center">
+                                          <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                                            <CheckCircle2 className="h-3 w-3" /> Paid
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Unpaid Fees */}
+                          {unpaidItems.length > 0 && (
+                            <div>
+                              <h4 className="mb-2 flex items-center gap-2 text-sm font-medium text-red-700">
+                                <AlertCircle className="h-4 w-4" /> Unpaid Fees
+                              </h4>
+                              <div className="overflow-x-auto rounded-lg border border-red-200">
+                                <table className="w-full text-left text-sm">
+                                  <thead className="bg-red-50 text-xs uppercase tracking-wide text-red-700">
+                                    <tr>
+                                      <th className="px-3 py-2">Fee Name</th>
+                                      <th className="px-3 py-2">Type</th>
+                                      <th className="px-3 py-2 text-right">Amount</th>
+                                      <th className="px-3 py-2 text-center">Status</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-red-100">
+                                    {unpaidItems.map((f) => (
+                                      <tr key={f.id} className="hover:bg-red-50">
+                                        <td className="px-3 py-2 font-medium">{f.name}</td>
+                                        <td className="px-3 py-2 text-xs text-gray-600">{f.type}</td>
+                                        <td className="px-3 py-2 text-right font-semibold text-red-700">₦{Number(f.amount).toLocaleString()}</td>
+                                        <td className="px-3 py-2 text-center">
+                                          <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+                                            <AlertCircle className="h-3 w-3" /> Unpaid
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
+
+                          {paidItems.length === 0 && unpaidItems.length === 0 && (
+                            <p className="text-sm text-gray-400">No mandatory fees configured.</p>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </section>
+                </>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-end border-t border-gray-100 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setRecordStudent(null)}
+                className="btn-secondary px-4 py-2 text-sm"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

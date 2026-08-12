@@ -401,9 +401,37 @@ export interface Student {
   currentLevel: number | null;
   programmeId: string | null;
   departmentId: string | null;
+  tempPassword: string | null;
   programme: { id: string; name: string } | null;
   department: { id: string; name: string; code: string } | null;
   createdAt: string;
+  // Populated by studentsApi.get(id) — full academic record
+  payments?: StudentPayment[];
+  results?: StudentResult[];
+}
+
+export interface StudentPayment {
+  id: string;
+  reference: string;
+  amount: string;
+  currency: string;
+  status: string;
+  paidAt: string | null;
+  createdAt: string;
+  feeStructure: { id: string; name: string; type: string; amount: string } | null;
+}
+
+export interface StudentResult {
+  id: string;
+  caScore: string;
+  examScore: string;
+  totalScore: string;
+  grade: string | null;
+  gradePoint: string;
+  status: string;
+  semester: string;
+  course: { id: string; code: string; title: string; creditUnits: number; level: number };
+  session: { id: string; name: string };
 }
 
 export interface StudentInput {

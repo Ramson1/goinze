@@ -1,19 +1,23 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CheckCircle2,
+  CreditCard,
   Loader2,
   Plus,
   Search,
+  ShieldCheck,
   Trash2,
   Upload,
   X,
 } from "lucide-react";
 import {
   admissionsApi,
+  financeApi,
   ApiError,
   type ApplyResult,
+  type ApplicationFee,
   type TrackResult,
   type WebsiteContentRecord,
 } from "@/lib/api";
@@ -116,6 +120,13 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
   const [signatureName, setSignatureName] = useState("");
   const [declDate, setDeclDate] = useState("");
 
+  // Payment state
+  const [appFees, setAppFees] = useState<ApplicationFee[]>([]);
+  const [flutterwaveKey, setFlutterwaveKey] = useState("");
+  const [paying, setPaying] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const paymentTxRef = useRef("");
+
   // Submission state
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -131,6 +142,14 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
 
   const formRef = useRef<HTMLFormElement>(null);
 
+  // Load application fees and Flutterwave config on mount
+  useEffect(() => {
+    financeApi.getApplicationFees().then(setAppFees).catch(() => {});
+    financeApi.getFlutterwaveConfig().then((cfg) => {
+      if (cfg.publicKey) setFlutterwaveKey(cfg.publicKey);
+    }).catch(() => {});
+  }, []);
+
   /* ── dynamic table helpers ── */
   function addRow<T>(arr: T[], setter: (v: T[]) => void, empty: T) {
     setter([...arr, empty]);
@@ -142,11 +161,121 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
     const c = [...arr]; c[idx] = { ...c[idx], [key]: val }; setter(c);
   }
 
+  /* ── Flutterwave script loader ── */
+  const loadFlutterwaveScript = useCallback((): Promise<void> => {
+    if ((window as any).FlutterwaveCheckout) return Promise.resolve();
+    return new Promise<void>((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://checkout.flutterwave.com/v3.js";
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Failed to load payment gateway"));
+      document.head.appendChild(script);
+    });
+  }, []);
+
   /* ── submit ── */
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!declaredAgreed) { setError("You must agree to the declaration before submitting."); return; }
-    await submitApplication();
+
+    const totalFees = appFees.reduce((sum, f) => sum + f.amount, 0);
+    if (totalFees <= 0) {
+      // No fees configured — submit directly
+      await submitApplication();
+      return;
+    }
+    if (!flutterwaveKey) {
+      setError("Payment system not configured. Please refresh the page or contact support.");
+      return;
+    }
+    if (!email) {
+      setError("Please enter your email address before proceeding to payment.");
+      return;
+    }
+
+    setPaying(true);
+    setError(null);
+
+    // Step 1: Initialize payment on the backend to create a DB record
+    let paymentRef: string;
+    try {
+      const initResult = await financeApi.initPayment({
+        schoolSlug: "goinze-demo",
+        amount: totalFees,
+        customerEmail: email,
+        purpose: `Application fees: ${appFees.map(f => f.name).join(", ")}`,
+      });
+      paymentRef = initResult.reference;
+      paymentTxRef.current = paymentRef;
+    } catch (err) {
+      setPaying(false);
+      setError(err instanceof Error ? err.message : "Could not initialize payment. Please try again.");
+      return;
+    }
+
+    // Step 2: Load Flutterwave script
+    try {
+      await loadFlutterwaveScript();
+    } catch {
+      setPaying(false);
+      setError("Could not load payment gateway. Please check your connection and try again.");
+      return;
+    }
+
+    const win = window as any;
+    if (typeof win.FlutterwaveCheckout !== "function") {
+      setPaying(false);
+      setError("Payment gateway could not initialize. Please try again.");
+      return;
+    }
+
+    // Step 3: Open Flutterwave checkout with the backend-generated reference
+    win.FlutterwaveCheckout({
+      public_key: flutterwaveKey,
+      tx_ref: paymentRef,
+      amount: totalFees,
+      currency: "NGN",
+      payment_options: "card, bank_transfer, ussd",
+      customer: { email, name: `${surname} ${otherNames}` },
+      customizations: {
+        title: "Application Fee Payment",
+        description: `Admission application — ${appFees.map(f => f.name).join(", ")}`,
+        logo: "",
+      },
+      async callback(data: any) {
+        // Flutterwave v3 callback fires when checkout completes.
+        // We do NOT check data.status here because Flutterwave's inline
+        // callback doesn't always include it — we verify server-side instead.
+        setPaying(false);
+        setVerifying(true);
+        try {
+          const verification = await financeApi.verifyPayment(paymentRef);
+          const verifyStatus = verification.status?.toUpperCase?.() ?? "";
+          if (verifyStatus !== "SUCCESS" && verifyStatus !== "SUCCESSFUL") {
+            setError("Payment verification returned status: " + (verification.status ?? "unknown") + ". Please contact support with reference: " + paymentRef);
+            setVerifying(false);
+            return;
+          }
+          // Payment verified — submit the application
+          await submitApplication();
+        } catch (err) {
+          setVerifying(false);
+          setError(err instanceof Error ? err.message : "Payment verification failed. Please contact support with reference: " + paymentRef);
+        }
+      },
+      onclose() {
+        // User closed the checkout modal without completing payment
+        // Only reset if we're not in the middle of verifying
+        setVerifying((v) => {
+          if (!v) setPaying(false);
+          return v;
+        });
+      },
+    });
+
+    // Reset paying after checkout opens (callback/onclose will handle state)
+    setPaying(false);
   }
 
   /* ── Submit the actual application form ── */
@@ -417,11 +546,34 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
           {error && <p className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm text-rose-600">{error}</p>}
           {uploadProgress && <p className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm text-blue-700"><Loader2 className="h-4 w-4 animate-spin" />{uploadProgress}</p>}
 
+          {/* Payment summary */}
+          {appFees.length > 0 && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <CreditCard className="h-4 w-4 text-amber-600" />
+                <h4 className="text-sm font-bold text-amber-800">Application Fees</h4>
+              </div>
+              <div className="space-y-1 text-sm text-amber-700">
+                {appFees.map((f) => (
+                  <div key={f.id} className="flex justify-between">
+                    <span>{f.name}</span>
+                    <span className="font-semibold">₦{f.amount.toLocaleString()}</span>
+                  </div>
+                ))}
+                <div className="flex justify-between border-t border-amber-200 pt-2 mt-2 font-bold text-amber-900">
+                  <span>Total</span>
+                  <span>₦{appFees.reduce((s, f) => s + f.amount, 0).toLocaleString()}</span>
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-amber-600">Payment is required before your application can be submitted.</p>
+            </div>
+          )}
+
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-slate-500">Your application is submitted securely to the admissions office.</p>
-            <button type="submit" disabled={submitting} className="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60">
-              {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-              {submitting ? "Submitting…" : "Submit Application"}
+            <button type="submit" disabled={submitting || paying || verifying} className="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60">
+              {(submitting || paying || verifying) && <Loader2 className="h-4 w-4 animate-spin" />}
+              {verifying ? "Verifying Payment…" : paying ? "Processing Payment…" : submitting ? "Submitting…" : appFees.length > 0 ? `Pay ₦${appFees.reduce((s, f) => s + f.amount, 0).toLocaleString()} & Submit` : "Submit Application"}
             </button>
           </div>
         </form>

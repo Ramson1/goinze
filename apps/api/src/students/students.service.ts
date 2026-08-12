@@ -49,8 +49,14 @@ export class StudentsService {
         programme: true,
         department: true,
         user: true,
-        payments: true,
-        results: true,
+        payments: {
+          include: { feeStructure: true },
+          orderBy: { createdAt: 'desc' },
+        },
+        results: {
+          include: { course: true, session: true },
+          orderBy: [{ session: { name: 'asc' } }, { semester: 'asc' }],
+        },
       },
     });
     if (!student) throw new NotFoundException('Student not found');

@@ -99,12 +99,31 @@ export class FinanceService {
     if (query.search) {
       where.reference = { contains: query.search, mode: 'insensitive' };
     }
-    return paginated(this.prisma.db.payment, {
+    const result = await paginated(this.prisma.db.payment, {
       where,
       page: query.page,
       pageSize: query.pageSize,
-      include: { student: true, feeStructure: true, receipt: true },
+      include: {
+        student: true,
+        feeStructure: true,
+        receipt: true,
+        application: {
+          include: {
+            student: true,
+          },
+        },
+      },
     });
+
+    // Resolve student from application when direct student is null
+    result.items = result.items.map((p: any) => {
+      if (!p.student && p.application?.student) {
+        p.student = p.application.student;
+      }
+      return p;
+    });
+
+    return result;
   }
 
   /** Initialize a payment and return a Flutterwave checkout URL. */
