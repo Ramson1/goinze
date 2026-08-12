@@ -146,6 +146,14 @@ export default function WebsiteCmsPage() {
   const [fileKey, setFileKey] = useState(0);
   const [lightboxItem, setLightboxItem] = useState<GalleryItemRecord | null>(null);
 
+  /* Gallery edit/delete state */
+  const [editingItem, setEditingItem] = useState<GalleryItemRecord | null>(null);
+  const [editUrl, setEditUrl] = useState('');
+  const [editCaption, setEditCaption] = useState('');
+  const [editAlbum, setEditAlbum] = useState('');
+  const [editType, setEditType] = useState('IMAGE');
+  const [deletingItem, setDeletingItem] = useState<GalleryItemRecord | null>(null);
+
   function resetGalleryForm() {
     setMediaUrl(''); setMediaCaption(''); setMediaAlbum('');
     setMediaType('IMAGE'); setUploadFile(null); setUploadMode('file');
@@ -269,6 +277,46 @@ export default function WebsiteCmsPage() {
       await load();
     } catch (err) {
       setUploading(false); setError(err instanceof Error ? err.message : 'Failed to add.');
+    } finally { setBusy(null); }
+  }
+
+  function openEditModal(item: GalleryItemRecord) {
+    setEditingItem(item);
+    setEditUrl(item.url);
+    setEditCaption(item.caption ?? '');
+    setEditAlbum(item.album ?? '');
+    setEditType(item.type);
+  }
+
+  async function handleUpdateGallery(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!editingItem) return;
+    setBusy('update-gallery');
+    try {
+      await cmsApi.updateGalleryItem(editingItem.id, {
+        url: editUrl.trim(),
+        type: editType,
+        caption: editCaption.trim() || undefined,
+        album: editAlbum.trim() || undefined,
+      });
+      setEditingItem(null);
+      setSuccessMsg('Gallery item updated.');
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update.');
+    } finally { setBusy(null); }
+  }
+
+  async function handleDeleteGallery() {
+    if (!deletingItem) return;
+    setBusy('delete-gallery');
+    try {
+      await cmsApi.deleteGalleryItem(deletingItem.id);
+      setDeletingItem(null);
+      setSuccessMsg('Gallery item deleted.');
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete.');
     } finally { setBusy(null); }
   }
 
@@ -752,6 +800,16 @@ export default function WebsiteCmsPage() {
                 <div className="px-4 py-3">
                   <p className="truncate text-sm font-medium text-gray-800">{item.caption || 'Untitled'}</p>
                   <p className="mt-0.5 text-xs font-medium text-amber-600">{item.album ? `Album: ${item.album}` : 'No album'}</p>
+                  <div className="mt-2 flex items-center gap-1.5">
+                    <button type="button" onClick={() => openEditModal(item)}
+                      className="flex items-center gap-1 rounded-md bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-600 transition hover:bg-blue-100">
+                      <Pencil className="h-3 w-3" /> Edit
+                    </button>
+                    <button type="button" onClick={() => setDeletingItem(item)}
+                      className="flex items-center gap-1 rounded-md bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 transition hover:bg-red-100">
+                      <Trash2 className="h-3 w-3" /> Delete
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -1425,6 +1483,71 @@ export default function WebsiteCmsPage() {
                 {lightboxItem.caption && <p className="text-sm font-medium text-white">{lightboxItem.caption}</p>}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit Gallery Item Modal ── */}
+      {editingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+              <h3 className="text-base font-semibold text-gray-900">Edit Gallery Item</h3>
+              <button type="button" onClick={() => setEditingItem(null)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100" aria-label="Close">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form onSubmit={handleUpdateGallery} className="space-y-4 px-6 py-5">
+              <div>
+                <label className="label">Media URL</label>
+                <input type="url" value={editUrl} onChange={(e) => setEditUrl(e.target.value)} placeholder="https://…" className="input" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Type</label>
+                  <select value={editType} onChange={(e) => setEditType(e.target.value)} className="input">
+                    <option value="IMAGE">Image</option><option value="VIDEO">Video</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Album (optional)</label>
+                  <input value={editAlbum} onChange={(e) => setEditAlbum(e.target.value)} placeholder="e.g. Convocation 2026" className="input" />
+                </div>
+              </div>
+              <div>
+                <label className="label">Caption (optional)</label>
+                <input value={editCaption} onChange={(e) => setEditCaption(e.target.value)} placeholder="Short description…" className="input" />
+              </div>
+              <div className="flex justify-end gap-2 border-t border-gray-100 pt-4">
+                <button type="button" onClick={() => setEditingItem(null)} className="btn-secondary">Cancel</button>
+                <button type="submit" disabled={busy === 'update-gallery'} className="btn-primary disabled:opacity-60">
+                  {busy === 'update-gallery' ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Gallery Item Confirmation ── */}
+      {deletingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
+              <Trash2 className="h-6 w-6 text-red-600" />
+            </div>
+            <h3 className="mt-4 text-center text-base font-semibold text-gray-900">Delete Gallery Item</h3>
+            <p className="mt-2 text-center text-sm text-gray-500">
+              Are you sure you want to delete &quot;{deletingItem.caption || 'this item'}&quot;? This action cannot be undone.
+            </p>
+            <div className="mt-6 flex justify-center gap-3">
+              <button type="button" onClick={() => setDeletingItem(null)} className="btn-secondary">Cancel</button>
+              <button type="button" onClick={handleDeleteGallery} disabled={busy === 'delete-gallery'}
+                className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-60">
+                {busy === 'delete-gallery' ? <><Loader2 className="h-4 w-4 animate-spin" /> Deleting…</> : 'Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}

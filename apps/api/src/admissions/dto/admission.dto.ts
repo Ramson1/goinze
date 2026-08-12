@@ -141,3 +141,31 @@ export class ReviewApplicationDto {
   @IsDateString()
   interviewDate?: string;
 }
+
+export class ApproveApplicationDto {
+  @IsOptional()
+  @IsString()
+  programmeId?: string;
+
+  @IsOptional()
+  @IsString()
+  departmentId?: string;
+}
+
+export class UpdateVerificationDto {
+  @IsOptional()
+  @IsBoolean()
+  verificationDocumentsReviewed?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  verificationDocumentsMatch?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  verificationReceiptAttached?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  verificationCourseApproved?: boolean;
+}

@@ -34,8 +34,15 @@ export class StudentsController {
     @Query() query: PaginationDto,
     @Query('status') status?: string,
     @Query('departmentId') departmentId?: string,
+    @Query('level') level?: string,
   ) {
-    return this.studentsService.findAll(user.schoolId, query, status, departmentId);
+    return this.studentsService.findAll(
+      user.schoolId,
+      query,
+      status,
+      departmentId,
+      level ? Number(level) : undefined,
+    );
   }
 
   @Get(':id')
@@ -63,6 +70,12 @@ export class StudentsController {
   @Roles('SCHOOL_ADMIN')
   promoteAll(@CurrentUser() user: SessionUser) {
     return this.studentsService.promoteAll(user.schoolId);
+  }
+
+  @Post('graduate-all')
+  @Roles('SCHOOL_ADMIN')
+  graduateAll(@CurrentUser() user: SessionUser) {
+    return this.studentsService.graduateAllFinalYear(user.schoolId);
   }
 
   @Patch(':id')
@@ -93,5 +106,11 @@ export class StudentsController {
   @Roles('SCHOOL_ADMIN')
   archive(@Param('id') id: string) {
     return this.studentsService.archive(id);
+  }
+
+  @Post(':id/reset-password')
+  @Roles('SCHOOL_ADMIN')
+  resetPassword(@Param('id') id: string) {
+    return this.studentsService.resetTempPassword(id);
   }
 }

@@ -132,7 +132,8 @@ export default function CbtDashboardPage() {
           <p className="font-semibold">Before you start</p>
           <p className="mt-0.5 opacity-90">
             Ensure a stable internet connection and a fully charged device. The exam timer starts as soon
-            as you begin and cannot be paused. Each exam can only be attempted once.
+            as you begin and cannot be paused. Each exam can only be attempted once. You will need a
+            valid <strong>exam access code</strong> from your instructor to start each exam.
           </p>
         </div>
       </div>

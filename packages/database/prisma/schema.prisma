@@ -411,6 +411,8 @@ model Student {
   departmentId  String?
   department    Department?   @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   currentLevel  Int?          @default(100)
+  matricActivatedAt DateTime?
+  tempPassword  String?       // Temporary password for portal login (cleared after first login)
   entrySessionId String?
   entrySession  AcademicSession? @relation(fields: [entrySessionId], references: [id], onDelete: SetNull)
 
@@ -544,6 +546,7 @@ model Department {
   courses     Course[]
   students    Student[]
   staff       Staff[]
+  feeStructures FeeStructure[]
 
   @@unique([schoolId, code])
 }
@@ -668,6 +671,8 @@ model FeeStructure {
   amount      Decimal  @db.Decimal(12, 2)
   level       Int?
   programmeId String?
+  departmentId String?
+  department  Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   isMandatory Boolean  @default(true)
   allowInstallment Boolean @default(false)
   createdAt   DateTime @default(now())
@@ -868,6 +873,7 @@ model Exam {
 
   questions     ExamQuestion[]
   attempts      ExamAttempt[]
+  accessCodes   ExamAccessCode[]
 
   @@index([schoolId, status])
 }
@@ -881,6 +887,19 @@ model ExamQuestion {
   order      Int      @default(0)
 
   @@unique([examId, questionId])
+}
+
+model ExamAccessCode {
+  id        String    @id @default(cuid())
+  examId    String
+  exam      Exam      @relation(fields: [examId], references: [id], onDelete: Cascade)
+  code      String    @unique
+  usedBy    String?
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([examId])
+  @@index([code])
 }
 
 model ExamAttempt {
@@ -1055,6 +1074,11 @@ model Application {
   admissionLetterUrl String?
   acceptanceFeePaid Boolean       @default(false)
   applicationFormFeePaid Boolean @default(false)
+  // Verification checklist (Office Use Only)
+  verificationDocumentsReviewed Boolean @default(false)
+  verificationDocumentsMatch Boolean @default(false)
+  verificationReceiptAttached Boolean @default(false)
+  verificationCourseApproved Boolean @default(false)
   studentId     String?           @unique
   student       Student?          @relation(fields: [studentId], references: [id], onDelete: SetNull)
   createdAt     DateTime          @default(now())

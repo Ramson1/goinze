@@ -143,9 +143,11 @@ export interface FeesResponse {
 }
 
 export interface ResultCourse {
+  resultId: string;
   code: string;
   title: string;
   units: number;
+  session: string;
   score: number;
   grade: string | null;
 }
@@ -164,6 +166,8 @@ export interface ResultsResponse {
   cgpa: number;
   classification: string;
   totalUnits: number;
+  passed: number;
+  failed: number;
 }
 
 export interface RegisteredCourse {
@@ -433,7 +437,7 @@ export interface CbtSubmitResponse extends CbtAttemptRecord {
 export const cbtStudentApi = {
   exams: () => api.get<CbtExamRecord[]>('/cbt/exams'),
   exam: (id: string) => api.get<CbtExamDetail>(`/cbt/exams/${id}`),
-  startAttempt: (payload: { examId: string; studentId: string }) =>
+  startAttempt: (payload: { examId: string; studentId: string; code?: string }) =>
     api.post<CbtAttemptRecord>('/cbt/attempts/start', payload),
   submitAttempt: (attemptId: string, answers: CbtAnswerInput[]) =>
     api.post<CbtSubmitResponse>(`/cbt/attempts/${attemptId}/submit`, { answers }),

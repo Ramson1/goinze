@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -17,6 +18,8 @@ import {
   StartAttemptDto,
   SubmitAttemptDto,
   UpdateExamStatusDto,
+  RedeemCodeDto,
+  BulkCreateQuestionsDto,
 } from './dto/cbt.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -57,6 +60,12 @@ export class CbtController {
     return this.cbtService.createQuestion(dto);
   }
 
+  @Post('questions/bulk')
+  @Roles('SCHOOL_ADMIN', 'LECTURER')
+  bulkCreateQuestions(@Body() dto: BulkCreateQuestionsDto) {
+    return this.cbtService.bulkCreateQuestions(dto);
+  }
+
   // ---- Exams ----
   @Get('exams')
   @Roles('SCHOOL_ADMIN', 'LECTURER', 'STUDENT')
@@ -85,6 +94,15 @@ export class CbtController {
     return this.cbtService.addExamQuestions(id, dto);
   }
 
+  @Delete('exams/:id/questions')
+  @Roles('SCHOOL_ADMIN', 'LECTURER')
+  removeExamQuestions(
+    @Param('id') id: string,
+    @Body() dto: AddExamQuestionsDto,
+  ) {
+    return this.cbtService.removeExamQuestions(id, dto.questionIds);
+  }
+
   @Patch('exams/:id/status')
   @Roles('SCHOOL_ADMIN', 'LECTURER')
   updateExamStatus(
@@ -92,6 +110,25 @@ export class CbtController {
     @Body() dto: UpdateExamStatusDto,
   ) {
     return this.cbtService.updateExamStatus(id, dto);
+  }
+
+  // ---- Access Codes ----
+  @Post('exams/:id/access-codes')
+  @Roles('SCHOOL_ADMIN')
+  generateAccessCodes(@Param('id') id: string) {
+    return this.cbtService.generateCodes(id);
+  }
+
+  @Get('exams/:id/access-codes')
+  @Roles('SCHOOL_ADMIN')
+  listAccessCodes(@Param('id') id: string) {
+    return this.cbtService.listCodes(id);
+  }
+
+  @Post('exams/redeem-code')
+  @Roles('STUDENT', 'SCHOOL_ADMIN')
+  redeemAccessCode(@Body() dto: RedeemCodeDto) {
+    return this.cbtService.redeemCode(dto);
   }
 
   @Get('exams/:id/attempts')

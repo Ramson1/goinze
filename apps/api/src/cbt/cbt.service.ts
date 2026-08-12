@@ -8,6 +8,8 @@ import {
   StartAttemptDto,
   SubmitAttemptDto,
   UpdateExamStatusDto,
+  RedeemCodeDto,
+  BulkCreateQuestionsDto,
 } from './dto/cbt.dto';
 
 /**
@@ -133,12 +135,30 @@ export class CbtService {
     });
   }
 
+  async removeExamQuestions(examId: string, questionIds: string[]) {
+    return this.prisma.db.examQuestion.deleteMany({
+      where: {
+        examId,
+        questionId: { in: questionIds },
+      },
+    });
+  }
+
   // ---- Attempts ----
   async startAttempt(dto: StartAttemptDto) {
     const exam = await this.prisma.db.exam.findUnique({
       where: { id: dto.examId },
     });
     if (!exam) throw new NotFoundException('Exam not found');
+
+    // Validate and redeem access code if provided
+    if (dto.code) {
+      await this.redeemCode({
+        examId: dto.examId,
+        code: dto.code,
+        studentId: dto.studentId,
+      });
+    }
 
     const existing = await this.prisma.db.examAttempt.findUnique({
       where: {
@@ -237,5 +257,133 @@ export class CbtService {
       include: { student: true },
       orderBy: { startedAt: 'desc' },
     });
+  }
+
+  // ---- Access Codes ----
+  async generateCodes(examId: string) {
+    const exam = await this.prisma.db.exam.findUnique({ where: { id: examId } });
+    if (!exam) throw new NotFoundException('Exam not found');
+
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const codes: string[] = [];
+    
+    // Generate 10 unique codes
+    for (let i = 0; i < 10; i++) {
+      let code: string;
+      let isUnique = false;
+      
+      while (!isUnique) {
+        const part1 = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+        const part2 = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+        code = `EXAM-${part1}-${part2}`;
+        
+        // Check if code already exists
+        const existing = await this.prisma.db.examAccessCode.findUnique({ where: { code } });
+        if (!existing) {
+          isUnique = true;
+        }
+      }
+      
+      codes.push(code!);
+    }
+
+    // Create all codes in the database
+    return this.prisma.db.examAccessCode.createMany({
+      data: codes.map((code) => ({ examId, code })),
+    });
+  }
+
+  async listCodes(examId: string) {
+    const codes = await this.prisma.db.examAccessCode.findMany({
+      where: { examId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Fetch student data for used codes
+    const studentIds = codes
+      .filter((c) => c.usedBy)
+      .map((c) => c.usedBy as string);
+    
+    const uniqueStudentIds = [...new Set(studentIds)];
+    
+    const students = uniqueStudentIds.length > 0
+      ? await this.prisma.db.student.findMany({
+          where: { id: { in: uniqueStudentIds } },
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        })
+      : [];
+
+    const studentMap = new Map(students.map((s) => [s.id, s]));
+
+    return codes.map((code) => ({
+      ...code,
+      usedBy: code.usedBy ? studentMap.get(code.usedBy) ?? null : null,
+    }));
+  }
+
+  async redeemCode(dto: RedeemCodeDto) {
+    const accessCode = await this.prisma.db.examAccessCode.findUnique({
+      where: { code: dto.code },
+    });
+
+    if (!accessCode) {
+      throw new BadRequestException('Invalid access code');
+    }
+
+    if (accessCode.examId !== dto.examId) {
+      throw new BadRequestException('Access code is not valid for this exam');
+    }
+
+    if (accessCode.usedBy) {
+      throw new BadRequestException('Access code has already been used');
+    }
+
+    return this.prisma.db.examAccessCode.update({
+      where: { id: accessCode.id },
+      data: {
+        usedBy: dto.studentId,
+        usedAt: new Date(),
+      },
+    });
+  }
+
+  // ---- Bulk Questions ----
+  async bulkCreateQuestions(dto: BulkCreateQuestionsDto) {
+    const bank = await this.prisma.db.questionBank.findUnique({
+      where: { id: dto.bankId },
+    });
+    if (!bank) throw new NotFoundException('Question bank not found');
+
+    const created: any[] = [];
+    for (const q of dto.questions) {
+      const question = await this.prisma.db.question.create({
+        data: {
+          bankId: dto.bankId,
+          type: (q.type as any) ?? 'OBJECTIVE',
+          text: q.text,
+          marks: q.marks ?? 1,
+          difficulty: q.difficulty ?? 'medium',
+          explanation: q.explanation,
+          options: q.options?.length
+            ? {
+                create: q.options.map((o, i) => ({
+                  text: o.text,
+                  isCorrect: o.isCorrect ?? false,
+                  order: o.order ?? i,
+                })),
+              }
+            : undefined,
+        },
+        include: { options: true },
+      });
+      created.push(question);
+    }
+
+    return { count: created.length, questions: created };
   }
 }

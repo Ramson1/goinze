@@ -11,6 +11,7 @@ import {
   ChevronsUp,
   Filter,
   GraduationCap,
+  Key,
   Loader2,
   Pencil,
   Plus,
@@ -44,7 +45,7 @@ const STATUS_FILTERS: Array<StudentStatus | ''> = [
   'ARCHIVED',
 ];
 const GENDERS = ['MALE', 'FEMALE', 'OTHER'];
-const LEVELS = [100, 200, 300, 400, 500, 600];
+const LEVELS = [100, 200, 300];
 const STATUSES: StudentStatus[] = [
   'APPLICANT',
   'ACTIVE',
@@ -70,6 +71,7 @@ export default function StudentsPage() {
   const [search, setSearch] = useState(initialSearch);
   const [statusFilter, setStatusFilter] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
+  const [levelFilter, setLevelFilter] = useState('');
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [actingId, setActingId] = useState<string | null>(null);
@@ -110,6 +112,12 @@ export default function StudentsPage() {
   const [passportFile, setPassportFile] = useState<File | null>(null);
   const [editSaving, setEditSaving] = useState(false);
   const [promoting, setPromoting] = useState(false);
+  const [graduatingAll, setGraduatingAll] = useState(false);
+
+  // Reset password modal
+  const [resetPasswordStudent, setResetPasswordStudent] = useState<Student | null>(null);
+  const [resettingPassword, setResettingPassword] = useState(false);
+  const [newTempPassword, setNewTempPassword] = useState<string | null>(null);
 
   const loadStudents = useCallback(() => {
     setLoading(true);
@@ -121,11 +129,12 @@ export default function StudentsPage() {
         search: search || undefined,
         status: statusFilter || undefined,
         departmentId: deptFilter || undefined,
+        level: levelFilter ? Number(levelFilter) : undefined,
       })
       .then(setStudents)
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load students.'))
       .finally(() => setLoading(false));
-  }, [page, search, statusFilter, deptFilter]);
+  }, [page, search, statusFilter, deptFilter, levelFilter]);
 
   useEffect(() => {
     studentsApi
@@ -141,7 +150,7 @@ export default function StudentsPage() {
   // Reset to page 1 when filters change.
   useEffect(() => {
     setPage(1);
-  }, [search, statusFilter, deptFilter]);
+  }, [search, statusFilter, deptFilter, levelFilter]);
 
   async function runAction(
     student: Student,
@@ -169,6 +178,22 @@ export default function StudentsPage() {
       setError(err instanceof Error ? err.message : 'Action failed.');
     } finally {
       setActingId(null);
+    }
+  }
+
+  async function handleResetPassword(student: Student) {
+    if (!window.confirm(`Reset password for ${student.firstName} ${student.lastName}? A new temporary password will be generated.`)) return;
+    setResettingPassword(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await studentsApi.resetPassword(student.id);
+      setNewTempPassword(result.tempPassword);
+      setResetPasswordStudent(student);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Password reset failed.');
+    } finally {
+      setResettingPassword(false);
     }
   }
 
@@ -257,7 +282,7 @@ export default function StudentsPage() {
   }
 
   async function handlePromote() {
-    if (!window.confirm('Promote all active students to the next level? This will increment each active student\'s level by 100.')) return;
+    if (!window.confirm('Promote all active students to the next level? This will increment each active student\'s level by 100. Maximum level is 300.')) return;
     setPromoting(true);
     setError(null);
     setNotice(null);
@@ -269,6 +294,22 @@ export default function StudentsPage() {
       setError(err instanceof Error ? err.message : 'Promotion failed.');
     } finally {
       setPromoting(false);
+    }
+  }
+
+  async function handleGraduateAll() {
+    if (!window.confirm('Graduate all active 300-level students? This will change their status to GRADUATED.')) return;
+    setGraduatingAll(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await studentsApi.graduateAll();
+      setNotice(`Successfully graduated ${result.graduated} student${result.graduated !== 1 ? 's' : ''}.`);
+      loadStudents();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Graduation failed.');
+    } finally {
+      setGraduatingAll(false);
     }
   }
 
@@ -369,6 +410,19 @@ export default function StudentsPage() {
                 >
                   <Pencil className="h-3.5 w-3.5" />
                 </button>
+                <button
+                  type="button"
+                  onClick={() => handleResetPassword(s)}
+                  disabled={resettingPassword}
+                  title="Reset Password"
+                  className="btn-secondary px-2 py-1.5 text-xs text-purple-600 hover:bg-purple-50 disabled:opacity-50"
+                >
+                  {resettingPassword && actingId === s.id ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Key className="h-3.5 w-3.5" />
+                  )}
+                </button>
                 {s.status === 'ACTIVE' && (
                   <>
                     <button
@@ -432,6 +486,19 @@ export default function StudentsPage() {
         subtitle="Manage student records, enrollment and status."
         action={
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleGraduateAll}
+              disabled={graduatingAll}
+              className="btn-secondary flex items-center gap-1.5 text-sm text-blue-600 hover:bg-blue-50 disabled:opacity-60"
+            >
+              {graduatingAll ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <GraduationCap className="h-4 w-4" />
+              )}
+              Graduate All Final Year
+            </button>
             <button
               type="button"
               onClick={handlePromote}
@@ -600,6 +667,19 @@ export default function StudentsPage() {
               {departments.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.name}
+                </option>
+              ))}
+            </select>
+            <select
+              value={levelFilter}
+              onChange={(e) => setLevelFilter(e.target.value)}
+              className="input sm:w-32"
+              aria-label="Filter by level"
+            >
+              <option value="">All levels</option>
+              {LEVELS.map((l) => (
+                <option key={l} value={l}>
+                  {l} Level
                 </option>
               ))}
             </select>
@@ -884,6 +964,52 @@ export default function StudentsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Password Modal */}
+      {resetPasswordStudent && newTempPassword && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Password Reset Successful</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setResetPasswordStudent(null);
+                  setNewTempPassword(null);
+                }}
+                className="rounded-md p-1 text-gray-400 hover:bg-gray-100"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                A new temporary password has been generated for{' '}
+                <strong>{resetPasswordStudent.firstName} {resetPasswordStudent.lastName}</strong>.
+              </p>
+              <div className="rounded-lg border border-purple-200 bg-purple-50 p-4">
+                <p className="mb-1 text-xs font-medium text-purple-700">Temporary Password:</p>
+                <p className="font-mono text-lg font-bold text-purple-900">{newTempPassword}</p>
+              </div>
+              <p className="text-sm text-gray-600">
+                Please communicate this password to the student. They can change it after logging in.
+              </p>
+              <div className="flex justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResetPasswordStudent(null);
+                    setNewTempPassword(null);
+                  }}
+                  className="btn-primary px-4 py-2 text-sm"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -71,7 +71,10 @@ const navGroups: NavGroup[] = [
   },
   {
     title: 'Finance',
-    items: [{ label: 'Payments', href: '/payments', icon: CreditCard }],
+    items: [
+      { label: 'Payments', href: '/payments', icon: CreditCard },
+      { label: 'Fee Structures', href: '/fee-structures', icon: FileText },
+    ],
   },
   {
     title: 'Assessment',

@@ -51,6 +51,26 @@ export class AcademicsService {
     });
   }
 
+  async updateDepartment(id: string, data: Record<string, any>) {
+    const department = await this.prisma.db.department.findUnique({ where: { id } });
+    if (!department) throw new NotFoundException('Department not found');
+    return this.prisma.db.department.update({
+      where: { id },
+      data: {
+        name: data.name,
+        code: data.code,
+        facultyId: data.facultyId,
+        description: data.description,
+      },
+    });
+  }
+
+  async deleteDepartment(id: string) {
+    const department = await this.prisma.db.department.findUnique({ where: { id } });
+    if (!department) throw new NotFoundException('Department not found');
+    return this.prisma.db.department.delete({ where: { id } });
+  }
+
   // ---- Programmes ----
   listProgrammes(schoolId: string | null, departmentId?: string) {
     const where: Record<string, any> = {};
@@ -74,6 +94,26 @@ export class AcademicsService {
         durationYears: data.durationYears ?? 4,
       },
     });
+  }
+
+  async updateProgramme(id: string, data: Record<string, any>) {
+    const programme = await this.prisma.db.programme.findUnique({ where: { id } });
+    if (!programme) throw new NotFoundException('Programme not found');
+    return this.prisma.db.programme.update({
+      where: { id },
+      data: {
+        name: data.name,
+        code: data.code,
+        degreeType: data.degreeType,
+        durationYears: data.durationYears,
+      },
+    });
+  }
+
+  async deleteProgramme(id: string) {
+    const programme = await this.prisma.db.programme.findUnique({ where: { id } });
+    if (!programme) throw new NotFoundException('Programme not found');
+    return this.prisma.db.programme.delete({ where: { id } });
   }
 
   // ---- Sessions ----
@@ -192,6 +232,29 @@ export class AcademicsService {
     return course;
   }
 
+  async updateCourse(id: string, data: Record<string, any>) {
+    const course = await this.prisma.db.course.findUnique({ where: { id } });
+    if (!course) throw new NotFoundException('Course not found');
+    return this.prisma.db.course.update({
+      where: { id },
+      data: {
+        code: data.code,
+        title: data.title,
+        departmentId: data.departmentId,
+        creditUnits: data.creditUnits,
+        level: data.level,
+        semester: data.semester,
+        description: data.description,
+      },
+    });
+  }
+
+  async deleteCourse(id: string) {
+    const course = await this.prisma.db.course.findUnique({ where: { id } });
+    if (!course) throw new NotFoundException('Course not found');
+    return this.prisma.db.course.delete({ where: { id } });
+  }
+
   // ---- Course allocation ----
   allocateCourse(data: {
     courseId: string;
@@ -212,5 +275,23 @@ export class AcademicsService {
       where: { courseId },
       include: { staff: true, course: true },
     });
+  }
+
+  async updateCourseAllocation(courseId: string, staffId: string) {
+    // Delete existing allocations for this course
+    await this.prisma.db.courseAllocation.deleteMany({
+      where: { courseId },
+    });
+    // Create new allocation if staffId is provided
+    if (staffId) {
+      return this.prisma.db.courseAllocation.create({
+        data: {
+          courseId,
+          staffId,
+        },
+        include: { staff: true, course: true },
+      });
+    }
+    return null;
   }
 }

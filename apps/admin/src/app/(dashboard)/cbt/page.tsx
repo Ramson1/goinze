@@ -1,14 +1,17 @@
 'use client';
 
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   ArrowLeft,
   CheckSquare,
   Database,
+  Download,
   FileQuestion,
   ListChecks,
+  Loader2,
   Plus,
   Square,
+  Upload,
   X,
 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
@@ -27,6 +30,7 @@ import {
   type CbtExamStatus,
   type CbtQuestionRecord,
   type CourseRecord,
+  type ExamAccessCodeRecord,
 } from '@/lib/api';
 
 type Tab = 'exams' | 'banks';
@@ -80,10 +84,16 @@ export default function CbtPage() {
   const [bankId, setBankId] = useState('');
   const [bankQuestions, setBankQuestions] = useState<CbtQuestionRecord[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
+  const [originalQuestions, setOriginalQuestions] = useState<string[]>([]);
 
   // Attempts panel
   const [attemptsFor, setAttemptsFor] = useState<string | null>(null);
   const [attempts, setAttempts] = useState<Record<string, CbtAttemptRecord[]>>({});
+
+  // Access codes panel
+  const [codesFor, setCodesFor] = useState<string | null>(null);
+  const [codes, setCodes] = useState<Record<string, ExamAccessCodeRecord[]>>({});
+  const [revealedCodes, setRevealedCodes] = useState<Set<string>>(new Set());
 
   // Create-bank modal
   const [bankFormOpen, setBankFormOpen] = useState(false);
@@ -94,7 +104,13 @@ export default function CbtPage() {
   // Manage-bank modal
   const [manageBank, setManageBank] = useState<CbtBankRecord | null>(null);
   const [manageQuestions, setManageQuestions] = useState<CbtQuestionRecord[] | null>(null);
-  const [bankView, setBankView] = useState<'list' | 'form'>('list');
+  const [bankView, setBankView] = useState<'list' | 'form' | 'upload'>('list');
+
+  // Bulk upload state
+  const [uploadDragOver, setUploadDragOver] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<'idle' | 'parsing' | 'uploading' | 'done'>('idle');
+  const [uploadResult, setUploadResult] = useState<{ count: number; errors: string[] } | null>(null);
 
   // Question form
   const [qText, setQText] = useState('');
@@ -210,10 +226,20 @@ export default function CbtPage() {
     }
   }
 
-  function openAddQuestions(exam: CbtExamRecord) {
+  async function openAddQuestions(exam: CbtExamRecord) {
     setAddFor(exam);
     setBankId(banks[0]?.id ?? '');
     setSelected([]);
+    setOriginalQuestions([]);
+    // Fetch exam details to get existing questions
+    try {
+      const examDetails = await cbtApi.getExam(exam.id);
+      const existingQuestionIds = examDetails.questions.map((eq: any) => eq.questionId);
+      setSelected(existingQuestionIds);
+      setOriginalQuestions(existingQuestionIds);
+    } catch (err) {
+      console.error('Failed to load exam questions:', err);
+    }
   }
 
   function toggleQuestion(id: string) {
@@ -224,14 +250,25 @@ export default function CbtPage() {
 
   async function handleAddQuestions(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!addFor || selected.length === 0) return;
+    if (!addFor) return;
     setBusy('add-questions');
     try {
-      await cbtApi.addExamQuestions(addFor.id, selected);
+      // Determine which questions to add and which to remove
+      const toAdd = selected.filter((id) => !originalQuestions.includes(id));
+      const toRemove = originalQuestions.filter((id) => !selected.includes(id));
+      
+      // Perform add and remove operations
+      if (toAdd.length > 0) {
+        await cbtApi.addExamQuestions(addFor.id, toAdd);
+      }
+      if (toRemove.length > 0) {
+        await cbtApi.removeExamQuestions(addFor.id, toRemove);
+      }
+      
       setAddFor(null);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add questions.');
+      setError(err instanceof Error ? err.message : 'Failed to update questions.');
     } finally {
       setBusy(null);
     }
@@ -251,6 +288,44 @@ export default function CbtPage() {
         setError(err instanceof Error ? err.message : 'Failed to load attempts.');
       }
     }
+  }
+
+  async function toggleCodes(examId: string) {
+    if (codesFor === examId) {
+      setCodesFor(null);
+      return;
+    }
+    setCodesFor(examId);
+    if (!codes[examId]) {
+      try {
+        const list = await cbtApi.listCodes(examId);
+        setCodes((prev) => ({ ...prev, [examId]: list }));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load access codes.');
+      }
+    }
+  }
+
+  async function handleGenerateCodes(examId: string) {
+    setBusy('generate-codes');
+    try {
+      await cbtApi.generateCodes(examId);
+      const list = await cbtApi.listCodes(examId);
+      setCodes((prev) => ({ ...prev, [examId]: list }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate codes.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function toggleCodeReveal(codeId: string) {
+    setRevealedCodes((prev) => {
+      const next = new Set(prev);
+      if (next.has(codeId)) next.delete(codeId);
+      else next.add(codeId);
+      return next;
+    });
   }
 
   // ---- Bank handlers ----
@@ -295,6 +370,7 @@ export default function CbtPage() {
     setQDifficulty('medium');
     setQExplanation('');
     setQOptions(EMPTY_OPTIONS());
+    setError(null);
   }
 
   function handleTypeChange(type: string) {
@@ -361,6 +437,178 @@ export default function CbtPage() {
     } finally {
       setBusy(null);
     }
+  }
+
+  // ---- Bulk upload ----
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function downloadTemplate() {
+    const header = 'Type,Question,Marks,Difficulty,Explanation,Option A,Option B,Option C,Option D,Correct Answer(s)';
+    const example1 = 'OBJECTIVE,What is the capital of France?,1,easy,France is in Europe,Paris,London,Berlin,Madrid,A';
+    const example2 = 'TRUE_FALSE,The Earth is flat.,1,easy,,True,False,,,False';
+    const example3 = 'MULTI_SELECT,Which are prime numbers?,2,medium,Select all that apply,2,3,4,5,"A,B,D"';
+    const example4 = 'ESSAY,Explain photosynthesis.,5,hard,Describe the process in detail,,,,,';
+    const csv = [header, example1, example2, example3, example4].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'question-template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function parseCSVLine(line: string): string[] {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        result.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    result.push(current.trim());
+    return result;
+  }
+
+  function parseCSV(text: string): { questions: any[]; errors: string[] } {
+    const lines = text.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
+    if (lines.length < 2) return { questions: [], errors: ['File must have a header row and at least one data row.'] };
+
+    // Skip header row
+    const dataLines = lines.slice(1);
+    const questions: any[] = [];
+    const errors: string[] = [];
+
+    dataLines.forEach((line, idx) => {
+      const rowNum = idx + 2; // 1-based, accounting for header
+      try {
+        const cols = parseCSVLine(line);
+        const [type, questionText, marksStr, difficulty, explanation, optA, optB, optC, optD, correctStr] = cols;
+
+        if (!questionText) {
+          errors.push(`Row ${rowNum}: Question text is empty.`);
+          return;
+        }
+
+        const qType = (type || 'OBJECTIVE').toUpperCase().replace(/\s+/g, '_');
+        const validTypes = ['OBJECTIVE', 'MULTI_SELECT', 'TRUE_FALSE', 'ESSAY', 'FILL_BLANK'];
+        if (!validTypes.includes(qType)) {
+          errors.push(`Row ${rowNum}: Invalid type "${type}". Use OBJECTIVE, MULTI_SELECT, TRUE_FALSE, ESSAY, or FILL_BLANK.`);
+          return;
+        }
+
+        const marks = marksStr ? parseInt(marksStr, 10) : 1;
+        if (isNaN(marks) || marks < 1) {
+          errors.push(`Row ${rowNum}: Marks must be a positive number.`);
+          return;
+        }
+
+        const q: any = {
+          type: qType,
+          text: questionText,
+          marks,
+          difficulty: (difficulty || 'medium').toLowerCase(),
+          explanation: explanation || undefined,
+        };
+
+        // Build options for types that need them
+        if (qType === 'OBJECTIVE' || qType === 'MULTI_SELECT' || qType === 'TRUE_FALSE') {
+          const optionTexts = [optA, optB, optC, optD].filter((o) => o && o.trim());
+          if (optionTexts.length < 2) {
+            errors.push(`Row ${rowNum}: Provide at least 2 options.`);
+            return;
+          }
+
+          // Parse correct answers (A, B, C, D or comma-separated)
+          const correctAnswers = correctStr
+            ? correctStr.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean)
+            : [];
+
+          const letterMap: Record<string, number> = { A: 0, B: 1, C: 2, D: 3 };
+          const correctIndices = new Set(
+            correctAnswers.map((letter) => letterMap[letter]).filter((i) => i !== undefined),
+          );
+
+          if (correctIndices.size === 0) {
+            errors.push(`Row ${rowNum}: No correct answer specified. Use A, B, C, D.`);
+            return;
+          }
+
+          q.options = optionTexts.map((text, i) => ({
+            text: text.trim(),
+            isCorrect: correctIndices.has(i),
+            order: i,
+          }));
+        }
+
+        questions.push(q);
+      } catch (err) {
+        errors.push(`Row ${rowNum}: Failed to parse — ${err instanceof Error ? err.message : 'unknown error'}`);
+      }
+    });
+
+    return { questions, errors };
+  }
+
+  function handleFileSelect(file: File) {
+    if (!file.name.endsWith('.csv')) {
+      setError('Please upload a CSV file.');
+      return;
+    }
+    setUploadFile(file);
+    setUploadResult(null);
+    setUploadProgress('idle');
+  }
+
+  async function handleBulkUpload() {
+    if (!uploadFile || !manageBank) return;
+    setUploadProgress('parsing');
+    setError(null);
+
+    try {
+      const text = await uploadFile.text();
+      const { questions, errors } = parseCSV(text);
+
+      if (questions.length === 0) {
+        setUploadResult({ count: 0, errors });
+        setUploadProgress('idle');
+        return;
+      }
+
+      setUploadProgress('uploading');
+      const result = await cbtApi.bulkCreateQuestions({
+        bankId: manageBank.id,
+        questions,
+      });
+
+      setUploadResult({ count: result.count, errors });
+      setUploadProgress('done');
+      setUploadFile(null);
+
+      // Refresh questions list
+      const qs = await cbtApi.bankQuestions(manageBank.id);
+      setManageQuestions(qs);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to upload questions.');
+      setUploadProgress('idle');
+    }
+  }
+
+  function resetUpload() {
+    setUploadFile(null);
+    setUploadResult(null);
+    setUploadProgress('idle');
+    setUploadDragOver(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
   // ---- Columns ----
@@ -473,6 +721,21 @@ export default function CbtPage() {
             <ListChecks className="h-3.5 w-3.5" />
             {attemptsFor === r.id ? 'Hide' : 'Attempts'}
           </button>
+          {(r.status === 'ACTIVE' || r.status === 'SCHEDULED') && (
+            <button
+              type="button"
+              onClick={() => toggleCodes(r.id)}
+              className={cn(
+                'inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors',
+                codesFor === r.id
+                  ? 'bg-green-100 text-green-700'
+                  : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700',
+              )}
+            >
+              <Database className="h-3.5 w-3.5" />
+              {codesFor === r.id ? 'Hide' : 'Codes'}
+            </button>
+          )}
         </div>
       ),
     },
@@ -640,6 +903,109 @@ export default function CbtPage() {
                   emptyMessage="No attempts recorded yet."
                 />
               )}
+            </Card>
+          )}
+
+          {codesFor && (
+            <Card
+              title={`Access Codes — ${exams.find((e) => e.id === codesFor)?.title}`}
+              subtitle="One-time-use exam access codes for students"
+              className="mt-4"
+            >
+              <div className="space-y-4 px-5 py-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-gray-600">
+                    {codes[codesFor] ? (
+                      <>
+                        <strong>
+                          {codes[codesFor].filter((c) => c.usedBy).length}
+                        </strong>{' '}
+                        of <strong>{codes[codesFor].length}</strong> codes used
+                      </>
+                    ) : (
+                      'Loading codes…'
+                    )}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => handleGenerateCodes(codesFor)}
+                    disabled={busy === 'generate-codes'}
+                    className="btn-primary px-3 py-1.5 text-xs disabled:opacity-60"
+                  >
+                    {busy === 'generate-codes' ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Generating…
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="h-3.5 w-3.5" /> Generate 10 Codes
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {codes[codesFor] && codes[codesFor].length > 0 && (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-200 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                          <th className="pb-2 pr-4">Code</th>
+                          <th className="pb-2 pr-4">Student</th>
+                          <th className="pb-2 pr-4">Status</th>
+                          <th className="pb-2">Used At</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {codes[codesFor].map((code) => (
+                          <tr key={code.id} className="hover:bg-gray-50">
+                            <td className="py-2.5 pr-4">
+                              <button
+                                type="button"
+                                onClick={() => toggleCodeReveal(code.id)}
+                                className="font-mono text-xs font-semibold text-gray-900 hover:text-brand"
+                              >
+                                {revealedCodes.has(code.id) ? code.code : '••••-••••-••••'}
+                              </button>
+                            </td>
+                            <td className="py-2.5 pr-4">
+                              {code.usedBy ? (
+                                <div>
+                                  <p className="text-xs font-medium text-gray-900">
+                                    {code.usedBy.firstName} {code.usedBy.lastName}
+                                  </p>
+                                  <p className="text-[11px] text-gray-500">{code.usedBy.email}</p>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-gray-400">—</span>
+                              )}
+                            </td>
+                            <td className="py-2.5 pr-4">
+                              {code.usedBy ? (
+                                <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-700">
+                                  Used
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center rounded-full bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">
+                                  Available
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2.5 text-xs text-gray-500">
+                              {code.usedAt ? formatWhen(code.usedAt) : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {codes[codesFor] && codes[codesFor].length === 0 && (
+                  <p className="rounded-xl border border-dashed border-gray-200 py-8 text-center text-sm text-gray-400">
+                    No codes generated yet. Click "Generate 10 Codes" to create access codes for this exam.
+                  </p>
+                )}
+              </div>
             </Card>
           )}
         </>
@@ -921,13 +1287,34 @@ export default function CbtPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={selected.length === 0 || busy === 'add-questions'}
+                  disabled={
+                    busy === 'add-questions' ||
+                    (selected.length === originalQuestions.length &&
+                      selected.every((id) => originalQuestions.includes(id)))
+                  }
                   className="btn-primary disabled:opacity-60"
                 >
-                  <Plus className="h-4 w-4" />
-                  {busy === 'add-questions'
-                    ? 'Adding…'
-                    : `Add ${selected.length} question${selected.length === 1 ? '' : 's'}`}
+                  {busy === 'add-questions' ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" /> Updating…
+                    </>
+                  ) : (
+                    <>
+                      <CheckSquare className="h-4 w-4" />
+                      {(() => {
+                        const toAdd = selected.filter((id) => !originalQuestions.includes(id));
+                        const toRemove = originalQuestions.filter((id) => !selected.includes(id));
+                        if (toAdd.length > 0 && toRemove.length > 0) {
+                          return `Update (${toAdd.length} added, ${toRemove.length} removed)`;
+                        } else if (toAdd.length > 0) {
+                          return `Add ${toAdd.length} question${toAdd.length === 1 ? '' : 's'}`;
+                        } else if (toRemove.length > 0) {
+                          return `Remove ${toRemove.length} question${toRemove.length === 1 ? '' : 's'}`;
+                        }
+                        return 'No changes';
+                      })()}
+                    </>
+                  )}
                 </button>
               </div>
             </form>
@@ -1017,10 +1404,13 @@ export default function CbtPage() {
           <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
               <div className="flex items-center gap-3">
-                {bankView === 'form' && (
+                {bankView !== 'list' && (
                   <button
                     type="button"
-                    onClick={() => setBankView('list')}
+                    onClick={() => {
+                      setBankView('list');
+                      resetUpload();
+                    }}
                     className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100"
                     aria-label="Back to questions"
                   >
@@ -1029,7 +1419,7 @@ export default function CbtPage() {
                 )}
                 <div>
                   <h3 className="text-base font-semibold text-gray-900">
-                    {bankView === 'list' ? 'Question Bank' : 'Add Question'}
+                    {bankView === 'list' ? 'Question Bank' : bankView === 'upload' ? 'Upload Questions' : 'Add Question'}
                   </h3>
                   <p className="mt-0.5 text-xs text-gray-500">
                     {manageBank.title} · {courseCode(manageBank.courseId)}
@@ -1041,6 +1431,7 @@ export default function CbtPage() {
                 onClick={() => {
                   setManageBank(null);
                   resetQuestionForm();
+                  resetUpload();
                 }}
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100"
                 aria-label="Close"
@@ -1057,13 +1448,22 @@ export default function CbtPage() {
                       ? 'Loading questions…'
                       : `${manageQuestions.length} question${manageQuestions.length === 1 ? '' : 's'} in this bank`}
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => setBankView('form')}
-                    className="btn-primary px-3 py-1.5 text-xs"
-                  >
-                    <Plus className="h-3.5 w-3.5" /> Add Question
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setBankView('form')}
+                      className="btn-primary px-3 py-1.5 text-xs"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Add Question
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setBankView('upload'); resetUpload(); }}
+                      className="btn-secondary px-3 py-1.5 text-xs"
+                    >
+                      <Upload className="h-3.5 w-3.5" /> Upload from File
+                    </button>
+                  </div>
                 </div>
 
                 {manageQuestions !== null &&
@@ -1093,8 +1493,156 @@ export default function CbtPage() {
                     </ul>
                   ))}
               </div>
+            ) : bankView === 'upload' ? (
+              <div className="px-6 py-5">
+                {/* Template download */}
+                <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
+                  <p className="mb-2 text-sm font-semibold text-blue-900">How to upload questions:</p>
+                  <ol className="space-y-1 text-xs text-blue-800">
+                    <li>1. Download the CSV template below</li>
+                    <li>2. Fill in your questions following the format in the template</li>
+                    <li>3. Upload the completed CSV file here</li>
+                  </ol>
+                  <button
+                    type="button"
+                    onClick={downloadTemplate}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-blue-100 px-3 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-200"
+                  >
+                    <Download className="h-3.5 w-3.5" /> Download Template
+                  </button>
+                </div>
+
+                {/* Drop zone */}
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setUploadDragOver(true); }}
+                  onDragLeave={() => setUploadDragOver(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setUploadDragOver(false);
+                    const file = e.dataTransfer.files[0];
+                    if (file) handleFileSelect(file);
+                  }}
+                  className={cn(
+                    'flex flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-10 transition-colors',
+                    uploadDragOver
+                      ? 'border-brand bg-blue-50'
+                      : 'border-gray-200 hover:border-gray-300',
+                  )}
+                >
+                  <Upload className={cn('h-8 w-8', uploadDragOver ? 'text-brand' : 'text-gray-300')} />
+                  <p className="mt-3 text-sm font-medium text-gray-700">
+                    Drag and drop your CSV file here
+                  </p>
+                  <p className="mt-1 text-xs text-gray-400">or</p>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="btn-secondary mt-3 px-4 py-2 text-xs"
+                  >
+                    Browse Files
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleFileSelect(file);
+                    }}
+                  />
+                </div>
+
+                {/* Selected file */}
+                {uploadFile && (
+                  <div className="mt-4 flex items-center justify-between rounded-lg border border-gray-200 px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <FileQuestion className="h-5 w-5 text-brand" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{uploadFile.name}</p>
+                        <p className="text-xs text-gray-400">{(uploadFile.size / 1024).toFixed(1)} KB</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={resetUpload}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Upload result */}
+                {uploadResult && (
+                  <div className="mt-4 space-y-2">
+                    {uploadResult.count > 0 && (
+                      <div className="rounded-lg border border-green-100 bg-green-50 px-4 py-3 text-sm font-medium text-green-700">
+                        Successfully imported {uploadResult.count} question{uploadResult.count === 1 ? '' : 's'}.
+                      </div>
+                    )}
+                    {uploadResult.errors.length > 0 && (
+                      <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3">
+                        <p className="mb-1 text-sm font-semibold text-red-700">
+                          {uploadResult.errors.length} issue{uploadResult.errors.length === 1 ? '' : 's'} found:
+                        </p>
+                        <ul className="space-y-0.5 text-xs text-red-600">
+                          {uploadResult.errors.map((err, i) => (
+                            <li key={i}>• {err}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Upload button */}
+                <div className="mt-5 flex justify-end gap-2 border-t border-gray-100 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => { setBankView('list'); resetUpload(); }}
+                    className="btn-secondary"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleBulkUpload}
+                    disabled={!uploadFile || uploadProgress === 'parsing' || uploadProgress === 'uploading'}
+                    className="btn-primary disabled:opacity-60"
+                  >
+                    {uploadProgress === 'parsing' ? (
+                      <><Loader2 className="h-4 w-4 animate-spin" /> Parsing…</>
+                    ) : uploadProgress === 'uploading' ? (
+                      <><Loader2 className="h-4 w-4 animate-spin" /> Importing…</>
+                    ) : uploadProgress === 'done' ? (
+                      <><CheckSquare className="h-4 w-4" /> Done</>
+                    ) : (
+                      <><Upload className="h-4 w-4" /> Upload Questions</>
+                    )}
+                  </button>
+                </div>
+              </div>
             ) : (
               <form onSubmit={handleCreateQuestion} className="space-y-4 px-6 py-5">
+                {error && (
+                  <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                    {error}
+                  </div>
+                )}
+                
+                {/* Instructions */}
+                <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
+                  <p className="mb-2 text-sm font-semibold text-blue-900">Instructions for adding questions:</p>
+                  <ul className="space-y-1 text-xs text-blue-800">
+                    <li>• <strong>Objective questions:</strong> Provide at least 2 options and mark the correct answer(s)</li>
+                    <li>• <strong>True/False questions:</strong> Select either True or False as the correct answer</li>
+                    <li>• <strong>Essay questions:</strong> No options needed, just set the marks</li>
+                    <li>• <strong>Multi-select:</strong> Mark multiple options as correct if needed</li>
+                    <li>• <strong>Explanation:</strong> Optional but recommended for student learning</li>
+                  </ul>
+                </div>
+                
                 <div>
                   <label className="label">Question</label>
                   <textarea

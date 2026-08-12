@@ -109,7 +109,8 @@ export const api = {
     request<T>(path, { method: 'PUT', body: JSON.stringify(data ?? {}) }),
   patch: <T>(path: string, data?: unknown) =>
     request<T>(path, { method: 'PATCH', body: JSON.stringify(data ?? {}) }),
-  delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+  delete: <T>(path: string, data?: unknown) =>
+    request<T>(path, { method: 'DELETE', body: data ? JSON.stringify(data) : undefined }),
 };
 
 // ---- Admissions ----
@@ -155,6 +156,11 @@ export interface ApplicationRecord {
   declarationName: string | null;
   declarationDate: string | null;
   declarationAgreed: boolean;
+  // Verification checklist (Office Use Only)
+  verificationDocumentsReviewed: boolean;
+  verificationDocumentsMatch: boolean;
+  verificationReceiptAttached: boolean;
+  verificationCourseApproved: boolean;
   // Related records
   student: { id: string; matricNumber: string | null; status: string } | null;
   documents: Array<{ id: string; name: string; url: string; type: string; createdAt: string }>;
@@ -179,12 +185,22 @@ export const admissionsApi = {
     return api.get<Paginated<ApplicationRecord>>(`/admissions${qs ? `?${qs}` : ''}`);
   },
   get: (id: string) => api.get<ApplicationRecord>(`/admissions/${id}`),
-  approve: (id: string) => api.patch<ApplicationRecord>(`/admissions/${id}/approve`),
+  approve: (id: string, payload?: { programmeId?: string; departmentId?: string }) =>
+    api.patch<ApplicationRecord>(`/admissions/${id}/approve`, payload ?? {}),
   reject: (id: string) =>
     api.patch<ApplicationRecord>(`/admissions/${id}/review`, { status: 'REJECTED' }),
   admit: (id: string) => api.patch<ApplicationRecord>(`/admissions/${id}/admit`),
   generateLetter: (id: string) =>
     api.post<ApplicationRecord>(`/admissions/${id}/letter`),
+  updateVerification: (
+    id: string,
+    payload: {
+      verificationDocumentsReviewed?: boolean;
+      verificationDocumentsMatch?: boolean;
+      verificationReceiptAttached?: boolean;
+      verificationCourseApproved?: boolean;
+    },
+  ) => api.patch<ApplicationRecord>(`/admissions/${id}/verification`, payload),
 };
 
 // ---- Finance ----
@@ -212,6 +228,7 @@ export interface FeeStructure {
   amount: string; // Prisma Decimal -> string
   level: number | null;
   programmeId: string | null;
+  departmentId: string | null;
   isMandatory: boolean;
   allowInstallment: boolean;
   sessionId: string | null;
@@ -264,9 +281,21 @@ export const financeApi = {
     amount: number;
     type?: string;
     level?: number;
+    departmentId?: string;
     isMandatory?: boolean;
     allowInstallment?: boolean;
   }) => api.post<FeeStructure>('/finance/fee-structures', payload),
+  updateFeeStructure: (id: string, payload: {
+    name?: string;
+    amount?: number;
+    type?: string;
+    level?: number;
+    departmentId?: string;
+    isMandatory?: boolean;
+    allowInstallment?: boolean;
+  }) => api.patch<FeeStructure>(`/finance/fee-structures/${id}`, payload),
+  deleteFeeStructure: (id: string) =>
+    request<FeeStructure>(`/finance/fee-structures/${id}`, { method: 'DELETE' }),
   refund: (paymentId: string, reason?: string) =>
     api.post<{ id: string; amount: string }>('/finance/refunds', { paymentId, reason }),
 };
@@ -296,6 +325,8 @@ export interface CourseSummariesResponse {
 export interface AdminResultRow {
   id: string;
   studentId: string;
+  courseId: string;
+  sessionId: string;
   studentName: string;
   matricNo: string | null;
   semester: string;
@@ -324,6 +355,15 @@ export const resultsApi = {
     api.patch<{ updated: number }>(`/results/admin/courses/${courseId}/lock`),
   publishCourse: (courseId: string) =>
     api.patch<{ updated: number }>(`/results/admin/courses/${courseId}/publish`),
+  // Individual result actions
+  updateScore: (id: string, payload: { caScore: number; examScore: number }) =>
+    api.patch<AdminResultRow>(`/results/${id}`, payload),
+  approveResult: (id: string) =>
+    api.patch<AdminResultRow>(`/results/${id}/approve`),
+  lockResult: (id: string) =>
+    api.patch<AdminResultRow>(`/results/${id}/lock`),
+  publishResult: (id: string) =>
+    api.patch<AdminResultRow>(`/results/${id}/publish`),
 };
 
 // ---- Students ----
@@ -393,6 +433,7 @@ export const studentsApi = {
     search?: string;
     status?: string;
     departmentId?: string;
+    level?: number;
   }) => {
     const q = new URLSearchParams();
     if (params?.page) q.set('page', String(params.page));
@@ -400,6 +441,7 @@ export const studentsApi = {
     if (params?.search) q.set('search', params.search);
     if (params?.status) q.set('status', params.status);
     if (params?.departmentId) q.set('departmentId', params.departmentId);
+    if (params?.level) q.set('level', String(params.level));
     const qs = q.toString();
     return api.get<Paginated<Student>>(`/students${qs ? `?${qs}` : ''}`);
   },
@@ -412,6 +454,8 @@ export const studentsApi = {
   archive: (id: string) => api.patch<Student>(`/students/${id}/archive`),
   remove: (id: string) => request<{ deleted: boolean }>(`/students/${id}`, { method: 'DELETE' }),
   promote: () => api.post<{ promoted: number }>('/students/promote'),
+  graduateAll: () => api.post<{ graduated: number }>('/students/graduate-all'),
+  resetPassword: (id: string) => api.post<{ tempPassword: string }>(`/students/${id}/reset-password`),
   departments: () => api.get<DepartmentRef[]>('/academics/departments'),
 };
 
@@ -611,7 +655,32 @@ export const academicsApi = {
     facultyId?: string;
     description?: string;
   }) => api.post<DepartmentFull>('/academics/departments', payload),
+  updateDepartment: (
+    id: string,
+    payload: {
+      name: string;
+      code: string;
+      facultyId?: string;
+      description?: string;
+    },
+  ) => api.put<DepartmentFull>(`/academics/departments/${id}`, payload),
+  deleteDepartment: (id: string) =>
+    api.delete<void>(`/academics/departments/${id}`),
   programmes: () => api.get<Programme[]>('/academics/programmes'),
+  createProgramme: (payload: {
+    departmentId: string;
+    name: string;
+    code: string;
+    degreeType?: string;
+    durationYears?: number;
+  }) => api.post<Programme>('/academics/programmes', payload),
+  updateProgramme: (id: string, payload: {
+    name?: string;
+    code?: string;
+    degreeType?: string;
+    durationYears?: number;
+  }) => api.put<Programme>(`/academics/programmes/${id}`, payload),
+  deleteProgramme: (id: string) => api.delete<void>(`/academics/programmes/${id}`),
   courses: (params?: {
     page?: number;
     pageSize?: number;
@@ -638,8 +707,20 @@ export const academicsApi = {
     level?: number;
     semester?: string;
   }) => api.post<CourseRecord>('/academics/courses', payload),
+  updateCourse: (id: string, payload: {
+    code?: string;
+    title?: string;
+    departmentId?: string;
+    creditUnits?: number;
+    level?: number;
+    semester?: string;
+    description?: string;
+  }) => api.put<CourseRecord>(`/academics/courses/${id}`, payload),
+  deleteCourse: (id: string) => api.delete<void>(`/academics/courses/${id}`),
   allocations: (courseId: string) =>
     api.get<CourseAllocation[]>(`/academics/courses/${courseId}/allocations`),
+  updateAllocation: (courseId: string, staffId: string) =>
+    api.put<CourseAllocation | null>(`/academics/courses/${courseId}/allocation`, { staffId }),
 };
 
 // ---- Academic sessions ----
@@ -909,6 +990,14 @@ export interface CbtAttemptRecord {
   };
 }
 
+export interface ExamAccessCodeRecord {
+  id: string;
+  code: string;
+  usedBy: { id: string; firstName: string; lastName: string; email: string } | null;
+  usedAt: string | null;
+  createdAt: string;
+}
+
 export const cbtApi = {
   banks: () => api.get<CbtBankRecord[]>('/cbt/question-banks'),
   createBank: (payload: { title: string; courseId?: string; category?: string }) =>
@@ -918,13 +1007,31 @@ export const cbtApi = {
   createQuestion: (payload: CbtQuestionInput) =>
     api.post<CbtQuestionRecord>('/cbt/questions', payload),
   exams: () => api.get<CbtExamRecord[]>('/cbt/exams'),
+  getExam: (id: string) => api.get<CbtExamRecord & { questions: any[] }>(`/cbt/exams/${id}`),
   createExam: (payload: CbtExamInput) => api.post<CbtExamRecord>('/cbt/exams', payload),
   setExamStatus: (id: string, status: CbtExamStatus) =>
     api.patch<CbtExamRecord>(`/cbt/exams/${id}/status`, { status }),
   addExamQuestions: (examId: string, questionIds: string[]) =>
     api.post<{ count: number }>(`/cbt/exams/${examId}/questions`, { questionIds }),
+  removeExamQuestions: (examId: string, questionIds: string[]) =>
+    api.delete<{ count: number }>(`/cbt/exams/${examId}/questions`, { questionIds }),
   examAttempts: (examId: string) =>
     api.get<CbtAttemptRecord[]>(`/cbt/exams/${examId}/attempts`),
+  generateCodes: (examId: string) =>
+    api.post<{ count: number }>(`/cbt/exams/${examId}/access-codes`),
+  listCodes: (examId: string) =>
+    api.get<ExamAccessCodeRecord[]>(`/cbt/exams/${examId}/access-codes`),
+  bulkCreateQuestions: (payload: {
+    bankId: string;
+    questions: {
+      type?: string;
+      text: string;
+      marks?: number;
+      difficulty?: string;
+      explanation?: string;
+      options?: { text: string; isCorrect?: boolean }[];
+    }[];
+  }) => api.post<{ count: number }>('/cbt/questions/bulk', payload),
 };
 
 // ---- Website CMS ----
@@ -955,6 +1062,10 @@ export const cmsApi = {
   gallery: () => api.get<GalleryItemRecord[]>('/website/gallery'),
   addGalleryItem: (payload: { url: string; type?: string; caption?: string; album?: string }) =>
     api.post<GalleryItemRecord>('/website/gallery', payload),
+  updateGalleryItem: (id: string, payload: { url?: string; type?: string; caption?: string; album?: string }) =>
+    api.patch<GalleryItemRecord>(`/website/gallery/${id}`, payload),
+  deleteGalleryItem: (id: string) =>
+    api.delete<GalleryItemRecord>(`/website/gallery/${id}`),
   /** Upload a file to Cloudinary and return the hosted URL. */
   uploadMedia: async (file: File): Promise<{ url: string; publicId: string }> => {
     async function doUpload(token: string | null) {

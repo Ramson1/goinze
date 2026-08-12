@@ -8,6 +8,7 @@ import {
   UpdateStudentDto,
   ImportStudentsDto,
 } from './dto/student.dto';
+import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class StudentsService {
@@ -18,11 +19,13 @@ export class StudentsService {
     query: PaginationDto,
     status?: string,
     departmentId?: string,
+    level?: number,
   ): Promise<Paginated<any>> {
     const where: Record<string, any> = {};
     if (schoolId) where.schoolId = schoolId;
     if (status) where.status = status;
     if (departmentId) where.departmentId = departmentId;
+    if (level) where.currentLevel = level;
     if (query.search) {
       where.OR = [
         { firstName: { contains: query.search, mode: 'insensitive' } },
@@ -158,12 +161,12 @@ export class StudentsService {
 
   /**
    * Promote all ACTIVE students to the next level (increment by 100).
-   * Students already at the maximum level (600) are not affected.
+   * Students already at the maximum level (300) are not affected.
    */
   async promoteAll(schoolId: string | null): Promise<{ promoted: number }> {
     const where: Record<string, any> = {
       status: 'ACTIVE',
-      currentLevel: { lt: 600 },
+      currentLevel: { lt: 300 },
     };
     if (schoolId) where.schoolId = schoolId;
 
@@ -177,5 +180,69 @@ export class StudentsService {
     });
 
     return { promoted: result.count };
+  }
+
+  /**
+   * Graduate all ACTIVE students at the final year level (300).
+   */
+  async graduateAllFinalYear(schoolId: string | null): Promise<{ graduated: number }> {
+    const where: Record<string, any> = {
+      status: 'ACTIVE',
+      currentLevel: 300,
+    };
+    if (schoolId) where.schoolId = schoolId;
+
+    const result = await this.prisma.db.student.updateMany({
+      where,
+      data: { status: 'GRADUATED' },
+    });
+
+    return { graduated: result.count };
+  }
+
+  /**
+   * Generate a random temporary password for student accounts.
+   */
+  private generateTempPassword(): string {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    let password = '';
+    for (let i = 0; i < 8; i++) {
+      password += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return password;
+  }
+
+  /**
+   * Reset a student's temporary password and update their user account.
+   * Returns the new temp password so it can be communicated to the student.
+   */
+  async resetTempPassword(id: string): Promise<{ tempPassword: string }> {
+    const student = await this.prisma.db.student.findUnique({
+      where: { id },
+      include: { user: true },
+    });
+
+    if (!student) {
+      throw new NotFoundException(`Student ${id} not found`);
+    }
+
+    const tempPassword = this.generateTempPassword();
+    const passwordHash = await bcrypt.hash(tempPassword, 10);
+
+    // Update the student record with the new temp password
+    await this.prisma.db.student.update({
+      where: { id },
+      data: { tempPassword },
+    });
+
+    // Update the user account with the new password hash
+    if (student.userId) {
+      await this.prisma.db.user.update({
+        where: { id: student.userId },
+        data: { passwordHash },
+      });
+    }
+
+    return { tempPassword };
   }
 }

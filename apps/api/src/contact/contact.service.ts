@@ -1,39 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as nodemailer from 'nodemailer';
 import { ContactMessageDto } from './dto/contact-message.dto';
+import { MailService } from '../mail/mail.service';
 
 @Injectable()
 export class ContactService {
-  private transporter: nodemailer.Transporter | null = null;
-
-  constructor(private readonly config: ConfigService) {
-    const host = this.config.get<string>('SMTP_HOST');
-    const port = this.config.get<number>('SMTP_PORT');
-    const user = this.config.get<string>('SMTP_USER');
-    const pass = this.config.get<string>('SMTP_PASS');
-
-    if (host && port) {
-      this.transporter = nodemailer.createTransport({
-        host,
-        port,
-        secure: port === 465,
-        auth: user && pass ? { user, pass } : undefined,
-      });
-    }
-  }
+  constructor(
+    private readonly config: ConfigService,
+    private readonly mail: MailService,
+  ) {}
 
   async sendMessage(dto: ContactMessageDto) {
     const recipientEmail = this.config.get<string>('CONTACT_RECIPIENT_EMAIL') || 'gonzenicmhst@gmail.com';
     const fromName = this.config.get<string>('SMTP_FROM_NAME') || 'Goinze International School';
-    const fromEmail = this.config.get<string>('SMTP_FROM_EMAIL') || dto.email;
-
-    if (!this.transporter) {
-      // Fallback: use Gmail SMTP with the recipient as sender (requires app password)
-      // For now, log the message and return success
-      console.warn('[ContactService] SMTP not configured. Message logged:', dto);
-      return { success: true, message: 'Message received. (Email delivery not configured yet)' };
-    }
+    const fromEmail = this.config.get<string>('RESEND_FROM_EMAIL') || 'noreply@goinze.com';
 
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -60,13 +40,12 @@ export class ContactService {
       </div>
     `;
 
-    await this.transporter.sendMail({
-      from: `"${fromName}" <${fromEmail}>`,
-      to: recipientEmail,
-      replyTo: dto.email,
-      subject: `[Contact Form] ${dto.subject}`,
+    await this.mail.sendEmail(
+      recipientEmail,
+      `[Contact Form] ${dto.subject}`,
       html,
-    });
+      { from: `"${fromName}" <${fromEmail}>` },
+    );
 
     return { success: true, message: 'Message sent successfully.' };
   }

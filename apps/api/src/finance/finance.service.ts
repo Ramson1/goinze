@@ -15,6 +15,7 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 import { FlutterwaveGateway } from './flutterwave.gateway';
 import {
   CreateFeeStructureDto,
+  UpdateFeeStructureDto,
   InitPaymentDto,
   VerifyPaymentDto,
   RefundDto,
@@ -50,10 +51,40 @@ export class FinanceService {
         sessionId: dto.sessionId,
         level: dto.level,
         programmeId: dto.programmeId,
+        departmentId: dto.departmentId,
         isMandatory: dto.isMandatory ?? true,
         allowInstallment: dto.allowInstallment ?? false,
       },
     });
+  }
+
+  async updateFeeStructure(id: string, schoolId: string | null, dto: UpdateFeeStructureDto) {
+    const existing = await this.prisma.db.feeStructure.findUnique({ where: { id } });
+    if (!existing || (schoolId && existing.schoolId !== schoolId)) {
+      throw new NotFoundException('Fee structure not found');
+    }
+    return this.prisma.db.feeStructure.update({
+      where: { id },
+      data: {
+        ...(dto.name !== undefined && { name: dto.name }),
+        ...(dto.type !== undefined && { type: dto.type as any }),
+        ...(dto.amount !== undefined && { amount: dto.amount }),
+        ...(dto.sessionId !== undefined && { sessionId: dto.sessionId }),
+        ...(dto.level !== undefined && { level: dto.level }),
+        ...(dto.programmeId !== undefined && { programmeId: dto.programmeId }),
+        ...(dto.departmentId !== undefined && { departmentId: dto.departmentId }),
+        ...(dto.isMandatory !== undefined && { isMandatory: dto.isMandatory }),
+        ...(dto.allowInstallment !== undefined && { allowInstallment: dto.allowInstallment }),
+      },
+    });
+  }
+
+  async deleteFeeStructure(id: string, schoolId: string | null) {
+    const existing = await this.prisma.db.feeStructure.findUnique({ where: { id } });
+    if (!existing || (schoolId && existing.schoolId !== schoolId)) {
+      throw new NotFoundException('Fee structure not found');
+    }
+    return this.prisma.db.feeStructure.delete({ where: { id } });
   }
 
   // ---- Payments ----

@@ -14,7 +14,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { SessionUser } from '@goinze/shared-types';
 import { AdmissionsService } from './admissions.service';
-import { ApplyDto, ReviewApplicationDto } from './dto/admission.dto';
+import { ApplyDto, ReviewApplicationDto, ApproveApplicationDto, UpdateVerificationDto } from './dto/admission.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -75,8 +75,12 @@ export class AdmissionsController {
 
   @Patch(':id/approve')
   @Roles('SCHOOL_ADMIN', 'ADMISSION_OFFICER')
-  approve(@Param('id') id: string, @CurrentUser() user: SessionUser) {
-    return this.admissionsService.approve(id, user.id);
+  approve(
+    @Param('id') id: string,
+    @CurrentUser() user: SessionUser,
+    @Body() dto: ApproveApplicationDto,
+  ) {
+    return this.admissionsService.approve(id, user.id, dto);
   }
 
   /** Finalize onboarding once the acceptance fee is paid. */
@@ -90,6 +94,15 @@ export class AdmissionsController {
   @Roles('SCHOOL_ADMIN', 'ADMISSION_OFFICER')
   generateLetter(@Param('id') id: string) {
     return this.admissionsService.generateLetter(id);
+  }
+
+  @Patch(':id/verification')
+  @Roles('SCHOOL_ADMIN', 'ADMISSION_OFFICER')
+  updateVerification(
+    @Param('id') id: string,
+    @Body() dto: UpdateVerificationDto,
+  ) {
+    return this.admissionsService.updateVerification(id, dto);
   }
 
   /** Public document upload for applications — uploads to Cloudinary and links to the application. */

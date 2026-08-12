@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -67,6 +68,18 @@ export class AcademicsController {
     return this.academicsService.createDepartment(user.schoolId, data);
   }
 
+  @Put('departments/:id')
+  @Roles('SCHOOL_ADMIN')
+  updateDepartment(@Param('id') id: string, @Body() data: Record<string, any>) {
+    return this.academicsService.updateDepartment(id, data);
+  }
+
+  @Delete('departments/:id')
+  @Roles('SCHOOL_ADMIN')
+  deleteDepartment(@Param('id') id: string) {
+    return this.academicsService.deleteDepartment(id);
+  }
+
   // ---- Programmes ----
   @Public()
   @Get('programmes')
@@ -88,6 +101,18 @@ export class AcademicsController {
     @Body() data: Record<string, any>,
   ) {
     return this.academicsService.createProgramme(user.schoolId, data);
+  }
+
+  @Put('programmes/:id')
+  @Roles('SCHOOL_ADMIN')
+  updateProgramme(@Param('id') id: string, @Body() data: Record<string, any>) {
+    return this.academicsService.updateProgramme(id, data);
+  }
+
+  @Delete('programmes/:id')
+  @Roles('SCHOOL_ADMIN')
+  deleteProgramme(@Param('id') id: string) {
+    return this.academicsService.deleteProgramme(id);
   }
 
   // ---- Sessions ----
@@ -162,6 +187,18 @@ export class AcademicsController {
     return this.academicsService.createCourse(user.schoolId, data);
   }
 
+  @Put('courses/:id')
+  @Roles('SCHOOL_ADMIN', 'LECTURER')
+  updateCourse(@Param('id') id: string, @Body() data: Record<string, any>) {
+    return this.academicsService.updateCourse(id, data);
+  }
+
+  @Delete('courses/:id')
+  @Roles('SCHOOL_ADMIN')
+  deleteCourse(@Param('id') id: string) {
+    return this.academicsService.deleteCourse(id);
+  }
+
   // ---- Course allocation ----
   @Get('courses/:id/allocations')
   @Roles('SCHOOL_ADMIN', 'LECTURER')
@@ -175,5 +212,14 @@ export class AcademicsController {
     @Body() data: { courseId: string; staffId: string; sessionId?: string },
   ) {
     return this.academicsService.allocateCourse(data);
+  }
+
+  @Put('courses/:id/allocation')
+  @Roles('SCHOOL_ADMIN', 'LECTURER')
+  updateCourseAllocation(
+    @Param('id') courseId: string,
+    @Body() data: { staffId: string },
+  ) {
+    return this.academicsService.updateCourseAllocation(courseId, data.staffId);
   }
 }

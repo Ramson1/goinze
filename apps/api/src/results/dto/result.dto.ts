@@ -77,3 +77,17 @@ export class VerifyResultPinDto {
   @IsString()
   serial?: string;
 }
+
+export class UpdateScoreDto {
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  caScore!: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  examScore!: number;
+}

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
+import ToastContainer from '@/components/Toast';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
@@ -31,6 +32,7 @@ export default function RootLayout({
     <html lang="en" className={inter.variable}>
       <body className="min-h-screen bg-gray-50 font-sans text-gray-900 antialiased">
         {children}
+        <ToastContainer />
       </body>
     </html>
   );

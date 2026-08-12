@@ -6,6 +6,7 @@ import {
   EnterScoreDto,
   BulkUploadDto,
   VerifyResultPinDto,
+  UpdateScoreDto,
 } from './dto/result.dto';
 
 /**
@@ -141,6 +142,28 @@ export class ResultsService {
     return this.setStatus(id, 'PUBLISHED', { publishedAt: new Date() });
   }
 
+  /** Update an individual result's scores and recalculate grade. Resets status to DRAFT. */
+  async updateScore(id: string, dto: UpdateScoreDto) {
+    const result = await this.prisma.db.result.findUnique({ where: { id } });
+    if (!result) throw new NotFoundException('Result not found');
+
+    const { totalScore, grade, gradePoint } = this.computeScore(dto.caScore, dto.examScore);
+
+    return this.prisma.db.result.update({
+      where: { id },
+      data: {
+        caScore: dto.caScore,
+        examScore: dto.examScore,
+        totalScore,
+        grade,
+        gradePoint,
+        status: 'DRAFT',
+        approvedBy: null,
+        publishedAt: null,
+      },
+    });
+  }
+
   // ---- Admin: course-grouped result approval ----
 
   private currentSession(schoolId: string) {
@@ -222,6 +245,8 @@ export class ResultsService {
     const rows = results.map((r) => ({
       id: r.id,
       studentId: r.studentId,
+      courseId: r.courseId,
+      sessionId: r.sessionId,
       studentName: `${r.student?.firstName ?? ''} ${r.student?.lastName ?? ''}`.trim(),
       matricNo: r.student?.matricNumber ?? null,
       semester: this.semesterLabel(r.semester),

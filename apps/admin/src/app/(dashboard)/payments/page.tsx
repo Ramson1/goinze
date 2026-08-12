@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   AlertCircle,
@@ -9,7 +9,6 @@ import {
   ChevronRight,
   Clock,
   Loader2,
-  Plus,
   Receipt,
   Search,
   Undo2,
@@ -23,14 +22,29 @@ import DataTable, { type Column } from '@/components/DataTable';
 import StatusBadge from '@/components/StatusBadge';
 import {
   financeApi,
-  type FeeStructure,
   type FinanceDashboard,
   type Paginated,
   type Payment,
 } from '@/lib/api';
-import { cn } from '@/lib/utils';
 
-const FEE_TYPES = ['SCHOOL', 'ACCEPTANCE', 'APPLICATION_FORM', 'ENTRANCE_EXAM', 'PORTAL_ACCESS', 'SPORTS_WEAR', 'MATRICULATION', 'MEDICAL', 'HOSTEL', 'LIBRARY', 'GRADUATION', 'OTHER'];
+/* ── Helpers ── */
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]+)'));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function decodeRoleFromToken(token: string): string | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1]));
+    return payload.role ?? null;
+  } catch {
+    return null;
+  }
+}
+
 const STATUS_FILTERS = ['', 'PENDING', 'SUCCESS', 'REFUNDED', 'FAILED'];
 const PAGE_SIZE = 10;
 
@@ -70,7 +84,6 @@ export default function PaymentsPage() {
   const initialSearch = searchParams.get('search') ?? '';
   const [dashboard, setDashboard] = useState<FinanceDashboard | null>(null);
   const [payments, setPayments] = useState<Paginated<Payment> | null>(null);
-  const [feeStructures, setFeeStructures] = useState<FeeStructure[]>([]);
   const [search, setSearch] = useState(initialSearch);
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
@@ -78,14 +91,14 @@ export default function PaymentsPage() {
   const [refundingId, setRefundingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
-  // Fee-structure form
-  const [showFeeForm, setShowFeeForm] = useState(false);
-  const [feeName, setFeeName] = useState('');
-  const [feeType, setFeeType] = useState('SCHOOL');
-  const [feeAmount, setFeeAmount] = useState('');
-  const [feeLevel, setFeeLevel] = useState('');
-  const [savingFee, setSavingFee] = useState(false);
+  // Check user role on mount
+  useEffect(() => {
+    const token = getCookie('access_token');
+    const role = token ? decodeRoleFromToken(token) : null;
+    setIsSuperAdmin(role === 'SUPER_ADMIN');
+  }, []);
 
   const loadDashboard = useCallback(() => {
     financeApi
@@ -104,17 +117,9 @@ export default function PaymentsPage() {
       .finally(() => setLoading(false));
   }, [page, search, statusFilter]);
 
-  const loadFeeStructures = useCallback(() => {
-    financeApi
-      .feeStructures()
-      .then(setFeeStructures)
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load fee structures.'));
-  }, []);
-
   useEffect(() => {
     loadDashboard();
-    loadFeeStructures();
-  }, [loadDashboard, loadFeeStructures]);
+  }, [loadDashboard]);
 
   useEffect(() => {
     loadPayments();
@@ -139,32 +144,6 @@ export default function PaymentsPage() {
       setError(err instanceof Error ? err.message : 'Refund failed.');
     } finally {
       setRefundingId(null);
-    }
-  }
-
-  async function submitFeeStructure(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setSavingFee(true);
-    setError(null);
-    setNotice(null);
-    try {
-      await financeApi.createFeeStructure({
-        name: feeName.trim(),
-        amount: Number(feeAmount),
-        type: feeType,
-        level: feeLevel ? Number(feeLevel) : undefined,
-      });
-      setNotice(`Fee structure "${feeName.trim()}" created.`);
-      setFeeName('');
-      setFeeAmount('');
-      setFeeLevel('');
-      setFeeType('SCHOOL');
-      setShowFeeForm(false);
-      loadFeeStructures();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not create fee structure.');
-    } finally {
-      setSavingFee(false);
     }
   }
 
@@ -208,7 +187,7 @@ export default function PaymentsPage() {
       key: 'actions',
       header: 'Action',
       render: (p) =>
-        p.status === 'SUCCESS' ? (
+        p.status === 'SUCCESS' && isSuperAdmin ? (
           <button
             type="button"
             onClick={() => refund(p)}
@@ -349,140 +328,6 @@ export default function PaymentsPage() {
               </div>
             )}
           </>
-        )}
-      </Card>
-
-      {/* Fee structures */}
-      <Card
-        title="Fee Structures"
-        subtitle="Fees configured for this school"
-        className="mt-6"
-        action={
-          <button
-            type="button"
-            onClick={() => setShowFeeForm((v) => !v)}
-            className="btn-primary inline-flex items-center gap-1.5 px-3 py-1.5 text-xs"
-          >
-            <Plus className="h-3.5 w-3.5" /> {showFeeForm ? 'Close' : 'Add Fee'}
-          </button>
-        }
-      >
-        {showFeeForm && (
-          <form
-            onSubmit={submitFeeStructure}
-            className="grid grid-cols-1 gap-3 border-b border-gray-100 bg-gray-50/60 px-5 py-4 sm:grid-cols-2 lg:grid-cols-5"
-          >
-            <div className="lg:col-span-2">
-              <label className="label">Name</label>
-              <input
-                type="text"
-                required
-                value={feeName}
-                onChange={(e) => setFeeName(e.target.value)}
-                placeholder="e.g. 100 Level Tuition"
-                className="input"
-              />
-            </div>
-            <div>
-              <label className="label">Type</label>
-              <select value={feeType} onChange={(e) => setFeeType(e.target.value)} className="input">
-                {FEE_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {titleCase(t)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="label">Amount (₦)</label>
-              <input
-                type="number"
-                required
-                min={0}
-                value={feeAmount}
-                onChange={(e) => setFeeAmount(e.target.value)}
-                placeholder="250000"
-                className="input"
-              />
-            </div>
-            <div>
-              <label className="label">Level (optional)</label>
-              <input
-                type="number"
-                min={100}
-                max={900}
-                value={feeLevel}
-                onChange={(e) => setFeeLevel(e.target.value)}
-                placeholder="100"
-                className="input"
-              />
-            </div>
-            <div className="flex items-end sm:col-span-2 lg:col-span-5">
-              <button type="submit" disabled={savingFee} className="btn-primary disabled:opacity-60">
-                {savingFee ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                Create Fee Structure
-              </button>
-            </div>
-          </form>
-        )}
-
-        {feeStructures.length === 0 ? (
-          <p className="px-5 py-10 text-center text-sm text-gray-400">
-            No fee structures configured yet.
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  {['Name', 'Type', 'Amount', 'Level', 'Mandatory', 'Installment'].map((h) => (
-                    <th
-                      key={h}
-                      className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500"
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {feeStructures.map((f) => (
-                  <tr key={f.id} className="odd:bg-white even:bg-gray-50/60">
-                    <td className="px-5 py-3 font-medium text-gray-900">{f.name}</td>
-                    <td className="px-5 py-3">
-                      <span className="inline-flex items-center rounded-md bg-brand/10 px-2 py-0.5 text-xs font-semibold text-brand">
-                        {titleCase(f.type)}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 font-semibold text-gray-900">
-                      {formatNaira(Number(f.amount))}
-                    </td>
-                    <td className="px-5 py-3 text-gray-600">{f.level ? `${f.level} Level` : 'All'}</td>
-                    <td className="px-5 py-3">
-                      <span
-                        className={cn(
-                          'text-xs font-medium',
-                          f.isMandatory ? 'text-emerald-600' : 'text-gray-400',
-                        )}
-                      >
-                        {f.isMandatory ? 'Yes' : 'No'}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3">
-                      <span
-                        className={cn(
-                          'text-xs font-medium',
-                          f.allowInstallment ? 'text-emerald-600' : 'text-gray-400',
-                        )}
-                      >
-                        {f.allowInstallment ? 'Allowed' : '—'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         )}
       </Card>
     </>

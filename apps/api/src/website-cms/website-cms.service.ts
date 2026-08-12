@@ -256,6 +256,34 @@ export class WebsiteCmsService {
     });
   }
 
+  async updateGalleryItem(
+    id: string,
+    schoolId: string,
+    data: { url?: string; type?: string; caption?: string; album?: string },
+  ) {
+    const item = await this.prisma.db.galleryItem.findUnique({ where: { id } });
+    if (!item || item.schoolId !== schoolId) {
+      throw new NotFoundException('Gallery item not found');
+    }
+    return this.prisma.db.galleryItem.update({
+      where: { id },
+      data: {
+        ...(data.url !== undefined ? { url: data.url } : {}),
+        ...(data.type !== undefined ? { type: data.type as any } : {}),
+        ...(data.caption !== undefined ? { caption: data.caption } : {}),
+        ...(data.album !== undefined ? { album: data.album } : {}),
+      },
+    });
+  }
+
+  async deleteGalleryItem(id: string, schoolId: string) {
+    const item = await this.prisma.db.galleryItem.findUnique({ where: { id } });
+    if (!item || item.schoolId !== schoolId) {
+      throw new NotFoundException('Gallery item not found');
+    }
+    return this.prisma.db.galleryItem.delete({ where: { id } });
+  }
+
   // ---- File uploads ----
 
   /** Upload a file to Cloudinary and return the hosted URL. */

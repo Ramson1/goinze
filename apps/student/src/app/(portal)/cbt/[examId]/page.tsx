@@ -14,6 +14,7 @@ import {
   XCircle,
   Loader2,
   AlertCircle,
+  Key,
 } from 'lucide-react';
 import Card from '@/components/Card';
 import {
@@ -62,6 +63,12 @@ export default function ExamPage(props: { params: Promise<{ examId: string }> })
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  // Code entry gate
+  const [accessCode, setAccessCode] = useState('');
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const [submittingCode, setSubmittingCode] = useState(false);
+  const [codeVerified, setCodeVerified] = useState(false);
+
   const [current, setCurrent] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string[]>>({});
   const [texts, setTexts] = useState<Record<string, string>>({});
@@ -72,21 +79,15 @@ export default function ExamPage(props: { params: Promise<{ examId: string }> })
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [result, setResult] = useState<CbtSubmitResponse | null>(null);
 
-  // ---- Load exam + start (or resume) the attempt ----
+  // ---- Load exam details (but don't start attempt yet) ----
   useEffect(() => {
     if (!profile?.id) return;
     let cancelled = false;
     (async () => {
       try {
         const detail = await cbtStudentApi.exam(examId);
-        const att = await cbtStudentApi.startAttempt({
-          examId,
-          studentId: profile.id,
-        });
         if (cancelled) return;
         setExam(detail);
-        setAttempt(att);
-        setSecondsLeft(detail.durationMins * 60);
       } catch (err) {
         if (!cancelled) {
           setLoadError(err instanceof Error ? err.message : 'Failed to load this exam.');
@@ -99,6 +100,31 @@ export default function ExamPage(props: { params: Promise<{ examId: string }> })
       cancelled = true;
     };
   }, [examId, profile?.id]);
+
+  // ---- Start attempt with access code ----
+  async function handleStartExam(e: React.FormEvent) {
+    e.preventDefault();
+    if (!accessCode.trim()) {
+      setCodeError('Please enter your exam access code.');
+      return;
+    }
+    setSubmittingCode(true);
+    setCodeError(null);
+    try {
+      const att = await cbtStudentApi.startAttempt({
+        examId,
+        studentId: profile!.id,
+        code: accessCode.trim(),
+      });
+      setAttempt(att);
+      setCodeVerified(true);
+      setSecondsLeft(exam!.durationMins * 60);
+    } catch (err) {
+      setCodeError(err instanceof Error ? err.message : 'Invalid or already used access code.');
+    } finally {
+      setSubmittingCode(false);
+    }
+  }
 
   const questions: CbtQuestion[] = useMemo(() => {
     if (!exam) return [];
@@ -200,7 +226,7 @@ export default function ExamPage(props: { params: Promise<{ examId: string }> })
     );
   }
 
-  if (loadError || !exam || !attempt) {
+  if (loadError || !exam) {
     return (
       <div className="mx-auto max-w-2xl">
         <Card className="p-10 text-center">
@@ -212,6 +238,80 @@ export default function ExamPage(props: { params: Promise<{ examId: string }> })
           <Link href="/cbt" className="btn-primary mt-6 inline-flex">
             <ArrowLeft className="h-4 w-4" /> Back to CBT Dashboard
           </Link>
+        </Card>
+      </div>
+    );
+  }
+
+  // ---- Code entry gate (before exam starts) ----
+  if (!codeVerified && !attempt) {
+    return (
+      <div className="mx-auto max-w-2xl">
+        <Card className="p-8">
+          <div className="text-center">
+            <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-blue-50">
+              <Key className="h-8 w-8 text-brand" />
+            </span>
+            <h1 className="mt-4 text-2xl font-bold text-slate-900">Exam Access Code Required</h1>
+            <p className="mt-2 text-sm text-slate-600">
+              {exam.course?.code ? `${exam.course.code} — ` : ''}
+              {exam.title}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Duration: {exam.durationMins} minutes · Pass mark: {exam.passMark}%
+            </p>
+          </div>
+
+          <form onSubmit={handleStartExam} className="mt-8 space-y-4">
+            {codeError && (
+              <div className="flex items-start gap-2.5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{codeError}</span>
+              </div>
+            )}
+
+            <div>
+              <label className="label">Enter your exam access code</label>
+              <input
+                type="text"
+                value={accessCode}
+                onChange={(e) => setAccessCode(e.target.value.toUpperCase())}
+                placeholder="EXAM-XXXX-XXXX"
+                className="input-field font-mono text-center text-lg tracking-wider"
+                autoFocus
+              />
+              <p className="mt-2 text-xs text-slate-500">
+                Your instructor will provide you with a unique access code. Enter it above to start the exam.
+              </p>
+            </div>
+
+            {exam.instructions && (
+              <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
+                <p className="mb-1 text-sm font-semibold text-blue-900">Exam Instructions:</p>
+                <p className="text-xs text-blue-800 whitespace-pre-line">{exam.instructions}</p>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={submittingCode}
+              className="btn-primary w-full disabled:opacity-60"
+            >
+              {submittingCode ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Validating code…
+                </>
+              ) : (
+                <>
+                  <Key className="h-4 w-4" /> Start Exam
+                </>
+              )}
+            </button>
+
+            <Link href="/cbt" className="btn-secondary block w-full text-center">
+              <ArrowLeft className="h-4 w-4" /> Back to Dashboard
+            </Link>
+          </form>
         </Card>
       </div>
     );

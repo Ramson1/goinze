@@ -54,6 +54,51 @@ export class CreateFeeStructureDto {
   programmeId?: string;
 
   @IsOptional()
+  @IsString()
+  departmentId?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isMandatory?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  allowInstallment?: boolean;
+}
+
+export class UpdateFeeStructureDto {
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsEnum(FEE_TYPES)
+  type?: (typeof FEE_TYPES)[number];
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  amount?: number;
+
+  @IsOptional()
+  @IsString()
+  sessionId?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  level?: number;
+
+  @IsOptional()
+  @IsString()
+  programmeId?: string;
+
+  @IsOptional()
+  @IsString()
+  departmentId?: string;
+
+  @IsOptional()
   @IsBoolean()
   isMandatory?: boolean;
 

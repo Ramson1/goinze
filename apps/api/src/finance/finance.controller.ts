@@ -1,9 +1,11 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Headers,
   Param,
+  Patch,
   Post,
   Query,
   Req,
@@ -15,6 +17,7 @@ import { FinanceService } from './finance.service';
 import { FlutterwaveGateway } from './flutterwave.gateway';
 import {
   CreateFeeStructureDto,
+  UpdateFeeStructureDto,
   InitPaymentDto,
   VerifyPaymentDto,
   RefundDto,
@@ -49,6 +52,25 @@ export class FinanceController {
     @Body() dto: CreateFeeStructureDto,
   ) {
     return this.financeService.createFeeStructure(user.schoolId, dto);
+  }
+
+  @Patch('fee-structures/:id')
+  @Roles('SCHOOL_ADMIN', 'ACCOUNTANT')
+  updateFeeStructure(
+    @Param('id') id: string,
+    @CurrentUser() user: SessionUser,
+    @Body() dto: UpdateFeeStructureDto,
+  ) {
+    return this.financeService.updateFeeStructure(id, user.schoolId, dto);
+  }
+
+  @Delete('fee-structures/:id')
+  @Roles('SCHOOL_ADMIN', 'ACCOUNTANT')
+  deleteFeeStructure(
+    @Param('id') id: string,
+    @CurrentUser() user: SessionUser,
+  ) {
+    return this.financeService.deleteFeeStructure(id, user.schoolId);
   }
 
   // ---- Application fees (pre-submission, public) ----

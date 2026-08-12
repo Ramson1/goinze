@@ -220,9 +220,11 @@ export class StudentsMeService {
     const semesters = Array.from(groups.values()).map((rows) => {
       const first = rows[0];
       const courses = rows.map((r) => ({
+        resultId: r.id,
         code: r.course.code,
         title: r.course.title,
         units: r.course.creditUnits,
+        session: r.session?.name ?? '',
         score: Number(r.totalScore),
         grade: r.grade,
       }));
@@ -243,11 +245,16 @@ export class StudentsMeService {
     }));
     const cumulative = computeGpa(allCourses);
 
+    const passed = results.filter((r) => Number(r.totalScore) >= 40).length;
+    const failed = results.filter((r) => Number(r.totalScore) < 40).length;
+
     return {
       semesters,
       cgpa: cumulative.gpa,
       classification: cumulative.classification,
       totalUnits: cumulative.totalUnits,
+      passed,
+      failed,
     };
   }
 

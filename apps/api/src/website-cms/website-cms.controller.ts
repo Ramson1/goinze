@@ -343,6 +343,50 @@ export class WebsiteCmsController {
     return result;
   }
 
+  @Patch('gallery/:id')
+  @Roles('SCHOOL_ADMIN')
+  async updateGalleryItem(
+    @Param('id') id: string,
+    @CurrentUser() user: SessionUser,
+    @Body() data: { url?: string; type?: string; caption?: string; album?: string },
+    @IpAddress() ip: string,
+  ) {
+    const result = await this.websiteCmsService.updateGalleryItem(id, user.schoolId!, data);
+    this.security
+      .log({
+        schoolId: user.schoolId,
+        userId: user.id,
+        action: 'cms.gallery_item_updated',
+        entity: 'GalleryItem',
+        entityId: result.id,
+        metadata: data,
+        ipAddress: ip,
+      })
+      .catch(() => undefined);
+    return result;
+  }
+
+  @Delete('gallery/:id')
+  @Roles('SCHOOL_ADMIN')
+  async deleteGalleryItem(
+    @Param('id') id: string,
+    @CurrentUser() user: SessionUser,
+    @IpAddress() ip: string,
+  ) {
+    const result = await this.websiteCmsService.deleteGalleryItem(id, user.schoolId!);
+    this.security
+      .log({
+        schoolId: user.schoolId,
+        userId: user.id,
+        action: 'cms.gallery_item_deleted',
+        entity: 'GalleryItem',
+        entityId: result.id,
+        ipAddress: ip,
+      })
+      .catch(() => undefined);
+    return result;
+  }
+
   // ---- Media upload ----
 
   @Post('upload')

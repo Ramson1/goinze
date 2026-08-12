@@ -38,14 +38,19 @@ export interface FlutterwaveResponse {
 let scriptPromise: Promise<void> | null = null;
 
 function injectFlutterwaveScript(): Promise<void> {
+  // Already loaded
+  if ((window as any).FlutterwaveCheckout) return Promise.resolve();
+  // Re-use in-flight promise
   if (scriptPromise) return scriptPromise;
-  scriptPromise = new Promise((resolve, reject) => {
-    if ((window as any).FlutterwaveCheckout) return resolve();
+  scriptPromise = new Promise<void>((resolve, reject) => {
     const script = document.createElement('script');
     script.src = 'https://checkout.flutterwave.com/v3.js';
     script.async = true;
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Failed to load Flutterwave script'));
+    script.onerror = () => {
+      scriptPromise = null; // allow retry
+      reject(new Error('Failed to load Flutterwave script'));
+    };
     document.head.appendChild(script);
   });
   return scriptPromise;
@@ -83,12 +88,18 @@ export default function PaymentModal({
   // Trigger Flutterwave checkout when modal opens
   useEffect(() => {
     if (!open || initiatedRef.current) return;
+    // Don't attempt checkout if public key is not yet loaded
+    if (!publicKey) {
+      setFailed(true);
+      onError('Payment key not loaded. Please refresh the page and try again.');
+      return;
+    }
     initiatedRef.current = true;
     setLoading(true);
 
     const doCheckout = () => {
       const win = window as any;
-      if (win.FlutterwaveCheckout) {
+      if (typeof win.FlutterwaveCheckout === 'function') {
         win.FlutterwaveCheckout({
           public_key: publicKey,
           tx_ref: txRef,

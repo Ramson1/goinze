@@ -16,7 +16,13 @@ export class SecurityService {
     schoolId: string | null,
     query: PaginationDto,
   ): Promise<Paginated<any>> {
-    const where: Record<string, any> = {};
+    const where: Record<string, any> = {
+      user: {
+        role: {
+          not: 'SUPER_ADMIN',
+        },
+      },
+    };
     if (schoolId) where.schoolId = schoolId;
     if (query.search) {
       where.OR = [

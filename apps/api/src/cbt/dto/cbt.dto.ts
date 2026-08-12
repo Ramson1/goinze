@@ -139,6 +139,10 @@ export class StartAttemptDto {
 
   @IsString()
   studentId!: string;
+
+  @IsOptional()
+  @IsString()
+  code?: string;
 }
 
 export class AnswerDto {
@@ -160,4 +164,54 @@ export class SubmitAttemptDto {
   @ValidateNested({ each: true })
   @Type(() => AnswerDto)
   answers!: AnswerDto[];
+}
+
+export class RedeemCodeDto {
+  @IsString()
+  examId!: string;
+
+  @IsString()
+  code!: string;
+
+  @IsString()
+  studentId!: string;
+}
+
+export class BulkQuestionItemDto {
+  @IsOptional()
+  @IsEnum(QUESTION_TYPES)
+  type?: (typeof QUESTION_TYPES)[number];
+
+  @IsString()
+  text!: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  marks?: number;
+
+  @IsOptional()
+  @IsString()
+  difficulty?: string;
+
+  @IsOptional()
+  @IsString()
+  explanation?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => QuestionOptionDto)
+  options?: QuestionOptionDto[];
+}
+
+export class BulkCreateQuestionsDto {
+  @IsString()
+  bankId!: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BulkQuestionItemDto)
+  questions!: BulkQuestionItemDto[];
 }

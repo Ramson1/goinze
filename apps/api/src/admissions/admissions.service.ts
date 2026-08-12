@@ -1,19 +1,29 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import type { Paginated } from '@goinze/shared-types';
 import { generateApplicationNo, generateMatricNumber } from '@goinze/shared-utils';
 import { PrismaService } from '../prisma/prisma.service';
 import { paginated } from '../common/utils/pagination.util';
 import { PaginationDto } from '../common/dto/pagination.dto';
-import { ApplyDto, ReviewApplicationDto } from './dto/admission.dto';
+import { ApplyDto, ReviewApplicationDto, ApproveApplicationDto } from './dto/admission.dto';
+import { MailService } from '../mail/mail.service';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class AdmissionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(AdmissionsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mail: MailService,
+    private readonly config: ConfigService,
+  ) {}
 
   /**
    * Submit a new application from the public website.
@@ -168,14 +178,28 @@ export class AdmissionsService {
    * Idempotent: re-approving an already-provisioned application just refreshes
    * the status without creating a duplicate student.
    */
-  async approve(id: string, reviewerId: string) {
+  async approve(id: string, reviewerId: string, dto: ApproveApplicationDto = {}) {
     const application = await this.findOne(id);
 
     if (application.status === 'REJECTED') {
       throw new BadRequestException('A rejected application cannot be approved.');
     }
 
+    // Use admin-selected programme/department, falling back to application values
+    const programmeId = dto.programmeId || application.programmeId;
+    const departmentId = dto.departmentId || application.departmentId;
+
     if (application.studentId) {
+      // Update student record with selected programme/department if provided
+      if (dto.programmeId || dto.departmentId) {
+        await this.prisma.db.student.update({
+          where: { id: application.studentId },
+          data: {
+            ...(dto.programmeId && { programmeId: dto.programmeId }),
+            ...(dto.departmentId && { departmentId: dto.departmentId }),
+          },
+        });
+      }
       return this.prisma.db.application.update({
         where: { id },
         data: { status: 'APPROVED', reviewedBy: reviewerId },
@@ -184,7 +208,7 @@ export class AdmissionsService {
     }
 
     const [matricNumber, currentSession] = await Promise.all([
-      this.generateMatricNumber(application.schoolId, application.departmentId),
+      this.generateMatricNumber(application.schoolId, departmentId),
       this.prisma.db.academicSession.findFirst({
         where: { schoolId: application.schoolId, isCurrent: true },
       }),
@@ -201,8 +225,8 @@ export class AdmissionsService {
           dateOfBirth: application.dateOfBirth ?? undefined,
           email: application.email,
           phone: application.phone,
-          programmeId: application.programmeId,
-          departmentId: application.departmentId,
+          programmeId,
+          departmentId,
           matricNumber,
           currentLevel: 100,
           entrySessionId: currentSession?.id,
@@ -211,7 +235,15 @@ export class AdmissionsService {
       });
 
       // Provision a portal login for the newly admitted student.
-      await this.provisionStudentUser(tx, student.id, application);
+      const tempPassword = await this.provisionStudentUser(tx, student.id, application);
+      
+      // Store the temp password on the student record so it can be included in the admission letter
+      if (tempPassword) {
+        await tx.student.update({
+          where: { id: student.id },
+          data: { tempPassword },
+        });
+      }
 
       return tx.application.update({
         where: { id },
@@ -225,18 +257,32 @@ export class AdmissionsService {
     });
   }
 
+  /**
+   * Generate a random temporary password for student accounts.
+   */
+  private generateTempPassword(): string {
+    // Generate a random 8-character password with letters and numbers
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    let password = '';
+    for (let i = 0; i < 8; i++) {
+      password += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return password;
+  }
+
   /** Default password for provisioned student accounts (change on first login). */
   static readonly DEFAULT_STUDENT_PASSWORD = 'student123';
 
   /**
    * Create a STUDENT-role User linked to a Student record so the applicant can
    * log in to the student portal. Idempotent: skips if the email is taken.
+   * Returns the generated temp password if a new user is created.
    */
   private async provisionStudentUser(
     tx: any,
     studentId: string,
     application: { schoolId: string; email: string; firstName: string; lastName: string; phone: string | null },
-  ) {
+  ): Promise<string | null> {
     const existing = await tx.user.findUnique({
       where: { email: application.email.toLowerCase() },
       include: { student: true },
@@ -249,13 +295,11 @@ export class AdmissionsService {
           data: { userId: existing.id },
         });
       }
-      return;
+      return null; // No new password generated
     }
 
-    const passwordHash = await bcrypt.hash(
-      AdmissionsService.DEFAULT_STUDENT_PASSWORD,
-      10,
-    );
+    const tempPassword = this.generateTempPassword();
+    const passwordHash = await bcrypt.hash(tempPassword, 10);
     const user = await tx.user.create({
       data: {
         schoolId: application.schoolId,
@@ -273,6 +317,7 @@ export class AdmissionsService {
       where: { id: studentId },
       data: { userId: user.id },
     });
+    return tempPassword;
   }
 
   /**
@@ -297,7 +342,7 @@ export class AdmissionsService {
     return this.prisma.db.$transaction(async (tx) => {
       await tx.student.update({
         where: { id: application.studentId! },
-        data: { status: 'ACTIVE' },
+        data: { status: 'ACTIVE', matricActivatedAt: new Date() },
       });
       return tx.application.update({
         where: { id },
@@ -333,9 +378,13 @@ export class AdmissionsService {
         : Promise.resolve(null),
     ]);
 
+    const portalUrl =
+      this.config.get<string>('STUDENT_PORTAL_URL') || 'http://localhost:3002';
+
     const html = this.renderLetterHtml({
       schoolName: school?.name ?? 'Goinze International School of Medical Health Science and Technology',
       schoolAddress: school?.address ?? '',
+      schoolLogoUrl: school?.logoUrl ?? '',
       applicationNo: application.applicationNo,
       applicantName: [application.firstName, application.middleName, application.lastName]
         .filter(Boolean)
@@ -343,6 +392,7 @@ export class AdmissionsService {
       programme: programme?.name ?? '—',
       department: department?.name ?? '—',
       matricNumber: application.student?.matricNumber ?? 'Pending',
+      portalUrl,
       date: new Date().toLocaleDateString('en-NG', {
         day: 'numeric',
         month: 'long',
@@ -352,10 +402,46 @@ export class AdmissionsService {
 
     const admissionLetterUrl = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
 
-    return this.prisma.db.application.update({
+    const updated = await this.prisma.db.application.update({
       where: { id },
       data: { admissionLetterUrl },
       include: { student: true },
+    });
+
+    // Send admission letter via email
+    const applicantEmail = application.email;
+    const applicantName = [application.firstName, application.lastName].filter(Boolean).join(' ');
+    const emailHtml = this.renderEmailBody({
+      applicantName,
+      schoolName: school?.name ?? 'Goinze International School',
+      schoolLogoUrl: school?.logoUrl ?? '',
+      admissionLetterUrl,
+      portalUrl,
+      matricNumber: application.student?.matricNumber ?? 'Pending',
+      tempPassword: application.student?.tempPassword,
+    });
+
+    await this.mail.sendEmail(
+      applicantEmail,
+      `Admission Letter — ${school?.name ?? 'Goinze International School'}`,
+      emailHtml,
+    );
+
+    return updated;
+  }
+
+  async updateVerification(id: string, dto: import('./dto/admission.dto').UpdateVerificationDto) {
+    const application = await this.prisma.db.application.findUnique({ where: { id } });
+    if (!application) throw new NotFoundException(`Application ${id} not found`);
+
+    return this.prisma.db.application.update({
+      where: { id },
+      data: {
+        verificationDocumentsReviewed: dto.verificationDocumentsReviewed ?? false,
+        verificationDocumentsMatch: dto.verificationDocumentsMatch ?? false,
+        verificationReceiptAttached: dto.verificationReceiptAttached ?? false,
+        verificationCourseApproved: dto.verificationCourseApproved ?? false,
+      },
     });
   }
 
@@ -412,13 +498,18 @@ export class AdmissionsService {
   private renderLetterHtml(d: {
     schoolName: string;
     schoolAddress: string;
+    schoolLogoUrl: string;
     applicationNo: string;
     applicantName: string;
     programme: string;
     department: string;
     matricNumber: string;
+    portalUrl: string;
     date: string;
   }): string {
+    const logoBlock = d.schoolLogoUrl
+      ? `<img src="${d.schoolLogoUrl}" alt="${d.schoolName} Logo" style="max-height:80px;margin:0 auto 12px;display:block;" />`
+      : '';
     return `<!doctype html><html><head><meta charset="utf-8"><title>Admission Letter — ${d.applicantName}</title>
 <style>
   body{font-family:Georgia,'Times New Roman',serif;color:#1e293b;margin:0;padding:48px;background:#fff;}
@@ -433,12 +524,14 @@ export class AdmissionsService {
   td.k{background:#f0fdfa;font-weight:bold;width:38%;color:#0f766e;}
   .sign{margin-top:48px;font-size:14px;}
   .foot{margin-top:40px;font-size:11px;color:#94a3b8;text-align:center;border-top:1px solid #e2e8f0;padding-top:14px;}
+  .portal-link{margin-top:24px;padding:16px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;font-size:14px;}
+  .portal-link a{color:#0f766e;font-weight:bold;text-decoration:underline;}
 </style></head><body><div class="sheet">
-  <div class="head"><h1>${d.schoolName}</h1><p>${d.schoolAddress}</p><p>Office of the Registrar — Admissions</p></div>
+  <div class="head">${logoBlock}<h1>${d.schoolName}</h1><p>${d.schoolAddress}</p><p>Office of the Registrar — Admissions</p></div>
   <div class="ref">Reference: ${d.applicationNo} &nbsp;|&nbsp; Date: ${d.date}</div>
   <p>Dear <strong>${d.applicantName}</strong>,</p>
   <h2>Offer of Provisional Admission</h2>
-  <p>We are pleased to inform you that, following the review of your application, you have been offered <strong>provisional admission</strong> into the programme below, subject to payment of the acceptance fee and completion of registration.</p>
+  <p>We are pleased to inform you that, following the review of your application, you have been offered <strong>provisional admission</strong> into the programme below, subject to payment of all required fees and completion of registration.</p>
   <table>
     <tr><td class="k">Applicant</td><td>${d.applicantName}</td></tr>
     <tr><td class="k">Application No.</td><td>${d.applicationNo}</td></tr>
@@ -446,10 +539,52 @@ export class AdmissionsService {
     <tr><td class="k">Department</td><td>${d.department}</td></tr>
     <tr><td class="k">Matric Number</td><td>${d.matricNumber}</td></tr>
   </table>
-  <p>To accept this offer, kindly pay the acceptance fee through the student portal. Your admission will be confirmed and your matric number activated upon receipt of payment.</p>
+  <div class="portal-link">
+    <p><strong>Student Portal Access</strong></p>
+    <p>Log in to the student portal using your matric number (<strong>${d.matricNumber}</strong>) and the temporary password provided separately.</p>
+    <p>Portal: <a href="${d.portalUrl}">${d.portalUrl}</a></p>
+    <p style="font-size:12px;color:#64748b;">You must complete all required payments (acceptance fee, portal access fee, etc.) before full portal access is granted.</p>
+  </div>
+  <p>To accept this offer, kindly pay the required fees through the student portal. Your admission will be confirmed and your matric number activated upon receipt of all required payments.</p>
   <p>Congratulations, and welcome to ${d.schoolName}.</p>
   <div class="sign"><p>Yours faithfully,</p><p><strong>The Registrar</strong><br/>${d.schoolName}</p></div>
   <div class="foot">This is a system-generated admission letter • Verify at the school portal using reference ${d.applicationNo}</div>
 </div></body></html>`;
+  }
+
+  private renderEmailBody(d: {
+    applicantName: string;
+    schoolName: string;
+    schoolLogoUrl: string;
+    admissionLetterUrl: string;
+    portalUrl: string;
+    matricNumber: string;
+    tempPassword?: string | null;
+  }): string {
+    const logoBlock = d.schoolLogoUrl
+      ? `<img src="${d.schoolLogoUrl}" alt="${d.schoolName}" style="max-height:60px;margin:0 auto 16px;display:block;" />`
+      : '';
+    return `<!doctype html><html><head><meta charset="utf-8"></head>
+<body style="font-family:Arial,sans-serif;background:#f8fafc;margin:0;padding:32px;">
+  <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:12px;padding:40px;border:1px solid #e2e8f0;">
+    <div style="text-align:center;margin-bottom:24px;">${logoBlock}
+      <h1 style="color:#0f766e;margin:0;font-size:22px;">${d.schoolName}</h1>
+    </div>
+    <p>Dear <strong>${d.applicantName}</strong>,</p>
+    <p>Congratulations! You have been offered provisional admission into <strong>${d.schoolName}</strong>.</p>
+    <p>Your matric number is: <strong>${d.matricNumber}</strong></p>
+    ${d.tempPassword ? `<p>Your temporary password is: <strong>${d.tempPassword}</strong></p>` : ''}
+    <p>Please find your admission letter attached below. You will need to log in to the student portal to complete your registration and make all required payments.</p>
+    <div style="text-align:center;margin:32px 0;">
+      <a href="${d.admissionLetterUrl}" target="_blank" style="display:inline-block;background:#0f766e;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:bold;">View Admission Letter</a>
+    </div>
+    <div style="text-align:center;margin:24px 0;">
+      <a href="${d.portalUrl}" target="_blank" style="display:inline-block;background:#f0fdfa;color:#0f766e;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:bold;border:1px solid #99f6e4;">Go to Student Portal</a>
+    </div>
+    <p style="font-size:13px;color:#64748b;">You will need your matric number (<strong>${d.matricNumber}</strong>)${d.tempPassword ? ` and temporary password (<strong>${d.tempPassword}</strong>)` : ' and the temporary password provided by the admissions office'} to log in.</p>
+    <hr style="border:none;border-top:1px solid #e2e8f0;margin:32px 0;" />
+    <p style="font-size:12px;color:#94a3b8;text-align:center;">This is a system-generated email from ${d.schoolName}. Please do not reply to this email.</p>
+  </div>
+</body></html>`;
   }
 }

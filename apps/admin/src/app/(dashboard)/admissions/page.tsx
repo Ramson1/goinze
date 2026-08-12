@@ -9,7 +9,6 @@ import {
   FileText,
   Loader2,
   RefreshCw,
-  UserCheck,
   X,
 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
@@ -18,12 +17,12 @@ import DataTable, { type Column } from '@/components/DataTable';
 import StatusBadge from '@/components/StatusBadge';
 import {
   admissionsApi,
-  financeApi,
+  academicsApi,
   ApiError,
   type ApplicationRecord,
+  type Programme,
+  type DepartmentFull,
 } from '@/lib/api';
-
-const ACCEPTANCE_FEE = 50000; // NGN — demo acceptance fee amount
 
 const STATUS_FILTERS = [
   { value: '', label: 'All statuses' },
@@ -36,6 +35,12 @@ const STATUS_FILTERS = [
 
 const reviewable = new Set(['SUBMITTED', 'UNDER_REVIEW', 'INTERVIEW']);
 
+interface ApprovalTarget {
+  application: ApplicationRecord;
+  programmeId: string;
+  departmentId: string;
+}
+
 export default function AdmissionsPage() {
   const searchParams = useSearchParams();
   const initialSearch = searchParams.get('search') ?? '';
@@ -47,6 +52,17 @@ export default function AdmissionsPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [viewingApplication, setViewingApplication] = useState<ApplicationRecord | null>(null);
+  const [approvalTarget, setApprovalTarget] = useState<ApprovalTarget | null>(null);
+  const [programmes, setProgrammes] = useState<Programme[]>([]);
+  const [departments, setDepartments] = useState<DepartmentFull[]>([]);
+  const [approving, setApproving] = useState(false);
+  const [verification, setVerification] = useState({
+    verificationDocumentsReviewed: false,
+    verificationDocumentsMatch: false,
+    verificationReceiptAttached: false,
+    verificationCourseApproved: false,
+  });
+  const [savingVerification, setSavingVerification] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -73,6 +89,11 @@ export default function AdmissionsPage() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    academicsApi.programmes().then(setProgrammes).catch(() => setProgrammes([]));
+    academicsApi.departments().then(setDepartments).catch(() => setDepartments([]));
+  }, []);
+
   function patchRow(updated: ApplicationRecord) {
     setRows((prev) => prev.map((r) => (r.id === updated.id ? { ...r, ...updated } : r)));
   }
@@ -91,33 +112,55 @@ export default function AdmissionsPage() {
     }
   }
 
-  const onApprove = (r: ApplicationRecord) =>
-    run(r.id, () => admissionsApi.approve(r.id), `Approved — student provisioned for ${r.applicationNo}.`);
+  const onApprove = (r: ApplicationRecord) => {
+    setApprovalTarget({
+      application: r,
+      programmeId: r.programmeId ?? '',
+      departmentId: r.departmentId ?? '',
+    });
+  };
+
+  const handleConfirmApprove = async () => {
+    if (!approvalTarget) return;
+    setApproving(true);
+    setNotice(null);
+    try {
+      const updated = await admissionsApi.approve(approvalTarget.application.id, {
+        programmeId: approvalTarget.programmeId || undefined,
+        departmentId: approvalTarget.departmentId || undefined,
+      });
+      patchRow(updated);
+      setNotice(`Approved — student provisioned for ${approvalTarget.application.applicationNo}.`);
+      setApprovalTarget(null);
+    } catch (err) {
+      setNotice(err instanceof ApiError ? err.message : 'Approval failed.');
+    } finally {
+      setApproving(false);
+    }
+  };
 
   const onReject = (r: ApplicationRecord) =>
     run(r.id, () => admissionsApi.reject(r.id), `Application ${r.applicationNo} rejected.`);
 
   const onLetter = (r: ApplicationRecord) =>
-    run(r.id, () => admissionsApi.generateLetter(r.id), 'Admission letter generated.');
+    run(r.id, () => admissionsApi.generateLetter(r.id), 'Admission letter generated and sent.');
 
-  // Simulate the applicant paying the acceptance fee, then finalize admission.
-  const onCollectFeeAndAdmit = async (r: ApplicationRecord) => {
-    setBusyId(r.id);
-    setNotice(null);
+  const handleVerificationChange = async (
+    field: keyof typeof verification,
+    value: boolean,
+  ) => {
+    if (!viewingApplication) return;
+    const updated = { ...verification, [field]: value };
+    setVerification(updated);
+    setSavingVerification(true);
     try {
-      const init = await financeApi.initAcceptanceFee(
-        r.id,
-        ACCEPTANCE_FEE,
-        typeof window !== 'undefined' ? window.location.origin : undefined,
-      );
-      await financeApi.verify(init.reference);
-      const updated = await admissionsApi.admit(r.id);
-      patchRow(updated);
-      setNotice(`Acceptance fee recorded — ${r.applicationNo} admitted & student activated.`);
+      await admissionsApi.updateVerification(viewingApplication.id, updated);
+      setViewingApplication({ ...viewingApplication, ...updated });
     } catch (err) {
-      setNotice(err instanceof ApiError ? err.message : 'Payment/admission failed.');
+      setNotice(err instanceof ApiError ? err.message : 'Failed to save verification.');
+      setVerification(verification);
     } finally {
-      setBusyId(null);
+      setSavingVerification(false);
     }
   };
 
@@ -193,17 +236,6 @@ export default function AdmissionsPage() {
               </>
             )}
 
-            {r.status === 'APPROVED' && !r.acceptanceFeePaid && (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => onCollectFeeAndAdmit(r)}
-                className="btn-secondary inline-flex items-center gap-1 px-2.5 py-1.5 text-xs disabled:opacity-50"
-              >
-                <UserCheck className="h-3.5 w-3.5" /> Collect fee & admit
-              </button>
-            )}
-
             {(r.status === 'APPROVED' || r.status === 'ADMITTED') && (
               <button
                 type="button"
@@ -232,6 +264,12 @@ export default function AdmissionsPage() {
                 try {
                   const full = await admissionsApi.get(r.id);
                   setViewingApplication(full);
+                  setVerification({
+                    verificationDocumentsReviewed: full.verificationDocumentsReviewed ?? false,
+                    verificationDocumentsMatch: full.verificationDocumentsMatch ?? false,
+                    verificationReceiptAttached: full.verificationReceiptAttached ?? false,
+                    verificationCourseApproved: full.verificationCourseApproved ?? false,
+                  });
                 } catch (err) {
                   setNotice(err instanceof ApiError ? err.message : 'Failed to load application details.');
                 }
@@ -511,22 +549,51 @@ export default function AdmissionsPage() {
                 <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-amber-700">Office Use Only — Verification Checklist</h3>
                 <div className="space-y-2 text-sm">
                   <label className="flex items-center gap-2">
-                    <input type="checkbox" className="rounded border-gray-300" />
+                    <input
+                      type="checkbox"
+                      className="rounded border-gray-300"
+                      checked={verification.verificationDocumentsReviewed}
+                      onChange={(e) => handleVerificationChange('verificationDocumentsReviewed', e.target.checked)}
+                      disabled={savingVerification}
+                    />
                     <span>Supporting documents reviewed (if submitted)</span>
                   </label>
                   <label className="flex items-center gap-2">
-                    <input type="checkbox" className="rounded border-gray-300" />
+                    <input
+                      type="checkbox"
+                      className="rounded border-gray-300"
+                      checked={verification.verificationDocumentsMatch}
+                      onChange={(e) => handleVerificationChange('verificationDocumentsMatch', e.target.checked)}
+                      disabled={savingVerification}
+                    />
                     <span>Documents agree with form information</span>
                   </label>
                   <label className="flex items-center gap-2">
-                    <input type="checkbox" className="rounded border-gray-300" />
+                    <input
+                      type="checkbox"
+                      className="rounded border-gray-300"
+                      checked={verification.verificationReceiptAttached}
+                      onChange={(e) => handleVerificationChange('verificationReceiptAttached', e.target.checked)}
+                      disabled={savingVerification}
+                    />
                     <span>Cashier's receipt attached</span>
                   </label>
                   <label className="flex items-center gap-2">
-                    <input type="checkbox" className="rounded border-gray-300" />
+                    <input
+                      type="checkbox"
+                      className="rounded border-gray-300"
+                      checked={verification.verificationCourseApproved}
+                      onChange={(e) => handleVerificationChange('verificationCourseApproved', e.target.checked)}
+                      disabled={savingVerification}
+                    />
                     <span>Approved course of study</span>
                   </label>
                 </div>
+                {savingVerification && (
+                  <div className="mt-2 flex items-center gap-2 text-xs text-amber-600">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Saving...
+                  </div>
+                )}
               </section>
             </div>
 
@@ -537,6 +604,113 @@ export default function AdmissionsPage() {
                 className="btn-secondary px-4 py-2 text-sm"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Approval Modal */}
+      {approvalTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b px-6 py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Approve Application</h2>
+                <p className="text-sm text-gray-500">
+                  {approvalTarget.application.firstName} {approvalTarget.application.lastName} —{' '}
+                  {approvalTarget.application.applicationNo}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setApprovalTarget(null)}
+                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 px-6 py-5">
+              {/* Course choices from application */}
+              {(approvalTarget.application.firstChoice ||
+                approvalTarget.application.secondChoice ||
+                approvalTarget.application.thirdChoice) && (
+                <div>
+                  <label className="label font-semibold text-gray-700">Applicant's Course Choices</label>
+                  <div className="space-y-1 text-sm text-gray-600">
+                    {approvalTarget.application.firstChoice && (
+                      <p>1st Choice: <span className="font-medium text-gray-900">{approvalTarget.application.firstChoice}</span></p>
+                    )}
+                    {approvalTarget.application.secondChoice && (
+                      <p>2nd Choice: <span className="font-medium text-gray-900">{approvalTarget.application.secondChoice}</span></p>
+                    )}
+                    {approvalTarget.application.thirdChoice && (
+                      <p>3rd Choice: <span className="font-medium text-gray-900">{approvalTarget.application.thirdChoice}</span></p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Programme selection */}
+              <div>
+                <label className="label">Programme</label>
+                <select
+                  value={approvalTarget.programmeId}
+                  onChange={(e) =>
+                    setApprovalTarget((prev) =>
+                      prev ? { ...prev, programmeId: e.target.value } : prev,
+                    )
+                  }
+                  className="input"
+                >
+                  <option value="">— Select Programme —</option>
+                  {programmes.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Department selection */}
+              <div>
+                <label className="label">Department</label>
+                <select
+                  value={approvalTarget.departmentId}
+                  onChange={(e) =>
+                    setApprovalTarget((prev) =>
+                      prev ? { ...prev, departmentId: e.target.value } : prev,
+                    )
+                  }
+                  className="input"
+                >
+                  <option value="">— Select Department —</option>
+                  {departments.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setApprovalTarget(null)}
+                className="btn-secondary px-4 py-2 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmApprove}
+                disabled={approving}
+                className="btn-primary inline-flex items-center gap-1.5 px-4 py-2 text-sm disabled:opacity-60"
+              >
+                {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                Confirm Approval
               </button>
             </div>
           </div>

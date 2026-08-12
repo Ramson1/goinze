@@ -14,6 +14,7 @@ import {
   EnterScoreDto,
   BulkUploadDto,
   VerifyResultPinDto,
+  UpdateScoreDto,
 } from './dto/result.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -99,6 +100,12 @@ export class ResultsController {
   @Roles('SCHOOL_ADMIN')
   publish(@Param('id') id: string) {
     return this.resultsService.publish(id);
+  }
+
+  @Patch(':id')
+  @Roles('SCHOOL_ADMIN')
+  updateScore(@Param('id') id: string, @Body() dto: UpdateScoreDto) {
+    return this.resultsService.updateScore(id, dto);
   }
 
   // ---- Result pins ----
