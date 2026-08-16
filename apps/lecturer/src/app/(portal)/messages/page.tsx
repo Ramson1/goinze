@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   Check,
   Edit3,
+  Filter,
   Loader2,
   MessageSquarePlus,
   Reply,
@@ -59,6 +60,7 @@ export default function MessagesPage() {
   const [groupName, setGroupName] = useState('');
   const [searchingContacts, setSearchingContacts] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [contactRole, setContactRole] = useState('');
 
   // Mobile
   const [showThread, setShowThread] = useState(false);
@@ -66,14 +68,29 @@ export default function MessagesPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Resolve current user ID from lecturer profile
+  // Resolve current user ID and load conversations
   useEffect(() => {
     lecturerApi.profile()
       .then((p) => { if (p?.userId) setCurrentUserId(p.userId); })
       .catch(() => undefined);
 
     lecturerApi.conversations.list()
-      .then((convs) => { setConversations(convs); setLoading(false); })
+      .then((convs) => {
+        setConversations(convs);
+        setLoading(false);
+        // Derive currentUserId from conversation participants if not set
+        if (!currentUserId && convs.length > 0) {
+          const firstConv = convs[0];
+          if (firstConv.participants.length >= 2) {
+            const lecturerParticipant = firstConv.participants.find(
+              (p) => p.user?.role === 'LECTURER'
+            );
+            if (lecturerParticipant?.user?.id) {
+              setCurrentUserId(lecturerParticipant.user.id);
+            }
+          }
+        }
+      })
       .catch(() => setLoading(false));
   }, []);
 
@@ -121,11 +138,11 @@ export default function MessagesPage() {
   useEffect(() => {
     if (!composeOpen) return;
     setSearchingContacts(true);
-    lecturerApi.conversations.contacts(contactQuery || undefined)
+    lecturerApi.conversations.contacts(contactQuery || undefined, contactRole || undefined)
       .then(setContacts)
       .catch(() => undefined)
       .finally(() => setSearchingContacts(false));
-  }, [contactQuery, composeOpen]);
+  }, [contactQuery, composeOpen, contactRole]);
 
   async function handleSend() {
     if (!input.trim() || !activeId) return;
@@ -180,6 +197,7 @@ export default function MessagesPage() {
     setSelectedContacts(new Set());
     setGroupName('');
     setContactQuery('');
+    setContactRole('');
   }
 
   function toggleContact(id: string) {
@@ -233,10 +251,7 @@ export default function MessagesPage() {
               </div>
             ) : (
               conversations.map((conv) => {
-                const other = otherParticipant(conv, currentUserId);
-                const name = conv.isGroup
-                  ? conv.title ?? 'Group Chat'
-                  : other ? `${other.firstName} ${other.lastName}` : 'Unknown';
+                const name = conv.title ?? (conv.isGroup ? 'Group Chat' : 'Unknown');
                 const isActive = conv.id === activeId;
                 return (
                   <button
@@ -248,9 +263,11 @@ export default function MessagesPage() {
                       isActive ? 'bg-brand/5' : 'hover:bg-slate-50',
                     )}
                   >
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand/10 text-sm font-bold text-brand">
-                      {name.charAt(0).toUpperCase()}
-                    </span>
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand/10 text-sm font-bold text-brand">
+                    {conv.otherAvatarUrl
+                      ? <img src={conv.otherAvatarUrl} alt="" className="h-full w-full object-cover" />
+                      : name.charAt(0).toUpperCase()}
+                  </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
                         <span className="truncate text-sm font-semibold text-slate-900">{name}</span>
@@ -296,18 +313,14 @@ export default function MessagesPage() {
                 >
                   <ArrowLeft className="h-5 w-5" />
                 </button>
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand/10 text-sm font-bold text-brand">
-                  {(activeConv.isGroup
-                    ? activeConv.title ?? 'G'
-                    : otherParticipant(activeConv, currentUserId)?.firstName?.charAt(0) ?? '?'
-                  ).toUpperCase()}
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand/10 text-sm font-bold text-brand">
+                  {activeConv.otherAvatarUrl
+                    ? <img src={activeConv.otherAvatarUrl} alt="" className="h-full w-full object-cover" />
+                    : (activeConv.title ?? '?').charAt(0).toUpperCase()}
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-slate-900">
-                    {activeConv.isGroup
-                      ? activeConv.title ?? 'Group Chat'
-                      : (() => { const o = otherParticipant(activeConv, currentUserId); return o ? `${o.firstName} ${o.lastName}` : 'Unknown'; })()
-                    }
+                    {activeConv.title ?? (activeConv.isGroup ? 'Group Chat' : 'Unknown')}
                   </p>
                 </div>
               </div>
@@ -348,7 +361,7 @@ export default function MessagesPage() {
                               isDeleted
                                 ? 'bg-slate-100 italic text-slate-400'
                                 : isMine
-                                  ? 'rounded-br-md bg-brand text-white'
+                                  ? 'rounded-br-md bg-sky-500 text-white'
                                   : 'rounded-bl-md bg-slate-100 text-slate-800',
                             )}
                           >
@@ -478,10 +491,35 @@ export default function MessagesPage() {
                     type="search"
                     value={contactQuery}
                     onChange={(e) => setContactQuery(e.target.value)}
-                    placeholder="Search by name or email…"
+                    placeholder="Search by name or email\u2026"
                     className="input pl-9"
                   />
                 </div>
+              </div>
+              
+              {/* Role filter */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Filter className="h-3.5 w-3.5 text-slate-400" />
+                {[
+                  { value: '', label: 'All' },
+                  { value: 'STUDENT', label: 'Students' },
+                  { value: 'LECTURER', label: 'Lecturers' },
+                  { value: 'SCHOOL_ADMIN', label: 'Admins' },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setContactRole(opt.value)}
+                    className={cn(
+                      'rounded-full px-3 py-1 text-xs font-medium transition',
+                      contactRole === opt.value
+                        ? 'bg-brand text-white'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
               </div>
 
               {selectedContacts.size > 0 && (

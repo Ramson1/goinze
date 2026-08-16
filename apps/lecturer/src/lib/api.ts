@@ -261,6 +261,7 @@ export interface NotificationRecord {
 export interface ConversationSummary {
   id: string;
   title: string | null;
+  otherAvatarUrl: string | null;
   isGroup: boolean;
   createdAt: string;
   updatedAt: string;
@@ -431,7 +432,12 @@ export const lecturerApi = {
       api.delete<unknown>(`/communication/messages/${id}`),
     markRead: (id: string) =>
       api.patch(`/communication/conversations/${id}/read`),
-    contacts: (q?: string) => api.get<ContactItem[]>(`/communication/contacts?q=${q ?? ''}`),
+    contacts: (q?: string, role?: string) => {
+          const params = new URLSearchParams();
+          if (q) params.set('q', q);
+          if (role) params.set('role', role);
+          return api.get<ContactItem[]>(`/communication/contacts?${params.toString()}`);
+        },
   },
 
   // Notifications

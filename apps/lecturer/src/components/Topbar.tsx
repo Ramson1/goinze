@@ -1,6 +1,6 @@
 'use client';
 
-import { Bell, ChevronDown, LogOut, Search, Settings, User } from 'lucide-react';
+import { Bell, ChevronDown, LogOut, RefreshCw, Search, Settings, User } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -87,6 +87,16 @@ export function Topbar() {
 
       {/* Right: Notifications + Avatar */}
       <div className="flex items-center gap-3">
+        {/* Refresh */}
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="rounded-lg border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-50 hover:text-brand"
+          title="Refresh page"
+        >
+          <RefreshCw className="h-4 w-4" />
+        </button>
+
         {/* Notifications */}
         <div className="relative" ref={notifRef}>
           <button

@@ -63,7 +63,7 @@ export class CommunicationService {
           include: {
             participants: {
               include: {
-                user: { select: { id: true, firstName: true, lastName: true, email: true, role: true } },
+                user: { select: { id: true, firstName: true, lastName: true, email: true, role: true, avatarUrl: true } },
               },
             },
             messages: {
@@ -88,18 +88,21 @@ export class CommunicationService {
         ? conv.messages.length // simplified — real count would need a separate query
         : 0;
 
-      // Determine display title
+      // Determine display title and other participant's avatar
       let title = conv.title;
-      if (!title && !conv.isGroup) {
+      let otherAvatarUrl: string | null = null;
+      if (!conv.isGroup) {
         const otherParticipant = conv.participants.find((pt) => pt.userId !== userId);
         if (otherParticipant) {
-          title = `${otherParticipant.user.firstName} ${otherParticipant.user.lastName}`;
+          if (!title) title = `${otherParticipant.user.firstName} ${otherParticipant.user.lastName}`;
+          otherAvatarUrl = otherParticipant.user.avatarUrl ?? null;
         }
       }
 
       return {
         id: conv.id,
         title,
+        otherAvatarUrl,
         isGroup: conv.isGroup,
         lastMessage: lastMessage
           ? {
@@ -113,10 +116,15 @@ export class CommunicationService {
             }
           : null,
         participants: conv.participants.map((pt) => ({
-          id: pt.user.id,
-          name: `${pt.user.firstName} ${pt.user.lastName}`,
-          email: pt.user.email,
-          role: pt.user.role,
+          userId: pt.userId,
+          user: {
+            id: pt.user.id,
+            firstName: pt.user.firstName,
+            lastName: pt.user.lastName,
+            email: pt.user.email,
+            role: pt.user.role,
+            avatarUrl: pt.user.avatarUrl,
+          },
         })),
         lastReadAt: p.lastReadAt,
         updatedAt: conv.updatedAt,
@@ -131,7 +139,7 @@ export class CommunicationService {
       include: {
         participants: {
           include: {
-            user: { select: { id: true, firstName: true, lastName: true, email: true, role: true } },
+            user: { select: { id: true, firstName: true, lastName: true, email: true, role: true, avatarUrl: true } },
           },
         },
         messages: {
@@ -173,23 +181,28 @@ export class CommunicationService {
       title,
       isGroup: conversation.isGroup,
       participants: conversation.participants.map((p) => ({
-        id: p.user.id,
-        name: `${p.user.firstName} ${p.user.lastName}`,
-        email: p.user.email,
-        role: p.user.role,
+        userId: p.userId,
+        user: {
+          id: p.user.id,
+          firstName: p.user.firstName,
+          lastName: p.user.lastName,
+          email: p.user.email,
+          role: p.user.role,
+          avatarUrl: p.user.avatarUrl,
+        },
       })),
       messages: conversation.messages.map((m) => ({
         id: m.id,
         senderId: m.senderId,
-        senderName: m.sender ? `${m.sender.firstName} ${m.sender.lastName}` : 'Unknown',
+        sender: m.sender ? { id: m.sender.id, firstName: m.sender.firstName, lastName: m.sender.lastName } : null,
         body: m.body,
         replyTo: m.replyTo
           ? {
               id: m.replyTo.id,
               body: m.replyTo.body,
-              senderName: m.replyTo.sender
-                ? `${m.replyTo.sender.firstName} ${m.replyTo.sender.lastName}`
-                : 'Unknown',
+              sender: m.replyTo.sender
+                ? { id: m.replyTo.sender.id, firstName: m.replyTo.sender.firstName, lastName: m.replyTo.sender.lastName }
+                : null,
             }
           : null,
         editedAt: m.editedAt,
@@ -230,7 +243,7 @@ export class CommunicationService {
       include: {
         participants: {
           include: {
-            user: { select: { id: true, firstName: true, lastName: true, email: true, role: true } },
+            user: { select: { id: true, firstName: true, lastName: true, email: true, role: true, avatarUrl: true } },
           },
         },
       },
@@ -245,10 +258,15 @@ export class CommunicationService {
           : null),
       isGroup: conversation.isGroup,
       participants: conversation.participants.map((p) => ({
-        id: p.user.id,
-        name: `${p.user.firstName} ${p.user.lastName}`,
-        email: p.user.email,
-        role: p.user.role,
+        userId: p.userId,
+        user: {
+          id: p.user.id,
+          firstName: p.user.firstName,
+          lastName: p.user.lastName,
+          email: p.user.email,
+          role: p.user.role,
+          avatarUrl: p.user.avatarUrl,
+        },
       })),
       messages: [],
     };
@@ -314,17 +332,17 @@ export class CommunicationService {
     return {
       id: message.id,
       senderId: message.senderId,
-      senderName: message.sender
-        ? `${message.sender.firstName} ${message.sender.lastName}`
-        : 'Unknown',
+      sender: message.sender
+        ? { id: message.sender.id, firstName: message.sender.firstName, lastName: message.sender.lastName }
+        : null,
       body: message.body,
       replyTo: message.replyTo
         ? {
             id: message.replyTo.id,
             body: message.replyTo.body,
-            senderName: message.replyTo.sender
-              ? `${message.replyTo.sender.firstName} ${message.replyTo.sender.lastName}`
-              : 'Unknown',
+            sender: message.replyTo.sender
+              ? { id: message.replyTo.sender.id, firstName: message.replyTo.sender.firstName, lastName: message.replyTo.sender.lastName }
+              : null,
           }
         : null,
       editedAt: message.editedAt,
@@ -350,9 +368,9 @@ export class CommunicationService {
     return {
       id: updated.id,
       senderId: updated.senderId,
-      senderName: updated.sender
-        ? `${updated.sender.firstName} ${updated.sender.lastName}`
-        : 'Unknown',
+      sender: updated.sender
+        ? { id: updated.sender.id, firstName: updated.sender.firstName, lastName: updated.sender.lastName }
+        : null,
       body: updated.body,
       editedAt: updated.editedAt,
       createdAt: updated.createdAt,
@@ -458,6 +476,7 @@ export class CommunicationService {
         lastName: true,
         email: true,
         role: true,
+        avatarUrl: true,
         student: { select: { matricNumber: true, department: { select: { name: true } } } },
         staff: { select: { department: { select: { name: true } } } },
       },
@@ -467,10 +486,11 @@ export class CommunicationService {
 
     return users.map((u) => ({
       id: u.id,
-      name: `${u.firstName} ${u.lastName}`,
+      firstName: u.firstName,
+      lastName: u.lastName,
       email: u.email,
       role: u.role,
-      matricNo: u.student?.matricNumber ?? null,
+      avatarUrl: u.avatarUrl ?? null,
       department: u.student?.department?.name ?? u.staff?.department?.name ?? null,
     }));
   }

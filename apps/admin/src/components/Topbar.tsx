@@ -23,6 +23,7 @@ import {
   MessageSquare,
   MonitorSmartphone,
   Newspaper,
+  RefreshCw,
   ScrollText,
   Search,
   Settings,
@@ -873,6 +874,16 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
       </div>
 
       <div className="ml-auto flex items-center gap-2">
+        {/* Refresh */}
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100 hover:text-brand"
+          title="Refresh page"
+        >
+          <RefreshCw className="h-4 w-4" />
+        </button>
+
         {/* Notifications */}
         <div className="relative" ref={notifRef}>
           <button
