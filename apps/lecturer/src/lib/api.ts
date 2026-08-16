@@ -267,7 +267,7 @@ export interface ConversationSummary {
   updatedAt: string;
   lastMessage: { body: string; createdAt: string; senderId: string } | null;
   unreadCount: number;
-  participants: { id: string; userId: string; user: { id: string; firstName: string; lastName: string; avatarUrl?: string | null } }[];
+  participants: { id: string; userId: string; user: { id: string; firstName: string; lastName: string; role?: string; avatarUrl?: string | null } }[];
 }
 
 export interface ConversationDetail {
@@ -275,7 +275,7 @@ export interface ConversationDetail {
   title: string | null;
   isGroup: boolean;
   createdAt: string;
-  participants: { id: string; userId: string; user: { id: string; firstName: string; lastName: string } }[];
+  participants: { id: string; userId: string; user: { id: string; firstName: string; lastName: string; role?: string } }[];
   messages: ConversationMessage[];
 }
 
