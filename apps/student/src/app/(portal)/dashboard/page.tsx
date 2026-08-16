@@ -10,7 +10,6 @@ import {
   ArrowRight,
   ClipboardList,
   Receipt,
-  IdCard,
   CalendarDays,
   Megaphone,
   Loader2,
@@ -34,7 +33,6 @@ const quickLinks = [
   { label: 'Register Courses', href: '/course-registration', icon: ClipboardList },
   { label: 'Make a Payment', href: '/payments', icon: Wallet },
   { label: 'View Results', href: '/results', icon: GraduationCap },
-  { label: 'Digital ID', href: '/digital-id', icon: IdCard },
   { label: 'Download Receipts', href: '/receipts', icon: Receipt },
   { label: 'Academic Calendar', href: '/academic-calendar', icon: CalendarDays },
 ];
@@ -144,7 +142,9 @@ export default function DashboardPage() {
           icon={MonitorSmartphone}
           label="Upcoming Exams"
           value={String(upcomingExams.length)}
-          sub={nextExam ? `Next: ${nextExam.title}` : 'No exams scheduled'}
+          sub={nextExam
+            ? `Next: ${nextExam.courseCode ? `${nextExam.courseCode} - ` : ''}${nextExam.title}`
+            : 'No exams scheduled'}
           iconClass="bg-rose-50 text-rose-600"
         />
       </div>

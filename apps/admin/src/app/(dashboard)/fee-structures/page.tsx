@@ -40,6 +40,8 @@ function decodeRoleFromToken(token: string): string | null {
 }
 
 const FEE_TYPES = ['SCHOOL', 'ACCEPTANCE', 'APPLICATION_FORM', 'ENTRANCE_EXAM', 'PORTAL_ACCESS', 'SPORTS_WEAR', 'MATRICULATION', 'MEDICAL', 'HOSTEL', 'LIBRARY', 'GRADUATION', 'OTHER'];
+const LEVELS = [100, 200, 300];
+const SEMESTERS = ['FIRST', 'SECOND', 'THIRD'];
 
 function titleCase(value: string): string {
   return value
@@ -69,7 +71,9 @@ export default function FeeStructuresPage() {
   const [feeType, setFeeType] = useState('SCHOOL');
   const [feeAmount, setFeeAmount] = useState('');
   const [feeLevel, setFeeLevel] = useState('');
+  const [feeSemester, setFeeSemester] = useState('');
   const [feeDept, setFeeDept] = useState('');
+  const [feeMandatory, setFeeMandatory] = useState(true);
   const [savingFee, setSavingFee] = useState(false);
 
   // Edit modal
@@ -78,7 +82,9 @@ export default function FeeStructuresPage() {
   const [editFeeType, setEditFeeType] = useState('SCHOOL');
   const [editFeeAmount, setEditFeeAmount] = useState('');
   const [editFeeLevel, setEditFeeLevel] = useState('');
+  const [editFeeSemester, setEditFeeSemester] = useState('');
   const [editFeeDept, setEditFeeDept] = useState('');
+  const [editFeeMandatory, setEditFeeMandatory] = useState(true);
   const [editSavingFee, setEditSavingFee] = useState(false);
   const [deletingFeeId, setDeletingFeeId] = useState<string | null>(null);
 
@@ -108,14 +114,18 @@ export default function FeeStructuresPage() {
         amount: Number(feeAmount),
         type: feeType,
         level: feeLevel ? Number(feeLevel) : undefined,
+        semester: feeSemester || undefined,
         departmentId: feeDept || undefined,
+        isMandatory: feeMandatory,
       });
       setNotice(`Fee structure "${feeName.trim()}" created.`);
       setFeeName('');
       setFeeAmount('');
       setFeeLevel('');
+      setFeeSemester('');
       setFeeDept('');
       setFeeType('SCHOOL');
+      setFeeMandatory(true);
       setShowForm(false);
       loadFeeStructures();
     } catch (err) {
@@ -131,7 +141,9 @@ export default function FeeStructuresPage() {
     setEditFeeType(f.type);
     setEditFeeAmount(String(f.amount));
     setEditFeeLevel(f.level ? String(f.level) : '');
+    setEditFeeSemester(f.semester ?? '');
     setEditFeeDept(f.departmentId ?? '');
+    setEditFeeMandatory(f.isMandatory);
   }
 
   async function submitEditFee(e: FormEvent<HTMLFormElement>) {
@@ -146,7 +158,9 @@ export default function FeeStructuresPage() {
         amount: Number(editFeeAmount),
         type: editFeeType,
         level: editFeeLevel ? Number(editFeeLevel) : undefined,
+        semester: editFeeSemester || undefined,
         departmentId: editFeeDept || undefined,
+        isMandatory: editFeeMandatory,
       });
       setNotice(`Fee structure "${editFeeName.trim()}" updated.`);
       setEditingFee(null);
@@ -249,15 +263,21 @@ export default function FeeStructuresPage() {
             </div>
             <div>
               <label className="label">Level (optional)</label>
-              <input
-                type="number"
-                min={100}
-                max={900}
-                value={feeLevel}
-                onChange={(e) => setFeeLevel(e.target.value)}
-                placeholder="100"
-                className="input"
-              />
+              <select value={feeLevel} onChange={(e) => setFeeLevel(e.target.value)} className="input">
+                <option value="">All Levels</option>
+                {LEVELS.map((l) => (
+                  <option key={l} value={l}>{l} Level</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Semester (optional)</label>
+              <select value={feeSemester} onChange={(e) => setFeeSemester(e.target.value)} className="input">
+                <option value="">All Semesters</option>
+                {SEMESTERS.map((s) => (
+                  <option key={s} value={s}>{titleCase(s)}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="label">Department (optional)</label>
@@ -269,6 +289,15 @@ export default function FeeStructuresPage() {
               </select>
             </div>
             <div className="flex items-end sm:col-span-2 lg:col-span-6">
+              <label className="mr-4 flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={feeMandatory}
+                  onChange={(e) => setFeeMandatory(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                <span className="text-gray-700">Mandatory</span>
+              </label>
               <button type="submit" disabled={savingFee} className="btn-primary disabled:opacity-60">
                 {savingFee ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                 Create Fee Structure
@@ -290,7 +319,7 @@ export default function FeeStructuresPage() {
             <table className="min-w-full divide-y divide-gray-200 text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  {['Name', 'Type', 'Amount', 'Level', 'Department', 'Mandatory', 'Installment', 'Actions'].map((h) => (
+                  {['Name', 'Type', 'Amount', 'Level', 'Semester', 'Department', 'Mandatory', 'Installment', 'Actions'].map((h) => (
                     <th
                       key={h}
                       className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500"
@@ -313,6 +342,7 @@ export default function FeeStructuresPage() {
                       {formatNaira(Number(f.amount))}
                     </td>
                     <td className="px-5 py-3 text-gray-600">{f.level ? `${f.level} Level` : 'All'}</td>
+                    <td className="px-5 py-3 text-gray-600">{f.semester ? titleCase(f.semester) : 'All'}</td>
                     <td className="px-5 py-3 text-gray-600">
                       {f.departmentId
                         ? departments.find((d) => d.id === f.departmentId)?.name ?? '—'
@@ -424,14 +454,21 @@ export default function FeeStructuresPage() {
                 </div>
                 <div>
                   <label className="label">Level (optional)</label>
-                  <input
-                    type="number"
-                    min={100}
-                    max={900}
-                    value={editFeeLevel}
-                    onChange={(e) => setEditFeeLevel(e.target.value)}
-                    className="input"
-                  />
+                  <select value={editFeeLevel} onChange={(e) => setEditFeeLevel(e.target.value)} className="input">
+                    <option value="">All Levels</option>
+                    {LEVELS.map((l) => (
+                      <option key={l} value={l}>{l} Level</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Semester (optional)</label>
+                  <select value={editFeeSemester} onChange={(e) => setEditFeeSemester(e.target.value)} className="input">
+                    <option value="">All Semesters</option>
+                    {SEMESTERS.map((s) => (
+                      <option key={s} value={s}>{titleCase(s)}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="label">Department (optional)</label>
@@ -441,6 +478,17 @@ export default function FeeStructuresPage() {
                       <option key={d.id} value={d.id}>{d.name}</option>
                     ))}
                   </select>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={editFeeMandatory}
+                      onChange={(e) => setEditFeeMandatory(e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                    <span className="text-gray-700">Mandatory fee</span>
+                  </label>
                 </div>
               </div>
               <div className="flex justify-end gap-2 pt-2">

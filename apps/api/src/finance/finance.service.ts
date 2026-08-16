@@ -50,6 +50,7 @@ export class FinanceService {
         amount: dto.amount,
         sessionId: dto.sessionId,
         level: dto.level,
+        semester: dto.semester as any,
         programmeId: dto.programmeId,
         departmentId: dto.departmentId,
         isMandatory: dto.isMandatory ?? true,
@@ -71,6 +72,7 @@ export class FinanceService {
         ...(dto.amount !== undefined && { amount: dto.amount }),
         ...(dto.sessionId !== undefined && { sessionId: dto.sessionId }),
         ...(dto.level !== undefined && { level: dto.level }),
+        ...(dto.semester !== undefined && { semester: dto.semester as any }),
         ...(dto.programmeId !== undefined && { programmeId: dto.programmeId }),
         ...(dto.departmentId !== undefined && { departmentId: dto.departmentId }),
         ...(dto.isMandatory !== undefined && { isMandatory: dto.isMandatory }),
@@ -126,26 +128,30 @@ export class FinanceService {
     return result;
   }
 
-  /** Initialize a payment and return a Flutterwave checkout URL. */
+  /**
+   * Initialize a payment record in the DB and return the reference.
+   * The frontend uses this reference with Flutterwave inline checkout,
+   * which creates its own transaction on Flutterwave with the correct
+   * customer email. We do NOT call gateway.initialize() here because
+   * that would create a server-side transaction whose merchant context
+   * overrides the customer email in the inline checkout.
+   */
   async initPayment(schoolId: string | null, dto: InitPaymentDto) {
     const reference = generatePaymentRef();
 
     // Resolve a customer email + owning school from the application or student
     // so unauthenticated applicants can pay the acceptance fee.
-    let customerEmail = dto.customerEmail;
     let resolvedSchoolId = schoolId;
     if (dto.applicationId) {
       const app = await this.prisma.db.application.findUnique({
         where: { id: dto.applicationId },
       });
-      customerEmail = customerEmail ?? app?.email;
       resolvedSchoolId = resolvedSchoolId ?? app?.schoolId ?? null;
     }
-    if (!customerEmail && dto.studentId) {
+    if (!resolvedSchoolId && dto.studentId) {
       const student = await this.prisma.db.student.findUnique({
         where: { id: dto.studentId },
       });
-      customerEmail = student?.email ?? undefined;
       resolvedSchoolId = resolvedSchoolId ?? student?.schoolId ?? null;
     }
 
@@ -178,21 +184,10 @@ export class FinanceService {
       },
     });
 
-    const redirectUrl =
-      dto.redirectUrl ??
-      `${this.config.get<string>('WEB_APP_URL', 'http://localhost:3000')}/payment/callback`;
-
-    const { checkoutUrl, live } = await this.gateway.initialize({
-      txRef: reference,
-      amount: Number(dto.amount),
-      currency: dto.currency ?? 'NGN',
-      email: customerEmail ?? 'applicant@goinzeschool.com',
-      redirectUrl,
-      title: 'Goinzeschool Payment',
-      description: `Payment ${reference}`,
-    });
-
-    return { payment, reference, checkoutUrl, live };
+    // Return just the DB record and reference.
+    // The frontend will use Flutterwave inline checkout with this reference,
+    // passing the customer email directly to Flutterwave.
+    return { payment, reference, checkoutUrl: '', live: this.gateway.isConfigured };
   }
 
   /**
@@ -410,6 +405,113 @@ export class FinanceService {
       where: { studentId },
       orderBy: { createdAt: 'asc' },
     });
+  }
+
+  // ---- Student fee breakdown (admin) ----
+  async studentFeeBreakdown(studentId: string) {
+    const student = await this.prisma.db.student.findUnique({
+      where: { id: studentId },
+    });
+    if (!student) throw new NotFoundException('Student not found');
+
+    // Get current session
+    const currentSession = await this.prisma.db.academicSession.findFirst({
+      where: { schoolId: student.schoolId, isCurrent: true },
+    });
+
+    // Determine current semester from latest course registration
+    const latestReg = await this.prisma.db.courseRegistration.findFirst({
+      where: { studentId: student.id, sessionId: currentSession?.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    const currentSemester = latestReg?.semester ?? 'FIRST';
+
+    const [structures, payments] = await Promise.all([
+      this.prisma.db.feeStructure.findMany({
+        where: {
+          schoolId: student.schoolId,
+          AND: [
+            { OR: [{ departmentId: null }, { departmentId: student.departmentId }] },
+            { OR: [{ level: null }, { level: student.currentLevel }] },
+            { OR: [{ sessionId: null }, { sessionId: currentSession?.id }] },
+            { OR: [{ semester: null }, { semester: currentSemester }] } as any,
+          ],
+        } as any,
+        orderBy: { createdAt: 'asc' },
+      }),
+      this.prisma.db.payment.findMany({
+        where: { studentId: student.id, status: 'SUCCESS' },
+        include: { receipt: true, feeStructure: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    // Filter out optional fees that student hasn't paid for
+    const paidFeeStructureIds = new Set(
+      payments.filter((p) => p.feeStructureId).map((p) => p.feeStructureId!),
+    );
+
+    const applicableFees = structures.filter((f) => {
+      if (f.isMandatory) return true;
+      return paidFeeStructureIds.has(f.id);
+    });
+
+    // Define display order
+    const typeOrder: Record<string, number> = {
+      PORTAL_ACCESS: 0,
+      SCHOOL: 1,
+      LIBRARY: 2,
+      MEDICAL: 3,
+      SPORTS_WEAR: 4,
+      MATRICULATION: 5,
+      HOSTEL: 6,
+      GRADUATION: 7,
+      ACCEPTANCE: 8,
+      OTHER: 9,
+    };
+
+    const sorted = [...applicableFees].sort((a, b) => {
+      const oa = typeOrder[a.type] ?? 9;
+      const ob = typeOrder[b.type] ?? 9;
+      if (oa !== ob) return oa - ob;
+      if (a.programmeId && !b.programmeId) return 1;
+      if (!a.programmeId && b.programmeId) return -1;
+      return a.name.localeCompare(b.name);
+    });
+
+    // Track which payments have been matched so we don't double-count
+    const matchedPaymentIds = new Set<string>();
+
+    const items = sorted.map((f) => {
+      let paid = payments.find(
+        (p) => p.feeStructureId === f.id && !matchedPaymentIds.has(p.id),
+      );
+      if (!paid) {
+        paid = payments.find(
+          (p) =>
+            !p.feeStructureId &&
+            !matchedPaymentIds.has(p.id) &&
+            p.feeStructure?.type === f.type &&
+            Number(p.amount) === Number(f.amount),
+        );
+      }
+      if (paid) matchedPaymentIds.add(paid.id);
+      return {
+        id: f.id,
+        description: f.name,
+        type: f.type,
+        amount: Number(f.amount),
+        status: paid ? ('PAID' as const) : ('PENDING' as const),
+        ref: paid?.reference ?? null,
+        paidAt: paid?.paidAt ?? null,
+        isOptional: !f.isMandatory,
+      };
+    });
+
+    const total = items.reduce((sum, i) => sum + i.amount, 0);
+    const paidTotal = items.filter((i) => i.status === 'PAID').reduce((sum, i) => sum + i.amount, 0);
+
+    return { items, summary: { total, paid: paidTotal, outstanding: total - paidTotal } };
   }
 
   // ---- Dashboard summary ----

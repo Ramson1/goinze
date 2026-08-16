@@ -192,6 +192,10 @@ export const admissionsApi = {
   admit: (id: string) => api.patch<ApplicationRecord>(`/admissions/${id}/admit`),
   generateLetter: (id: string) =>
     api.post<ApplicationRecord>(`/admissions/${id}/letter`),
+  sendLetterEmail: (id: string) =>
+    api.post<{ success: boolean; message: string }>(`/admissions/${id}/send-letter`),
+  createStudentPassword: (id: string) =>
+    api.post<{ tempPassword: string; studentId: string }>(`/admissions/${id}/create-password`),
   updateVerification: (
     id: string,
     payload: {
@@ -201,6 +205,7 @@ export const admissionsApi = {
       verificationCourseApproved?: boolean;
     },
   ) => api.patch<ApplicationRecord>(`/admissions/${id}/verification`, payload),
+  remove: (id: string) => api.delete<{ success: boolean; message: string }>(`/admissions/${id}`),
 };
 
 // ---- Finance ----
@@ -227,12 +232,29 @@ export interface FeeStructure {
   type: string;
   amount: string; // Prisma Decimal -> string
   level: number | null;
+  semester: string | null;
   programmeId: string | null;
   departmentId: string | null;
   isMandatory: boolean;
   allowInstallment: boolean;
   sessionId: string | null;
   session: { id: string; name: string } | null;
+}
+
+export interface StudentFeeItem {
+  id: string;
+  description: string;
+  type: string;
+  amount: number;
+  status: 'PAID' | 'PENDING';
+  ref: string | null;
+  paidAt: string | null;
+  isOptional: boolean;
+}
+
+export interface StudentFeeBreakdown {
+  items: StudentFeeItem[];
+  summary: { total: number; paid: number; outstanding: number };
 }
 
 export interface Payment {
@@ -281,6 +303,7 @@ export const financeApi = {
     amount: number;
     type?: string;
     level?: number;
+    semester?: string;
     departmentId?: string;
     isMandatory?: boolean;
     allowInstallment?: boolean;
@@ -290,6 +313,7 @@ export const financeApi = {
     amount?: number;
     type?: string;
     level?: number;
+    semester?: string;
     departmentId?: string;
     isMandatory?: boolean;
     allowInstallment?: boolean;
@@ -298,6 +322,8 @@ export const financeApi = {
     request<FeeStructure>(`/finance/fee-structures/${id}`, { method: 'DELETE' }),
   refund: (paymentId: string, reason?: string) =>
     api.post<{ id: string; amount: string }>('/finance/refunds', { paymentId, reason }),
+  studentFees: (studentId: string) =>
+    api.get<StudentFeeBreakdown>(`/finance/student-fees/${studentId}`),
 };
 
 // ---- Results (admin approval workflow) ----
@@ -579,6 +605,7 @@ export interface StaffRecord {
   employmentDate: string | null;
   qualification: string | null;
   isLecturer: boolean;
+  isActive: boolean;
   staffCategory: string | null;
   departmentId: string | null;
   department: { id: string; name: string; code: string } | null;
@@ -626,6 +653,7 @@ export const staffApi = {
   update: (id: string, payload: Partial<StaffInput>) =>
     api.patch<StaffRecord>(`/staff/${id}`, payload),
   remove: (id: string) => request<{ deleted: boolean }>(`/staff/${id}`, { method: 'DELETE' }),
+  toggleActive: (id: string) => api.patch<StaffRecord>(`/staff/${id}/toggle-active`),
 };
 
 // ---- Academics (faculties / departments / programmes / courses) ----

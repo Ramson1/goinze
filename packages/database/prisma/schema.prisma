@@ -491,6 +491,7 @@ model Staff {
   employmentDate  DateTime?
   qualification   String?
   isLecturer      Boolean  @default(false)
+  isActive        Boolean  @default(true)
   staffCategory   StaffCategory?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -670,6 +671,7 @@ model FeeStructure {
   type        FeeType  @default(SCHOOL)
   amount      Decimal  @db.Decimal(12, 2)
   level       Int?
+  semester    Semester?
   programmeId String?
   departmentId String?
   department  Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)

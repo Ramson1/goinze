@@ -187,7 +187,12 @@ export default function PaymentsPage() {
                   const StatusIcon = cfg.icon;
                   return (
                     <tr key={f.id} className="transition hover:bg-slate-50">
-                      <td className="px-6 py-4 font-medium text-slate-900">{f.description}</td>
+                      <td className="px-6 py-4">
+                        <span className="font-medium text-slate-900">{f.description}</span>
+                        {f.isOptional && (
+                          <span className="ml-1.5 inline-flex items-center rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-600">Optional</span>
+                        )}
+                      </td>
                       <td className="px-4 py-4 text-xs text-slate-500">{f.type}</td>
                       <td className="px-4 py-4 font-mono text-xs text-slate-400">{f.ref ?? '—'}</td>
                       <td className="px-4 py-4 text-right font-semibold text-slate-900">

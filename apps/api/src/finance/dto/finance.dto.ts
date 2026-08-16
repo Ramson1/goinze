@@ -50,6 +50,10 @@ export class CreateFeeStructureDto {
   level?: number;
 
   @IsOptional()
+  @IsEnum(['FIRST', 'SECOND', 'THIRD'])
+  semester?: string;
+
+  @IsOptional()
   @IsString()
   programmeId?: string;
 
@@ -89,6 +93,10 @@ export class UpdateFeeStructureDto {
   @Type(() => Number)
   @IsInt()
   level?: number;
+
+  @IsOptional()
+  @IsEnum(['FIRST', 'SECOND', 'THIRD'])
+  semester?: string;
 
   @IsOptional()
   @IsString()

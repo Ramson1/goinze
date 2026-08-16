@@ -34,9 +34,9 @@ import {
   financeApi,
   studentsApi,
   type DepartmentRef,
-  type FeeStructure,
   type Paginated,
   type Student,
+  type StudentFeeBreakdown,
   type StudentPayment,
   type StudentResult,
   type StudentStatus,
@@ -63,6 +63,23 @@ const STATUSES: StudentStatus[] = [
 ];
 const PAGE_SIZE = 10;
 
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]+)'));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function decodeRoleFromToken(token: string): string | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1]));
+    return payload.role ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function titleCase(value: string): string {
   return value
     .toLowerCase()
@@ -84,6 +101,14 @@ export default function StudentsPage() {
   const [actingId, setActingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+
+  // Check user role on mount
+  useEffect(() => {
+    const token = getCookie('access_token');
+    const role = token ? decodeRoleFromToken(token) : null;
+    setIsSuperAdmin(role === 'SUPER_ADMIN');
+  }, []);
 
   // Add-student form
   const [showForm, setShowForm] = useState(false);
@@ -129,8 +154,11 @@ export default function StudentsPage() {
   // Academic record modal
   const [recordStudent, setRecordStudent] = useState<Student | null>(null);
   const [recordLoading, setRecordLoading] = useState(false);
-  const [feeStructures, setFeeStructures] = useState<FeeStructure[]>([]);
+  const [studentFees, setStudentFees] = useState<StudentFeeBreakdown | null>(null);
   const [copiedPw, setCopiedPw] = useState<string | null>(null);
+
+  // Custom confirm dialog
+  const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
 
   const loadStudents = useCallback(() => {
     setLoading(true);
@@ -175,8 +203,19 @@ export default function StudentsPage() {
       archive: `Archive ${student.firstName} ${student.lastName}? This hides them from active lists.`,
       reactivate: `Reactivate ${student.firstName} ${student.lastName}?`,
     };
-    if (!window.confirm(labels[action])) return;
+    setConfirmDialog({
+      message: labels[action],
+      onConfirm: () => {
+        setConfirmDialog(null);
+        doRunAction(student, action);
+      },
+    });
+  }
 
+  async function doRunAction(
+    student: Student,
+    action: 'suspend' | 'graduate' | 'archive' | 'reactivate',
+  ) {
     setActingId(student.id);
     setError(null);
     setNotice(null);
@@ -195,7 +234,16 @@ export default function StudentsPage() {
   }
 
   async function handleResetPassword(student: Student) {
-    if (!window.confirm(`Reset password for ${student.firstName} ${student.lastName}? A new temporary password will be generated.`)) return;
+    setConfirmDialog({
+      message: `Reset password for ${student.firstName} ${student.lastName}? A new temporary password will be generated.`,
+      onConfirm: () => {
+        setConfirmDialog(null);
+        doResetPassword(student);
+      },
+    });
+  }
+
+  async function doResetPassword(student: Student) {
     setResettingPassword(true);
     setError(null);
     setNotice(null);
@@ -216,10 +264,10 @@ export default function StudentsPage() {
     try {
       const [full, fees] = await Promise.all([
         studentsApi.get(student.id),
-        financeApi.feeStructures().catch(() => [] as FeeStructure[]),
+        financeApi.studentFees(student.id).catch(() => ({ items: [], summary: { total: 0, paid: 0, outstanding: 0 } }) as StudentFeeBreakdown),
       ]);
       setRecordStudent(full);
-      setFeeStructures(fees);
+      setStudentFees(fees);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load student record.');
     } finally {
@@ -302,7 +350,16 @@ export default function StudentsPage() {
   }
 
   async function deleteStudent(student: Student) {
-    if (!window.confirm(`Delete ${student.firstName} ${student.lastName}? This cannot be undone.`)) return;
+    setConfirmDialog({
+      message: `Delete ${student.firstName} ${student.lastName}? This cannot be undone.`,
+      onConfirm: () => {
+        setConfirmDialog(null);
+        doDeleteStudent(student);
+      },
+    });
+  }
+
+  async function doDeleteStudent(student: Student) {
     setActingId(student.id);
     setError(null);
     setNotice(null);
@@ -318,7 +375,16 @@ export default function StudentsPage() {
   }
 
   async function handlePromote() {
-    if (!window.confirm('Promote all active students to the next level? This will increment each active student\'s level by 100. Maximum level is 300.')) return;
+    setConfirmDialog({
+      message: "Promote all active students to the next level? This will increment each active student's level by 100. Maximum level is 300.",
+      onConfirm: () => {
+        setConfirmDialog(null);
+        doPromote();
+      },
+    });
+  }
+
+  async function doPromote() {
     setPromoting(true);
     setError(null);
     setNotice(null);
@@ -334,7 +400,16 @@ export default function StudentsPage() {
   }
 
   async function handleGraduateAll() {
-    if (!window.confirm('Graduate all active 300-level students? This will change their status to GRADUATED.')) return;
+    setConfirmDialog({
+      message: 'Graduate all active 300-level students? This will change their status to GRADUATED.',
+      onConfirm: () => {
+        setConfirmDialog(null);
+        doGraduateAll();
+      },
+    });
+  }
+
+  async function doGraduateAll() {
     setGraduatingAll(true);
     setError(null);
     setNotice(null);
@@ -530,14 +605,16 @@ export default function StudentsPage() {
                   >
                     <Archive className="h-3.5 w-3.5" /> Archive
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => deleteStudent(s)}
-                    title="Delete"
-                    className="btn-secondary flex items-center gap-1 px-2 py-1.5 text-xs text-red-600 hover:bg-red-50"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" /> Delete
-                  </button>
+                  {isSuperAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => deleteStudent(s)}
+                      title="Delete"
+                      className="btn-secondary flex items-center gap-1 px-2 py-1.5 text-xs text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> Delete
+                    </button>
+                  )}
                 </div>
               </>
             )}
@@ -1215,28 +1292,11 @@ export default function StudentsPage() {
                   {/* Fee Breakdown */}
                   <section>
                     <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Fee Breakdown</h3>
-                    {(() => {
-                      const successfulPayments = (recordStudent.payments ?? []).filter((p: StudentPayment) => p.status === 'SUCCESS');
-                      // Show fees mandatory for all students + fees specific to this student's department
-                      const mandatoryFees = feeStructures.filter((f) =>
-                        f.isMandatory && (!f.departmentId || f.departmentId === recordStudent.departmentId)
-                      );
-
-                      // Build a map of which fees have been paid
-                      const paidFeeIds = new Set<string>();
-                      const paidAmounts = new Map<string, number>();
-                      successfulPayments.forEach((p: StudentPayment) => {
-                        if (p.feeStructure?.id) {
-                          paidFeeIds.add(p.feeStructure.id);
-                          paidAmounts.set(p.feeStructure.id, (paidAmounts.get(p.feeStructure.id) ?? 0) + Number(p.amount));
-                        }
-                      });
-
-                      const paidItems = mandatoryFees.filter((f) => paidFeeIds.has(f.id));
-                      const unpaidItems = mandatoryFees.filter((f) => !paidFeeIds.has(f.id));
-                      const totalPaid = successfulPayments.reduce((sum: number, p: StudentPayment) => sum + Number(p.amount), 0);
-                      const totalExpected = mandatoryFees.reduce((sum, f) => sum + Number(f.amount), 0);
-                      const outstanding = totalExpected - totalPaid;
+                    {studentFees ? (() => {
+                      const { items, summary } = studentFees;
+                      const paidItems = items.filter((i) => i.status === 'PAID');
+                      const unpaidItems = items.filter((i) => i.status === 'PENDING');
+                      const { total, paid, outstanding } = summary;
 
                       return (
                         <>
@@ -1244,11 +1304,11 @@ export default function StudentsPage() {
                           <div className="mb-4 grid grid-cols-3 gap-4">
                             <div className="rounded-lg border border-gray-200 p-4 text-center">
                               <p className="text-xs text-gray-500">Total Expected</p>
-                              <p className="mt-1 text-xl font-bold text-gray-900">₦{totalExpected.toLocaleString()}</p>
+                              <p className="mt-1 text-xl font-bold text-gray-900">₦{total.toLocaleString()}</p>
                             </div>
                             <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-center">
                               <p className="text-xs text-green-600">Total Paid</p>
-                              <p className="mt-1 text-xl font-bold text-green-700">₦{totalPaid.toLocaleString()}</p>
+                              <p className="mt-1 text-xl font-bold text-green-700">₦{paid.toLocaleString()}</p>
                             </div>
                             <div className={`rounded-lg border p-4 text-center ${outstanding > 0 ? 'border-red-200 bg-red-50' : 'border-green-200 bg-green-50'}`}>
                               <p className={`text-xs ${outstanding > 0 ? 'text-red-600' : 'text-green-600'}`}>{outstanding > 0 ? 'Outstanding' : 'Fully Paid'}</p>
@@ -1273,11 +1333,11 @@ export default function StudentsPage() {
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-green-100">
-                                    {paidItems.map((f) => (
-                                      <tr key={f.id} className="hover:bg-green-50">
-                                        <td className="px-3 py-2 font-medium">{f.name}</td>
-                                        <td className="px-3 py-2 text-xs text-gray-600">{f.type}</td>
-                                        <td className="px-3 py-2 text-right font-semibold text-green-700">₦{Number(f.amount).toLocaleString()}</td>
+                                    {paidItems.map((item) => (
+                                      <tr key={item.id} className="hover:bg-green-50">
+                                        <td className="px-3 py-2 font-medium">{item.description}</td>
+                                        <td className="px-3 py-2 text-xs text-gray-600">{item.type}</td>
+                                        <td className="px-3 py-2 text-right font-semibold text-green-700">₦{item.amount.toLocaleString()}</td>
                                         <td className="px-3 py-2 text-center">
                                           <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
                                             <CheckCircle2 className="h-3 w-3" /> Paid
@@ -1308,11 +1368,11 @@ export default function StudentsPage() {
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-red-100">
-                                    {unpaidItems.map((f) => (
-                                      <tr key={f.id} className="hover:bg-red-50">
-                                        <td className="px-3 py-2 font-medium">{f.name}</td>
-                                        <td className="px-3 py-2 text-xs text-gray-600">{f.type}</td>
-                                        <td className="px-3 py-2 text-right font-semibold text-red-700">₦{Number(f.amount).toLocaleString()}</td>
+                                    {unpaidItems.map((item) => (
+                                      <tr key={item.id} className="hover:bg-red-50">
+                                        <td className="px-3 py-2 font-medium">{item.description}</td>
+                                        <td className="px-3 py-2 text-xs text-gray-600">{item.type}</td>
+                                        <td className="px-3 py-2 text-right font-semibold text-red-700">₦{item.amount.toLocaleString()}</td>
                                         <td className="px-3 py-2 text-center">
                                           <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
                                             <AlertCircle className="h-3 w-3" /> Unpaid
@@ -1327,11 +1387,13 @@ export default function StudentsPage() {
                           )}
 
                           {paidItems.length === 0 && unpaidItems.length === 0 && (
-                            <p className="text-sm text-gray-400">No mandatory fees configured.</p>
+                            <p className="text-sm text-gray-400">No fees configured for this student.</p>
                           )}
                         </>
                       );
-                    })()}
+                    })() : (
+                      <p className="text-sm text-gray-400">Loading fee breakdown…</p>
+                    )}
                   </section>
                 </>
               )}
@@ -1345,6 +1407,36 @@ export default function StudentsPage() {
                 className="btn-secondary px-4 py-2 text-sm"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Confirm dialog ── */}
+      {confirmDialog && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-2xl">
+            <div className="mb-5 flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+                <AlertCircle className="h-5 w-5" />
+              </div>
+              <p className="pt-1.5 text-sm text-slate-700">{confirmDialog.message}</p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDialog(null)}
+                className="btn-secondary rounded-lg px-4 py-2 text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDialog.onConfirm}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+              >
+                Confirm
               </button>
             </div>
           </div>

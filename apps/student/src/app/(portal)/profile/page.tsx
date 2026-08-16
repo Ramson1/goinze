@@ -110,8 +110,8 @@ export default function ProfilePage() {
       {/* Identity banner */}
       <Card className="mb-6 overflow-hidden">
         <div className="h-24 bg-gradient-to-r from-brand-dark via-brand to-brand-light" />
-        <div className="flex flex-col gap-4 px-6 pb-6 sm:flex-row sm:items-end sm:justify-between">
-          <div className="-mt-10 flex items-end gap-4">
+        <div className="flex flex-col gap-4 px-6 pb-6 pt-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="-mt-10 flex items-end gap-4 sm:-mt-12">
             <span className="flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-brand to-brand-light text-2xl font-bold text-white ring-4 ring-white">
               {initials}
             </span>

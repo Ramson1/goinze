@@ -123,6 +123,7 @@ export interface FeeItem {
   status: 'PAID' | 'PENDING';
   ref: string | null;
   paidAt: string | null;
+  isOptional?: boolean;
 }
 
 export interface ReceiptItem {
@@ -200,6 +201,9 @@ export interface DashboardResponse {
   upcomingExams: {
     id: string;
     title: string;
+    courseCode: string | null;
+    courseTitle: string | null;
+    department: string | null;
     startsAt: string | null;
     durationMins: number;
     status: string;

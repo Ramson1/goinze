@@ -24,7 +24,7 @@ import StatusBadge from '@/components/StatusBadge';
 import {
   financeApi,
   studentsApi,
-  type FeeStructure,
+  type StudentFeeBreakdown,
   type FinanceDashboard,
   type Paginated,
   type Payment,
@@ -84,7 +84,7 @@ export default function PaymentsPage() {
   const [studentPaymentsModal, setStudentPaymentsModal] = useState<Student | null>(null);
   const [studentPaymentsLoading, setStudentPaymentsLoading] = useState(false);
   const [studentPaymentsLoadingId, setStudentPaymentsLoadingId] = useState<string | null>(null);
-  const [feeStructures, setFeeStructures] = useState<FeeStructure[]>([]);
+  const [studentFeeBreakdown, setStudentFeeBreakdown] = useState<StudentFeeBreakdown | null>(null);
 
   const loadDashboard = useCallback(() => {
     financeApi
@@ -122,10 +122,10 @@ export default function PaymentsPage() {
     try {
       const [student, fees] = await Promise.all([
         studentsApi.get(studentId),
-        financeApi.feeStructures().catch(() => [] as FeeStructure[]),
+        financeApi.studentFees(studentId).catch(() => ({ items: [], summary: { total: 0, paid: 0, outstanding: 0 } }) as StudentFeeBreakdown),
       ]);
       setStudentPaymentsModal(student);
-      setFeeStructures(fees);
+      setStudentFeeBreakdown(fees);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load student payments.');
       setStudentPaymentsModal(null);
@@ -391,26 +391,11 @@ export default function PaymentsPage() {
                   {/* Fee Breakdown */}
                   <section>
                     <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Fee Breakdown</h3>
-                    {(() => {
-                      const successfulPayments = (studentPaymentsModal.payments ?? []).filter((p: StudentPayment) => p.status === 'SUCCESS');
-                      // Show fees mandatory for all students + fees specific to this student's department
-                      const mandatoryFees = feeStructures.filter((f) =>
-                        f.isMandatory && (!f.departmentId || f.departmentId === studentPaymentsModal.departmentId)
-                      );
-
-                      // Build a map of which fees have been paid
-                      const paidFeeIds = new Set<string>();
-                      successfulPayments.forEach((p: StudentPayment) => {
-                        if (p.feeStructure?.id) {
-                          paidFeeIds.add(p.feeStructure.id);
-                        }
-                      });
-
-                      const paidItems = mandatoryFees.filter((f) => paidFeeIds.has(f.id));
-                      const unpaidItems = mandatoryFees.filter((f) => !paidFeeIds.has(f.id));
-                      const totalPaid = successfulPayments.reduce((sum: number, p: StudentPayment) => sum + Number(p.amount), 0);
-                      const totalExpected = mandatoryFees.reduce((sum, f) => sum + Number(f.amount), 0);
-                      const outstanding = totalExpected - totalPaid;
+                    {studentFeeBreakdown ? (() => {
+                      const { items, summary } = studentFeeBreakdown;
+                      const paidItems = items.filter((i) => i.status === 'PAID');
+                      const unpaidItems = items.filter((i) => i.status === 'PENDING');
+                      const { total, paid, outstanding } = summary;
 
                       return (
                         <>
@@ -418,11 +403,11 @@ export default function PaymentsPage() {
                           <div className="mb-4 grid grid-cols-3 gap-4">
                             <div className="rounded-lg border border-gray-200 p-4 text-center">
                               <p className="text-xs text-gray-500">Total Expected</p>
-                              <p className="mt-1 text-xl font-bold text-gray-900">₦{totalExpected.toLocaleString()}</p>
+                              <p className="mt-1 text-xl font-bold text-gray-900">₦{total.toLocaleString()}</p>
                             </div>
                             <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-center">
                               <p className="text-xs text-green-600">Total Paid</p>
-                              <p className="mt-1 text-xl font-bold text-green-700">₦{totalPaid.toLocaleString()}</p>
+                              <p className="mt-1 text-xl font-bold text-green-700">₦{paid.toLocaleString()}</p>
                             </div>
                             <div className={`rounded-lg border p-4 text-center ${outstanding > 0 ? 'border-red-200 bg-red-50' : 'border-green-200 bg-green-50'}`}>
                               <p className={`text-xs ${outstanding > 0 ? 'text-red-600' : 'text-green-600'}`}>{outstanding > 0 ? 'Outstanding' : 'Fully Paid'}</p>
@@ -447,11 +432,11 @@ export default function PaymentsPage() {
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-green-100">
-                                    {paidItems.map((f) => (
-                                      <tr key={f.id} className="hover:bg-green-50">
-                                        <td className="px-3 py-2 font-medium">{f.name}</td>
-                                        <td className="px-3 py-2 text-xs text-gray-600">{f.type}</td>
-                                        <td className="px-3 py-2 text-right font-semibold text-green-700">₦{Number(f.amount).toLocaleString()}</td>
+                                    {paidItems.map((item) => (
+                                      <tr key={item.id} className="hover:bg-green-50">
+                                        <td className="px-3 py-2 font-medium">{item.description}</td>
+                                        <td className="px-3 py-2 text-xs text-gray-600">{item.type}</td>
+                                        <td className="px-3 py-2 text-right font-semibold text-green-700">₦{item.amount.toLocaleString()}</td>
                                         <td className="px-3 py-2 text-center">
                                           <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
                                             <CheckCircle2 className="h-3 w-3" /> Paid
@@ -482,11 +467,11 @@ export default function PaymentsPage() {
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-red-100">
-                                    {unpaidItems.map((f) => (
-                                      <tr key={f.id} className="hover:bg-red-50">
-                                        <td className="px-3 py-2 font-medium">{f.name}</td>
-                                        <td className="px-3 py-2 text-xs text-gray-600">{f.type}</td>
-                                        <td className="px-3 py-2 text-right font-semibold text-red-700">₦{Number(f.amount).toLocaleString()}</td>
+                                    {unpaidItems.map((item) => (
+                                      <tr key={item.id} className="hover:bg-red-50">
+                                        <td className="px-3 py-2 font-medium">{item.description}</td>
+                                        <td className="px-3 py-2 text-xs text-gray-600">{item.type}</td>
+                                        <td className="px-3 py-2 text-right font-semibold text-red-700">₦{item.amount.toLocaleString()}</td>
                                         <td className="px-3 py-2 text-center">
                                           <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
                                             <AlertCircle className="h-3 w-3" /> Unpaid
@@ -501,11 +486,13 @@ export default function PaymentsPage() {
                           )}
 
                           {paidItems.length === 0 && unpaidItems.length === 0 && (
-                            <p className="text-sm text-gray-400">No mandatory fees configured.</p>
+                            <p className="text-sm text-gray-400">No fees configured for this student.</p>
                           )}
                         </>
                       );
-                    })()}
+                    })() : (
+                      <p className="text-sm text-gray-400">Loading fee breakdown…</p>
+                    )}
                   </section>
                 </>
               )}

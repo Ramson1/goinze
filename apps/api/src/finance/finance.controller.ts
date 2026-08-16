@@ -150,6 +150,13 @@ export class FinanceController {
     return this.financeService.createScholarship(user.schoolId, dto);
   }
 
+  // ---- Student fee breakdown (admin) ----
+  @Get('student-fees/:studentId')
+  @Roles('SCHOOL_ADMIN', 'ACCOUNTANT')
+  getStudentFees(@Param('studentId') studentId: string) {
+    return this.financeService.studentFeeBreakdown(studentId);
+  }
+
   // ---- Ledger ----
   @Get('ledger/:studentId')
   @Roles('SCHOOL_ADMIN', 'ACCOUNTANT', 'STUDENT')

@@ -121,4 +121,14 @@ export class StaffService {
     await this.findOne(id);
     return this.prisma.db.staff.delete({ where: { id } });
   }
+
+  /** Toggle a staff member's active status (disable/enable). */
+  async toggleActive(id: string) {
+    const staff = await this.prisma.db.staff.findUnique({ where: { id } });
+    if (!staff) throw new NotFoundException('Staff not found');
+    return this.prisma.db.staff.update({
+      where: { id },
+      data: { isActive: !staff.isActive },
+    });
+  }
 }

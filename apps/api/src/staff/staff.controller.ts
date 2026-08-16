@@ -58,7 +58,13 @@ export class StaffController {
     return this.staffService.update(id, data);
   }
 
+  @Patch(':id/toggle-active')
+  toggleActive(@Param('id') id: string) {
+    return this.staffService.toggleActive(id);
+  }
+
   @Delete(':id')
+  @Roles('SUPER_ADMIN')
   remove(@Param('id') id: string) {
     return this.staffService.remove(id);
   }

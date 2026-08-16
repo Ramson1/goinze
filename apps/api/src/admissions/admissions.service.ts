@@ -400,8 +400,7 @@ export class AdmissionsService {
     // Build an absolute logo URL — relative paths like /logo.png break in data-URLs and emails
     let schoolLogoUrl = school?.logoUrl || '';
     if (!schoolLogoUrl || (!schoolLogoUrl.startsWith('http://') && !schoolLogoUrl.startsWith('https://') && !schoolLogoUrl.startsWith('data:'))) {
-      const baseUrl = school?.website || this.config.get<string>('APP_URL') || 'https://goinzeschool.vercel.app';
-      schoolLogoUrl = `${baseUrl.replace(/\/+$/, '')}/logo.png`;
+      schoolLogoUrl = 'https://res.cloudinary.com/dq7vegvkk/image/upload/v1786631436/logo_phczed.png';
     }
 
     // Resolve programme name: prefer linked record, fall back to firstChoice text
@@ -476,6 +475,57 @@ export class AdmissionsService {
     });
   }
 
+  /**
+   * Re-send the admission letter email to the applicant without regenerating the letter.
+   */
+  async sendLetterEmail(id: string) {
+    const application = await this.prisma.db.application.findUnique({
+      where: { id },
+      include: { student: true },
+    });
+    if (!application) throw new NotFoundException(`Application ${id} not found`);
+    if (!application.admissionLetterUrl) {
+      throw new BadRequestException('No admission letter has been generated yet. Generate the letter first.');
+    }
+
+    await this.sendAdmissionEmail(id);
+    return { success: true, message: `Admission letter sent to ${application.email}` };
+  }
+
+  /**
+   * Generate a temporary password for the student linked to this application
+   * and update their user account so they can log in to the student portal.
+   */
+  async createStudentPassword(id: string) {
+    const application = await this.prisma.db.application.findUnique({
+      where: { id },
+      include: { student: true },
+    });
+    if (!application) throw new NotFoundException(`Application ${id} not found`);
+    if (!application.studentId) {
+      throw new BadRequestException('No student record linked to this application. Approve the application first.');
+    }
+
+    const tempPassword = crypto.randomBytes(8).toString('base64url').slice(0, 10);
+    const passwordHash = await bcrypt.hash(tempPassword, 10);
+
+    // Update the student record
+    await this.prisma.db.student.update({
+      where: { id: application.studentId },
+      data: { tempPassword },
+    });
+
+    // Update the user account if linked
+    if (application.student?.userId) {
+      await this.prisma.db.user.update({
+        where: { id: application.student.userId },
+        data: { passwordHash },
+      });
+    }
+
+    return { tempPassword, studentId: application.studentId };
+  }
+
   async updateVerification(id: string, dto: import('./dto/admission.dto').UpdateVerificationDto) {
     const application = await this.prisma.db.application.findUnique({ where: { id } });
     if (!application) throw new NotFoundException(`Application ${id} not found`);
@@ -489,6 +539,18 @@ export class AdmissionsService {
         verificationCourseApproved: dto.verificationCourseApproved ?? false,
       },
     });
+  }
+
+  /** Delete an application and its related records. */
+  async remove(id: string) {
+    const application = await this.prisma.db.application.findUnique({ where: { id } });
+    if (!application) throw new NotFoundException(`Application ${id} not found`);
+
+    // Delete related documents first
+    await this.prisma.db.document.deleteMany({ where: { applicationId: id } });
+    // Delete the application
+    await this.prisma.db.application.delete({ where: { id } });
+    return { success: true, message: `Application ${application.applicationNo} deleted.` };
   }
 
   // ---- helpers ----

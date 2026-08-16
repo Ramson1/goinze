@@ -7,8 +7,11 @@ import {
   Check,
   Eye,
   FileText,
+  Key,
   Loader2,
+  Mail,
   RefreshCw,
+  Trash2,
   X,
 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
@@ -32,6 +35,23 @@ const STATUS_FILTERS = [
   { value: 'ADMITTED', label: 'Admitted' },
   { value: 'REJECTED', label: 'Rejected' },
 ];
+
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]+)'));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function decodeRoleFromToken(token: string): string | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1]));
+    return payload.role ?? null;
+  } catch {
+    return null;
+  }
+}
 
 const reviewable = new Set(['SUBMITTED', 'UNDER_REVIEW', 'INTERVIEW']);
 
@@ -62,6 +82,15 @@ export default function AdmissionsPage() {
     verificationCourseApproved: false,
   });
   const [savingVerification, setSavingVerification] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
+
+  // Check user role on mount
+  useEffect(() => {
+    const token = getCookie('access_token');
+    const role = token ? decodeRoleFromToken(token) : null;
+    setIsSuperAdmin(role === 'SUPER_ADMIN');
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -143,6 +172,52 @@ export default function AdmissionsPage() {
 
   const onLetter = (r: ApplicationRecord) =>
     run(r.id, () => admissionsApi.generateLetter(r.id), 'Admission letter generated and sent.');
+
+  const onSendLetter = async (r: ApplicationRecord) => {
+    setBusyId(r.id);
+    setNotice(null);
+    try {
+      const res = await admissionsApi.sendLetterEmail(r.id);
+      setNotice(res.message);
+    } catch (err) {
+      setNotice(err instanceof ApiError ? err.message : 'Failed to send letter email.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const onCreatePassword = async (r: ApplicationRecord) => {
+    setBusyId(r.id);
+    setError(null);
+    try {
+      const res = await admissionsApi.createStudentPassword(r.id);
+      setNotice(`Password created: ${res.tempPassword} — share this with the student.`);
+    } catch (err) {
+      setNotice(err instanceof ApiError ? err.message : 'Failed to create password.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const onDelete = (r: ApplicationRecord) => {
+    setConfirmDialog({
+      message: `Delete application ${r.applicationNo} (${r.firstName} ${r.lastName})? This cannot be undone.`,
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        setBusyId(r.id);
+        setNotice(null);
+        try {
+          const res = await admissionsApi.remove(r.id);
+          setNotice(res.message);
+          setRows((prev) => prev.filter((row) => row.id !== r.id));
+        } catch (err) {
+          setNotice(err instanceof ApiError ? err.message : 'Failed to delete application.');
+        } finally {
+          setBusyId(null);
+        }
+      },
+    });
+  };
 
   const handleVerificationChange = async (
     field: keyof typeof verification,
@@ -236,14 +311,38 @@ export default function AdmissionsPage() {
             )}
 
             {(r.status === 'APPROVED' || r.status === 'ADMITTED') && (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => onLetter(r)}
-                className="btn-secondary inline-flex items-center gap-1 px-2.5 py-1.5 text-xs disabled:opacity-50"
-              >
-                <FileText className="h-3.5 w-3.5" /> Letter
-              </button>
+              <>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onLetter(r)}
+                  className="btn-secondary inline-flex items-center gap-1 px-2.5 py-1.5 text-xs disabled:opacity-50"
+                >
+                  <FileText className="h-3.5 w-3.5" /> Letter
+                </button>
+                {r.admissionLetterUrl && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => onSendLetter(r)}
+                    className="btn-secondary inline-flex items-center gap-1 px-2.5 py-1.5 text-xs disabled:opacity-50"
+                    title="Send admission letter email to the student"
+                  >
+                    <Mail className="h-3.5 w-3.5" /> Send
+                  </button>
+                )}
+                {r.student && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => onCreatePassword(r)}
+                    className="btn-secondary inline-flex items-center gap-1 px-2.5 py-1.5 text-xs disabled:opacity-50"
+                    title="Create a temporary password for the student portal"
+                  >
+                    <Key className="h-3.5 w-3.5" /> Password
+                  </button>
+                )}
+              </>
             )}
 
             {r.admissionLetterUrl && (
@@ -276,6 +375,18 @@ export default function AdmissionsPage() {
             >
               <Eye className="h-3.5 w-3.5" /> Details
             </button>
+
+            {isSuperAdmin && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => onDelete(r)}
+                className="btn-secondary inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
+                title="Delete this application"
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Delete
+              </button>
+            )}
 
             {busy && <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />}
           </div>
@@ -699,6 +810,36 @@ export default function AdmissionsPage() {
               >
                 {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                 Confirm Approval
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Confirm dialog ── */}
+      {confirmDialog && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-2xl">
+            <div className="mb-5 flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+                <AlertCircle className="h-5 w-5" />
+              </div>
+              <p className="pt-1.5 text-sm text-slate-700">{confirmDialog.message}</p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDialog(null)}
+                className="btn-secondary rounded-lg px-4 py-2 text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDialog.onConfirm}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+              >
+                Confirm
               </button>
             </div>
           </div>

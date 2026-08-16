@@ -29,6 +29,11 @@ const inputCls =
 const labelCls = "mb-1.5 block text-sm font-medium text-slate-700";
 const sectionCls = "rounded-xl border border-slate-200 bg-white p-6 shadow-sm";
 
+/** Strip non-digit characters from an input value. */
+function digitsOnly(v: string) {
+  return v.replace(/\D/g, "");
+}
+
 const STATUS_LABEL: Record<string, string> = {
   DRAFT: "Draft",
   SUBMITTED: "Submitted — under review",
@@ -48,13 +53,13 @@ const NIGERIAN_STATES = [
 ];
 
 const DOC_TYPES = [
-  { key: "PASSPORT_PHOTO", label: "Passport Photographs (2)" },
-  { key: "BIRTH_CERTIFICATE", label: "Birth Certificate / Declaration of Age" },
-  { key: "CERTIFICATE", label: "Photocopies of Educational Certificates" },
-  { key: "TESTIMONIAL", label: "Testimonial from Last Institution" },
-  { key: "GOOD_CONDUCT", label: "Letter of Good Conduct" },
-  { key: "INGENIUNE_FORM", label: "Local Government Indigene Form" },
-  { key: "NAME_CHANGE", label: "Evidence of Change of Name (if applicable)" },
+  { key: "PASSPORT_PHOTO", label: "Passport Photographs (2)", required: true },
+  { key: "BIRTH_CERTIFICATE", label: "Birth Certificate / Declaration of Age", required: true },
+  { key: "CERTIFICATE", label: "Photocopies of Educational Certificates", required: true },
+  { key: "TESTIMONIAL", label: "Testimonial from Last Institution", required: false },
+  { key: "GOOD_CONDUCT", label: "Letter of Good Conduct", required: true },
+  { key: "INGENIUNE_FORM", label: "Local Government Indigene Form", required: true },
+  { key: "NAME_CHANGE", label: "Evidence of Change of Name (if applicable)", required: false },
 ] as const;
 
 const defaultProgrammes = [
@@ -178,6 +183,47 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!declaredAgreed) { setError("You must agree to the declaration before submitting."); return; }
+
+    // ── Validate all required fields before allowing payment/submission ──
+    const missing: string[] = [];
+
+    // Personal Information (except Medical History)
+    if (!surname.trim()) missing.push("Surname");
+    if (!otherNames.trim()) missing.push("Other Names");
+    if (!dob) missing.push("Date of Birth");
+    if (!sex) missing.push("Sex");
+    if (!maritalStatus) missing.push("Marital Status");
+    if (!stateOfOrigin) missing.push("State of Origin");
+    if (!localGovt.trim()) missing.push("Local Government");
+    if (!gsm.trim()) missing.push("GSM Number");
+    if (!email.trim()) missing.push("Email Address");
+    if (!postalAddr.trim()) missing.push("Postal Address");
+    if (!homeAddr.trim()) missing.push("Permanent Home Address");
+    if (!guardianName.trim()) missing.push("Guardian/Sponsor Name");
+    if (!guardianGsm.trim()) missing.push("Guardian/Sponsor GSM");
+
+    // Programme (at least first choice)
+    if (!firstChoice) missing.push("Programme (First Choice)");
+
+    // Schools Attended (at least one school with a name)
+    const validSchools = schools.filter(s => s.schoolName.trim());
+    if (validSchools.length === 0) missing.push("Schools Attended (at least one)");
+
+    // O' Level Results (at least one result with a subject)
+    const validOlevel = olevel.filter(r => r.subject.trim());
+    if (validOlevel.length === 0) missing.push("O' Level Results (at least one)");
+
+    // Required documents
+    for (const dt of DOC_TYPES) {
+      if (dt.required && !docFiles[dt.key]) {
+        missing.push(dt.label);
+      }
+    }
+
+    if (missing.length > 0) {
+      setError(`Please complete the following required fields:\n• ${missing.join("\n• ")}`);
+      return;
+    }
 
     const totalFees = appFees.reduce((sum, f) => sum + f.amount, 0);
     if (totalFees <= 0) {
@@ -355,7 +401,10 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
     setAlevel([{ institution: "", from: "", to: "", programme: "", qualification: "" }]);
     setEmployment([{ employer: "", position: "", from: "", to: "" }]);
     setDocFiles({}); setDeclaredAgreed(false); setSignatureName(""); setDeclDate("");
-    setError(null);
+    setError(null); setPaying(false); setVerifying(false); setSubmitting(false);
+    setUploadProgress(""); paymentTxRef.current = "";
+    // Scroll to top so user sees the form from the beginning
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   /* ─── render ─── */
@@ -390,20 +439,20 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
               <div><label className={labelCls}>Sex *</label>
                 <select required value={sex} onChange={e => setSex(e.target.value)} className={inputCls}><option value="" disabled>Select…</option><option>Male</option><option>Female</option></select>
               </div>
-              <div><label className={labelCls}>Marital Status</label>
-                <select value={maritalStatus} onChange={e => setMaritalStatus(e.target.value)} className={inputCls}><option value="">Select…</option><option>Single</option><option>Married</option><option>Divorced</option><option>Widowed</option></select>
+              <div><label className={labelCls}>Marital Status *</label>
+                <select required value={maritalStatus} onChange={e => setMaritalStatus(e.target.value)} className={inputCls}><option value="">Select…</option><option>Single</option><option>Married</option><option>Divorced</option><option>Widowed</option></select>
               </div>
-              <div><label className={labelCls}>State of Origin</label>
-                <select value={stateOfOrigin} onChange={e => setStateOfOrigin(e.target.value)} className={inputCls}><option value="">Select…</option>{NIGERIAN_STATES.map(s => <option key={s}>{s}</option>)}</select>
+              <div><label className={labelCls}>State of Origin *</label>
+                <select required value={stateOfOrigin} onChange={e => setStateOfOrigin(e.target.value)} className={inputCls}><option value="">Select…</option>{NIGERIAN_STATES.map(s => <option key={s}>{s}</option>)}</select>
               </div>
-              <div><label className={labelCls}>Local Government</label><input type="text" value={localGovt} onChange={e => setLocalGovt(e.target.value)} className={inputCls} /></div>
-              <div><label className={labelCls}>GSM Number *</label><input type="tel" required value={gsm} onChange={e => setGsm(e.target.value)} placeholder="0810 557 6612" className={inputCls} /></div>
+              <div><label className={labelCls}>Local Government *</label><input type="text" required value={localGovt} onChange={e => setLocalGovt(e.target.value)} className={inputCls} /></div>
+              <div><label className={labelCls}>GSM Number *</label><input type="tel" inputMode="numeric" pattern="[0-9]*" required value={gsm} onChange={e => setGsm(digitsOnly(e.target.value))} placeholder="08105576612" className={inputCls} /></div>
               <div><label className={labelCls}>Email Address *</label><input type="email" required value={email} onChange={e => setEmail(e.target.value)} className={inputCls} /></div>
-              <div className="sm:col-span-2"><label className={labelCls}>Postal Address</label><input type="text" value={postalAddr} onChange={e => setPostalAddr(e.target.value)} className={inputCls} /></div>
+              <div className="sm:col-span-2"><label className={labelCls}>Postal Address *</label><input type="text" required value={postalAddr} onChange={e => setPostalAddr(e.target.value)} className={inputCls} /></div>
               <div className="sm:col-span-2 lg:col-span-3"><label className={labelCls}>Medical History (if any)</label><textarea value={medicalHistory} onChange={e => setMedicalHistory(e.target.value)} rows={2} className={inputCls + " resize-none"} placeholder="Any known medical conditions, allergies, etc." /></div>
-              <div className="sm:col-span-2 lg:col-span-3"><label className={labelCls}>Permanent Home Address (if different)</label><input type="text" value={homeAddr} onChange={e => setHomeAddr(e.target.value)} className={inputCls} /></div>
-              <div><label className={labelCls}>Guardian/Sponsor Name</label><input type="text" value={guardianName} onChange={e => setGuardianName(e.target.value)} className={inputCls} /></div>
-              <div><label className={labelCls}>Guardian/Sponsor GSM</label><input type="tel" value={guardianGsm} onChange={e => setGuardianGsm(e.target.value)} className={inputCls} /></div>
+              <div className="sm:col-span-2 lg:col-span-3"><label className={labelCls}>Permanent Home Address *</label><input type="text" required value={homeAddr} onChange={e => setHomeAddr(e.target.value)} className={inputCls} /></div>
+              <div><label className={labelCls}>Guardian/Sponsor Name *</label><input type="text" required value={guardianName} onChange={e => setGuardianName(e.target.value)} className={inputCls} /></div>
+              <div><label className={labelCls}>Guardian/Sponsor GSM *</label><input type="tel" inputMode="numeric" pattern="[0-9]*" required value={guardianGsm} onChange={e => setGuardianGsm(digitsOnly(e.target.value))} className={inputCls} /></div>
             </div>
           </div>
 
@@ -412,8 +461,8 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
             <h3 className="mb-5 text-base font-bold text-slate-900 border-b border-slate-100 pb-3">Programme (Course of Study)</h3>
             <p className="mb-4 text-xs text-slate-500">Please refer to the school brochure for your course of study.</p>
             <div className="grid gap-4 sm:grid-cols-3">
-              <div><label className={labelCls}>First Choice</label>
-                <select value={firstChoice} onChange={e => setFirstChoice(e.target.value)} className={inputCls}><option value="">Select…</option>{programmes.map((p, i) => <option key={i} value={p.name}>{p.name}</option>)}</select>
+              <div><label className={labelCls}>First Choice *</label>
+                <select required value={firstChoice} onChange={e => setFirstChoice(e.target.value)} className={inputCls}><option value="">Select…</option>{programmes.map((p, i) => <option key={i} value={p.name}>{p.name}</option>)}</select>
               </div>
               <div><label className={labelCls}>Second Choice</label>
                 <select value={secondChoice} onChange={e => setSecondChoice(e.target.value)} className={inputCls}><option value="">Select…</option>{programmes.map((p, i) => <option key={i} value={p.name}>{p.name}</option>)}</select>
@@ -431,8 +480,8 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
               {schools.map((s, i) => (
                 <div key={i} className="grid gap-2 sm:grid-cols-[2fr_1fr_1fr_2fr_auto] items-end">
                   <div><label className={labelCls}>School Name</label><input value={s.schoolName} onChange={e => updateRow(schools, setSchools, i, "schoolName", e.target.value)} className={inputCls} /></div>
-                  <div><label className={labelCls}>From</label><input value={s.from} onChange={e => updateRow(schools, setSchools, i, "from", e.target.value)} placeholder="Year" className={inputCls} /></div>
-                  <div><label className={labelCls}>To</label><input value={s.to} onChange={e => updateRow(schools, setSchools, i, "to", e.target.value)} placeholder="Year" className={inputCls} /></div>
+                  <div><label className={labelCls}>From</label><input inputMode="numeric" pattern="[0-9]*" value={s.from} onChange={e => updateRow(schools, setSchools, i, "from", digitsOnly(e.target.value))} placeholder="Year" className={inputCls} /></div>
+                  <div><label className={labelCls}>To</label><input inputMode="numeric" pattern="[0-9]*" value={s.to} onChange={e => updateRow(schools, setSchools, i, "to", digitsOnly(e.target.value))} placeholder="Year" className={inputCls} /></div>
                   <div><label className={labelCls}>Certificate Obtained</label><input value={s.certificate} onChange={e => updateRow(schools, setSchools, i, "certificate", e.target.value)} className={inputCls} /></div>
                   <button type="button" onClick={() => removeRow(schools, setSchools, i)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
                 </div>
@@ -450,12 +499,12 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
                   <div><label className={labelCls}>Examination</label>
                     <select value={r.examination} onChange={e => updateRow(olevel, setOlevel, i, "examination", e.target.value)} className={inputCls}><option>WAEC</option><option>NECO</option><option>NABTEB</option></select>
                   </div>
-                  <div><label className={labelCls}>Centre No.</label><input value={r.centreNo} onChange={e => updateRow(olevel, setOlevel, i, "centreNo", e.target.value)} className={inputCls} /></div>
+                  <div><label className={labelCls}>Centre No.</label><input inputMode="numeric" pattern="[0-9]*" value={r.centreNo} onChange={e => updateRow(olevel, setOlevel, i, "centreNo", digitsOnly(e.target.value))} className={inputCls} /></div>
                   <div><label className={labelCls}>Subject</label><input value={r.subject} onChange={e => updateRow(olevel, setOlevel, i, "subject", e.target.value)} className={inputCls} /></div>
                   <div><label className={labelCls}>Grade</label>
                     <select value={r.grade} onChange={e => updateRow(olevel, setOlevel, i, "grade", e.target.value)} className={inputCls}><option value="">Select</option>{["A1","B2","B3","C4","C5","C6","D7","E8","F9"].map(g => <option key={g}>{g}</option>)}</select>
                   </div>
-                  <div><label className={labelCls}>Year</label><input value={r.year} onChange={e => updateRow(olevel, setOlevel, i, "year", e.target.value)} placeholder="YYYY" className={inputCls} /></div>
+                  <div><label className={labelCls}>Year</label><input inputMode="numeric" pattern="[0-9]*" value={r.year} onChange={e => updateRow(olevel, setOlevel, i, "year", digitsOnly(e.target.value))} placeholder="YYYY" className={inputCls} /></div>
                   <button type="button" onClick={() => removeRow(olevel, setOlevel, i)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
                 </div>
               ))}
@@ -501,7 +550,7 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
           {/* ── Section 7: Document Uploads ── */}
           <div className={sectionCls}>
             <h3 className="mb-2 text-base font-bold text-slate-900 border-b border-slate-100 pb-3">Supporting Documents</h3>
-            <p className="mb-4 text-xs text-slate-500">Upload any available documents. All uploads are optional — you can submit your application without them.</p>
+            <p className="mb-4 text-xs text-slate-500">Upload required documents marked with <span className="font-semibold text-rose-500">*</span>. Optional documents can be uploaded if available.</p>
             <div className="grid gap-4 sm:grid-cols-2">
               {DOC_TYPES.map(dt => (
                 <label key={dt.key} className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3 transition-colors hover:border-brand hover:bg-blue-50">
@@ -511,7 +560,7 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
                     <Upload className="h-5 w-5 shrink-0 text-brand" />
                   )}
                   <span className="flex-1 text-sm text-slate-600">
-                    {docFiles[dt.key] ? docFiles[dt.key]!.name : dt.label}
+                    {docFiles[dt.key] ? docFiles[dt.key]!.name : <>{dt.label}{dt.required && <span className="text-rose-500 font-semibold"> *</span>}</>}
                   </span>
                   {docFiles[dt.key] && (
                     <button type="button" onClick={(e) => { e.preventDefault(); setDocFiles(prev => { const c = { ...prev }; delete c[dt.key]; return c; }); }}
@@ -543,7 +592,7 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
           </div>
 
           {/* ── Error / Submit ── */}
-          {error && <p className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm text-rose-600">{error}</p>}
+          {error && <p className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm text-rose-600 whitespace-pre-line">{error}</p>}
           {uploadProgress && <p className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm text-blue-700"><Loader2 className="h-4 w-4 animate-spin" />{uploadProgress}</p>}
 
           {/* Payment summary */}

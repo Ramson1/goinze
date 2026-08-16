@@ -14,6 +14,8 @@ import {
   Search,
   Trash2,
   Upload,
+  UserX,
+  UserCheck,
   X,
 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
@@ -38,6 +40,23 @@ const STAFF_CATEGORIES = [
 const GENDERS = ['MALE', 'FEMALE', 'OTHER'];
 const PAGE_SIZE = 10;
 
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]+)'));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function decodeRoleFromToken(token: string): string | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1]));
+    return payload.role ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function titleCase(value: string): string {
   return value
     .toLowerCase()
@@ -58,6 +77,15 @@ export default function StaffPage() {
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
+
+  // Check user role on mount
+  useEffect(() => {
+    const token = getCookie('access_token');
+    const role = token ? decodeRoleFromToken(token) : null;
+    setIsSuperAdmin(role === 'SUPER_ADMIN');
+  }, []);
 
   // Add-staff form
   const [showForm, setShowForm] = useState(false);
@@ -127,8 +155,17 @@ export default function StaffPage() {
     setPage(1);
   }, [search, deptFilter, roleFilter]);
 
-  async function removeStaff(s: StaffRecord) {
-    if (!window.confirm(`Remove ${s.firstName} ${s.lastName}? This cannot be undone.`)) return;
+  function removeStaff(s: StaffRecord) {
+    setConfirmDialog({
+      message: `Remove ${s.firstName} ${s.lastName}? This cannot be undone.`,
+      onConfirm: () => {
+        setConfirmDialog(null);
+        doRemoveStaff(s);
+      },
+    });
+  }
+
+  async function doRemoveStaff(s: StaffRecord) {
     setRemovingId(s.id);
     setError(null);
     setNotice(null);
@@ -138,6 +175,32 @@ export default function StaffPage() {
       loadStaff();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not remove staff.');
+    } finally {
+      setRemovingId(null);
+    }
+  }
+
+  function toggleStaffActive(s: StaffRecord) {
+    const action = s.isActive ? 'disable' : 'enable';
+    setConfirmDialog({
+      message: `${action === 'disable' ? 'Disable' : 'Enable'} ${s.firstName} ${s.lastName}? ${action === 'disable' ? 'They will no longer have access to the system.' : 'They will regain access to the system.'}`,
+      onConfirm: () => {
+        setConfirmDialog(null);
+        doToggleActive(s);
+      },
+    });
+  }
+
+  async function doToggleActive(s: StaffRecord) {
+    setRemovingId(s.id);
+    setError(null);
+    setNotice(null);
+    try {
+      const updated = await staffApi.toggleActive(s.id);
+      setNotice(`${updated.firstName} ${updated.lastName} ${updated.isActive ? 'enabled' : 'disabled'}.`);
+      loadStaff();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update staff status.');
     } finally {
       setRemovingId(null);
     }
@@ -338,6 +401,20 @@ export default function StaffPage() {
       render: (s) => s.employmentType ?? <span className="text-gray-400">—</span>,
     },
     {
+      key: 'status',
+      header: 'Status',
+      render: (s) =>
+        s.isActive !== false ? (
+          <span className="inline-flex items-center whitespace-nowrap rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
+            Active
+          </span>
+        ) : (
+          <span className="inline-flex items-center whitespace-nowrap rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-600/20">
+            Disabled
+          </span>
+        ),
+    },
+    {
       key: 'actions',
       header: 'Action',
       render: (s) =>
@@ -349,18 +426,37 @@ export default function StaffPage() {
               type="button"
               onClick={() => openEditModal(s)}
               title="Edit"
-              className="btn-secondary px-2 py-1.5 text-xs text-indigo-600 hover:bg-indigo-50"
+              className="btn-secondary inline-flex items-center gap-1 px-2 py-1.5 text-xs text-indigo-600 hover:bg-indigo-50"
             >
-              <Pencil className="h-3.5 w-3.5" />
+              <Pencil className="h-3.5 w-3.5" /> Edit
             </button>
             <button
               type="button"
-              onClick={() => removeStaff(s)}
-              title="Remove"
-              className="btn-secondary px-2 py-1.5 text-xs text-rose-600 hover:bg-rose-50"
+              onClick={() => toggleStaffActive(s)}
+              title={s.isActive !== false ? 'Disable staff' : 'Enable staff'}
+              className={cn(
+                'btn-secondary inline-flex items-center gap-1 px-2 py-1.5 text-xs',
+                s.isActive !== false
+                  ? 'text-amber-600 hover:bg-amber-50'
+                  : 'text-emerald-600 hover:bg-emerald-50',
+              )}
             >
-              <Trash2 className="h-3.5 w-3.5" />
+              {s.isActive !== false ? (
+                <><UserX className="h-3.5 w-3.5" /> Disable</>
+              ) : (
+                <><UserCheck className="h-3.5 w-3.5" /> Enable</>
+              )}
             </button>
+            {isSuperAdmin && (
+              <button
+                type="button"
+                onClick={() => removeStaff(s)}
+                title="Remove"
+                className="btn-secondary inline-flex items-center gap-1 px-2 py-1.5 text-xs text-rose-600 hover:bg-rose-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Delete
+              </button>
+            )}
           </div>
         ),
     },
@@ -838,6 +934,36 @@ export default function StaffPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Confirm dialog ── */}
+      {confirmDialog && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-2xl">
+            <div className="mb-5 flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+                <AlertCircle className="h-5 w-5" />
+              </div>
+              <p className="pt-1.5 text-sm text-slate-700">{confirmDialog.message}</p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDialog(null)}
+                className="btn-secondary rounded-lg px-4 py-2 text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDialog.onConfirm}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+              >
+                Confirm
+              </button>
+            </div>
           </div>
         </div>
       )}

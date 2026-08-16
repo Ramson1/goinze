@@ -131,17 +131,50 @@ export class StudentsMeService {
   /** Fees (from fee structures) reconciled against the student's payments. */
   async fees(userId: string) {
     const s = await this.resolveStudent(userId);
+
+    // Get current session
+    const currentSession = await this.prisma.db.academicSession.findFirst({
+      where: { schoolId: s.schoolId, isCurrent: true },
+    });
+
+    // Determine current semester from latest course registration
+    const latestReg = await this.prisma.db.courseRegistration.findFirst({
+      where: { studentId: s.id, sessionId: currentSession?.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    const currentSemester = latestReg?.semester ?? 'FIRST';
+
     const [structures, payments] = await Promise.all([
       this.prisma.db.feeStructure.findMany({
-        where: { schoolId: s.schoolId },
+        where: {
+          schoolId: s.schoolId,
+          AND: [
+            { OR: [{ departmentId: null }, { departmentId: s.departmentId }] },
+            { OR: [{ level: null }, { level: s.currentLevel }] },
+            { OR: [{ sessionId: null }, { sessionId: currentSession?.id }] },
+            { OR: [{ semester: null }, { semester: currentSemester }] } as any,
+          ],
+        } as any,
         orderBy: { createdAt: 'asc' },
       }),
       this.prisma.db.payment.findMany({
-        where: { studentId: s.id },
-        include: { receipt: true },
+        where: { studentId: s.id, status: 'SUCCESS' },
+        include: { receipt: true, feeStructure: true },
         orderBy: { createdAt: 'desc' },
       }),
     ]);
+
+    // Filter out optional fees that student hasn't paid for
+    const paidFeeStructureIds = new Set(
+      payments.filter((p) => p.feeStructureId).map((p) => p.feeStructureId!),
+    );
+
+    const applicableFees = structures.filter((f) => {
+      // Always include mandatory fees
+      if (f.isMandatory) return true;
+      // Only include optional fees if student has paid for them
+      return paidFeeStructureIds.has(f.id);
+    });
 
     // Define display order: Portal Access first, then by type priority
     const typeOrder: Record<string, number> = {
@@ -157,7 +190,7 @@ export class StudentsMeService {
       OTHER: 9,
     };
 
-    const sorted = [...structures].sort((a, b) => {
+    const sorted = [...applicableFees].sort((a, b) => {
       const oa = typeOrder[a.type] ?? 9;
       const ob = typeOrder[b.type] ?? 9;
       if (oa !== ob) return oa - ob;
@@ -166,10 +199,25 @@ export class StudentsMeService {
       return a.name.localeCompare(b.name);
     });
 
+    // Track which payments have been matched so we don't double-count
+    const matchedPaymentIds = new Set<string>();
+
     const items = sorted.map((f) => {
-      const paid = payments.find(
-        (p) => p.feeStructureId === f.id && p.status === 'SUCCESS',
+      // First: exact match by feeStructureId
+      let paid = payments.find(
+        (p) => p.feeStructureId === f.id && !matchedPaymentIds.has(p.id),
       );
+      // Fallback: match by type + amount for payments not linked to a specific fee structure
+      if (!paid) {
+        paid = payments.find(
+          (p) =>
+            !p.feeStructureId &&
+            !matchedPaymentIds.has(p.id) &&
+            p.feeStructure?.type === f.type &&
+            Number(p.amount) === Number(f.amount),
+        );
+      }
+      if (paid) matchedPaymentIds.add(paid.id);
       return {
         id: f.id,
         description: f.name,
@@ -183,10 +231,9 @@ export class StudentsMeService {
     });
 
     const total = items.reduce((sum, i) => sum + i.amount, 0);
-    const paid = items.filter((i) => i.status === 'PAID').reduce((sum, i) => sum + i.amount, 0);
+    const paidTotal = items.filter((i) => i.status === 'PAID').reduce((sum, i) => sum + i.amount, 0);
 
     const receipts = payments
-      .filter((p) => p.status === 'SUCCESS')
       .map((p) => ({
         id: p.id,
         receiptNo: p.receipt?.receiptNumber ?? p.reference,
@@ -198,7 +245,7 @@ export class StudentsMeService {
         status: 'SUCCESS' as const,
       }));
 
-    return { items, receipts, summary: { total, paid, outstanding: total - paid } };
+    return { items, receipts, summary: { total, paid: paidTotal, outstanding: total - paidTotal } };
   }
 
   /** Results grouped by session/semester with GPA + cumulative GPA. */
@@ -306,7 +353,21 @@ export class StudentsMeService {
         take: 5,
       }),
       this.prisma.db.exam.findMany({
-        where: { schoolId: s.schoolId, status: { in: ['SCHEDULED', 'ACTIVE'] } },
+        where: {
+          schoolId: s.schoolId,
+          status: { in: ['SCHEDULED', 'ACTIVE'] },
+          OR: [
+            // Exams with no course (general exams for all students)
+            { courseId: null },
+            // Exams for courses in the student's department
+            { course: { departmentId: s.departmentId } },
+            // Exams for courses with no department (all students)
+            { course: { departmentId: null } },
+          ],
+        },
+        include: {
+          course: { select: { code: true, title: true, department: { select: { name: true } } } },
+        },
         orderBy: { startsAt: 'asc' },
         take: 5,
       }),
@@ -322,6 +383,9 @@ export class StudentsMeService {
       upcomingExams: exams.map((e) => ({
         id: e.id,
         title: e.title,
+        courseCode: e.course?.code ?? null,
+        courseTitle: e.course?.title ?? null,
+        department: e.course?.department?.name ?? null,
         startsAt: e.startsAt,
         durationMins: e.durationMins,
         status: e.status,

@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -96,6 +97,18 @@ export class AdmissionsController {
     return this.admissionsService.generateLetter(id);
   }
 
+  @Post(':id/send-letter')
+  @Roles('SCHOOL_ADMIN', 'ADMISSION_OFFICER')
+  sendLetterEmail(@Param('id') id: string) {
+    return this.admissionsService.sendLetterEmail(id);
+  }
+
+  @Post(':id/create-password')
+  @Roles('SCHOOL_ADMIN', 'ADMISSION_OFFICER')
+  createStudentPassword(@Param('id') id: string) {
+    return this.admissionsService.createStudentPassword(id);
+  }
+
   @Patch(':id/verification')
   @Roles('SCHOOL_ADMIN', 'ADMISSION_OFFICER')
   updateVerification(
@@ -103,6 +116,12 @@ export class AdmissionsController {
     @Body() dto: UpdateVerificationDto,
   ) {
     return this.admissionsService.updateVerification(id, dto);
+  }
+
+  @Delete(':id')
+  @Roles('SUPER_ADMIN')
+  remove(@Param('id') id: string) {
+    return this.admissionsService.remove(id);
   }
 
   /** Public document upload for applications — uploads to Cloudinary and links to the application. */
