@@ -59,12 +59,15 @@ export const api = {
     request<T>(path, { method: 'PATCH', body: JSON.stringify(data ?? {}) }),
   put: <T>(path: string, data?: unknown) =>
     request<T>(path, { method: 'PUT', body: JSON.stringify(data ?? {}) }),
+  delete: <T>(path: string) =>
+    request<T>(path, { method: 'DELETE' }),
 };
 
 // ---- Types mirroring the API responses ----
 
 export interface StudentProfile {
   id: string;
+  userId: string | null;
   matricNo: string | null;
   regNumber: string | null;
   firstName: string;
@@ -124,6 +127,10 @@ export interface FeeItem {
   ref: string | null;
   paidAt: string | null;
   isOptional?: boolean;
+  locked?: boolean;
+  sessionName?: string;
+  semester?: string | null;
+  sessionId?: string | null;
 }
 
 export interface ReceiptItem {
@@ -135,6 +142,7 @@ export interface ReceiptItem {
   method: string;
   verificationCode: string | null;
   status: 'SUCCESS';
+  reference: string;
 }
 
 export interface FeesResponse {
@@ -281,9 +289,30 @@ export interface VerifyPaymentResult {
   id: string;
   status: string;
   reference: string;
+  gatewayRef: string | null;
   amount: string;
   paidAt: string | null;
   receipt?: ReceiptData;
+  school?: {
+    name: string;
+    address: string | null;
+    phone: string | null;
+    email: string | null;
+    logoUrl: string | null;
+  };
+  student?: {
+    firstName: string;
+    lastName: string;
+    middleName: string | null;
+    email: string | null;
+    matricNumber: string | null;
+    department?: { name: string } | null;
+    programme?: { name: string } | null;
+  };
+  feeStructure?: {
+    name: string;
+    type: string;
+  } | null;
 }
 
 export interface FlutterwaveConfig {
@@ -296,6 +325,7 @@ export const financeApi = {
   getFlutterwaveConfig: () => api.get<FlutterwaveConfig>('/finance/flutterwave-config'),
   initPayment: (data: {
     feeStructureId?: string;
+    studentId?: string;
     amount: number;
     customerEmail?: string;
     redirectUrl?: string;
@@ -327,6 +357,51 @@ export interface MessageRecord {
   sender: { id: string; firstName: string; lastName: string } | null;
 }
 
+// ---- Conversations ----
+
+export interface ConversationSummary {
+  id: string;
+  title: string | null;
+  isGroup: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastMessage: { body: string; createdAt: string; senderId: string } | null;
+  unreadCount: number;
+  participants: { id: string; userId: string; user: { id: string; firstName: string; lastName: string; avatarUrl?: string | null } }[];
+}
+
+export interface ConversationDetail {
+  id: string;
+  title: string | null;
+  isGroup: boolean;
+  createdAt: string;
+  participants: { id: string; userId: string; user: { id: string; firstName: string; lastName: string } }[];
+  messages: ConversationMessage[];
+}
+
+export interface ConversationMessage {
+  id: string;
+  senderId: string;
+  body: string;
+  conversationId: string;
+  replyToId: string | null;
+  editedAt: string | null;
+  deletedAt: string | null;
+  readAt: string | null;
+  createdAt: string;
+  sender: { id: string; firstName: string; lastName: string; avatarUrl?: string | null } | null;
+  replyTo: { id: string; body: string; sender: { id: string; firstName: string; lastName: string } | null } | null;
+}
+
+export interface ContactItem {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: string;
+  avatarUrl: string | null;
+}
+
 export const commApi = {
   notifications: () => api.get<NotificationRecord[]>('/communication/notifications'),
   markNotificationRead: (id: string) =>
@@ -336,6 +411,23 @@ export const commApi = {
     api.post<MessageRecord>('/communication/messages', payload),
   markMessageRead: (id: string) =>
     api.patch<MessageRecord>(`/communication/messages/${id}/read`),
+};
+
+export const conversationApi = {
+  list: () => api.get<ConversationSummary[]>('/communication/conversations'),
+  get: (id: string) => api.get<ConversationDetail>(`/communication/conversations/${id}`),
+  create: (data: { recipientIds: string[]; title?: string; isGroup?: boolean }) =>
+    api.post<ConversationDetail>('/communication/conversations', data),
+  messages: (id: string) => api.get<ConversationMessage[]>(`/communication/conversations/${id}/messages`),
+  sendMessage: (id: string, data: { body: string; replyToId?: string }) =>
+    api.post<ConversationMessage>(`/communication/conversations/${id}/messages`, data),
+  editMessage: (id: string, body: string) =>
+    api.patch<ConversationMessage>(`/communication/messages/${id}`, { body }),
+  deleteMessage: (id: string) =>
+    api.delete(`/communication/messages/${id}`),
+  markRead: (id: string) =>
+    api.patch(`/communication/conversations/${id}/read`),
+  contacts: (q?: string) => api.get<ContactItem[]>(`/communication/contacts?q=${q ?? ''}`),
 };
 
 // ---- Website content (public CMS) ----
@@ -461,7 +553,9 @@ export interface DocumentRecord {
 
 export const documentsApi = {
   mine: (studentId: string) =>
-    api.get<DocumentRecord[]>(`/documents/student/${studentId}`),
+    api.get<{ documents: DocumentRecord[]; admissionLetterUrl: string | null }>(
+      `/documents/student/${studentId}`,
+    ),
 };
 
 // ---- Result PINs ----

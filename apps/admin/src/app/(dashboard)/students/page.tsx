@@ -1327,6 +1327,7 @@ export default function StudentsPage() {
                                   <thead className="bg-green-50 text-xs uppercase tracking-wide text-green-700">
                                     <tr>
                                       <th className="px-3 py-2">Fee Name</th>
+                                      <th className="px-3 py-2">Session</th>
                                       <th className="px-3 py-2">Type</th>
                                       <th className="px-3 py-2 text-right">Amount</th>
                                       <th className="px-3 py-2 text-center">Status</th>
@@ -1336,6 +1337,9 @@ export default function StudentsPage() {
                                     {paidItems.map((item) => (
                                       <tr key={item.id} className="hover:bg-green-50">
                                         <td className="px-3 py-2 font-medium">{item.description}</td>
+                                        <td className="px-3 py-2 text-xs text-gray-600">
+                                          {item.sessionName ?? '—'}{item.semester ? ` — ${titleCase(item.semester)}` : ''}
+                                        </td>
                                         <td className="px-3 py-2 text-xs text-gray-600">{item.type}</td>
                                         <td className="px-3 py-2 text-right font-semibold text-green-700">₦{item.amount.toLocaleString()}</td>
                                         <td className="px-3 py-2 text-center">
@@ -1362,6 +1366,7 @@ export default function StudentsPage() {
                                   <thead className="bg-red-50 text-xs uppercase tracking-wide text-red-700">
                                     <tr>
                                       <th className="px-3 py-2">Fee Name</th>
+                                      <th className="px-3 py-2">Session</th>
                                       <th className="px-3 py-2">Type</th>
                                       <th className="px-3 py-2 text-right">Amount</th>
                                       <th className="px-3 py-2 text-center">Status</th>
@@ -1371,6 +1376,9 @@ export default function StudentsPage() {
                                     {unpaidItems.map((item) => (
                                       <tr key={item.id} className="hover:bg-red-50">
                                         <td className="px-3 py-2 font-medium">{item.description}</td>
+                                        <td className="px-3 py-2 text-xs text-gray-600">
+                                          {item.sessionName ?? '—'}{item.semester ? ` — ${titleCase(item.semester)}` : ''}
+                                        </td>
                                         <td className="px-3 py-2 text-xs text-gray-600">{item.type}</td>
                                         <td className="px-3 py-2 text-right font-semibold text-red-700">₦{item.amount.toLocaleString()}</td>
                                         <td className="px-3 py-2 text-center">

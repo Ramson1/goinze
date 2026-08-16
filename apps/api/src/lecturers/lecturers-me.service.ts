@@ -2,10 +2,12 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { resolveGrade } from '@goinze/shared-utils';
 import { PrismaService } from '../prisma/prisma.service';
+import { CommunicationService } from '../communication/communication.service';
 import type { SaveScoresDto, UpdateProfileDto } from './dto/lecturers-me.dto';
 
 /**
@@ -15,13 +17,18 @@ import type { SaveScoresDto, UpdateProfileDto } from './dto/lecturers-me.dto';
  */
 @Injectable()
 export class LecturersMeService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(LecturersMeService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly comms: CommunicationService,
+  ) {}
 
   /** Resolve the Staff record (with department/faculty) for the authenticated user. */
   private async resolveStaff(userId: string) {
     const user = await this.prisma.db.user.findUnique({
       where: { id: userId },
-      include: { staff: { include: { department: { include: { faculty: true } } } } },
+      include: { staff: { include: { user: true, department: { include: { faculty: true } } } } },
     });
     if (!user?.staff) {
       throw new ForbiddenException('This account is not linked to a staff record.');
@@ -393,6 +400,28 @@ export class LecturersMeService {
       },
       data: { status: 'PUBLISHED', publishedAt: new Date() },
     });
+
+    // Notify students enrolled in this course + admin
+    if (course.departmentId) {
+      this.comms
+        .notifyStudentsByDepartment(
+          s.schoolId,
+          course.departmentId,
+          'Results Published',
+          `Results for ${course.code} — ${course.title} have been published and are now available.`,
+        )
+        .catch((err) => this.logger.error('Failed to send results notification', err instanceof Error ? err.stack : ''));
+
+      this.comms
+        .notifyUsersByRole(
+          s.schoolId,
+          'SCHOOL_ADMIN',
+          'Results Published',
+          `${s.user?.firstName ?? 'A lecturer'} ${s.user?.lastName ?? ''} published results for ${course.code} — ${course.title}.`,
+        )
+        .catch((err) => this.logger.error('Failed to send results notification to admin', err instanceof Error ? err.stack : ''));
+    }
+
     return { published: updated.count };
   }
 

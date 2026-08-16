@@ -24,6 +24,10 @@ export function Topbar() {
 
   useEffect(() => {
     lecturerApi.notifications().then(setNotifications).catch(() => undefined);
+    const interval = setInterval(() => {
+      lecturerApi.notifications().then(setNotifications).catch(() => undefined);
+    }, 30_000);
+    return () => clearInterval(interval);
   }, []);
 
   const unreadCount = notifications.filter((n) => n.status !== 'READ').length;

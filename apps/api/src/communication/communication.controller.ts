@@ -58,7 +58,93 @@ export class CommunicationController {
     return this.communicationService.deleteAnnouncement(id);
   }
 
-  // ---- Messages ----
+  // ---- Conversations ----
+  @Get('conversations')
+  listConversations(@CurrentUser() user: SessionUser) {
+    return this.communicationService.listConversations(user.id);
+  }
+
+  @Post('conversations')
+  createConversation(
+    @CurrentUser() user: SessionUser,
+    @Body() data: { recipientIds: string[]; title?: string; isGroup?: boolean },
+  ) {
+    return this.communicationService.createConversation({
+      senderId: user.id,
+      recipientIds: data.recipientIds,
+      title: data.title,
+      isGroup: data.isGroup,
+    });
+  }
+
+  @Get('conversations/:id')
+  getConversation(
+    @Param('id') id: string,
+    @CurrentUser() user: SessionUser,
+  ) {
+    return this.communicationService.getConversation(id, user.id);
+  }
+
+  @Get('conversations/:id/messages')
+  async getConversationMessages(
+    @Param('id') id: string,
+    @CurrentUser() user: SessionUser,
+  ) {
+    const conv = await this.communicationService.getConversation(id, user.id);
+    return conv.messages;
+  }
+
+  @Post('conversations/:id/messages')
+  sendMessageInConversation(
+    @Param('id') id: string,
+    @CurrentUser() user: SessionUser,
+    @Body() data: { body: string; replyToId?: string },
+  ) {
+    return this.communicationService.sendMessageInConversation({
+      senderId: user.id,
+      conversationId: id,
+      body: data.body,
+      replyToId: data.replyToId,
+    });
+  }
+
+  @Patch('conversations/:id/read')
+  markConversationRead(
+    @Param('id') id: string,
+    @CurrentUser() user: SessionUser,
+  ) {
+    return this.communicationService.markConversationRead(id, user.id);
+  }
+
+  // ---- Contacts ----
+  @Get('contacts')
+  searchContacts(
+    @CurrentUser() user: SessionUser,
+    @Query('q') q?: string,
+    @Query('role') role?: string,
+  ) {
+    return this.communicationService.searchContacts(user.id, q, role);
+  }
+
+  // ---- Messages (edit/delete) ----
+  @Patch('messages/:id')
+  editMessage(
+    @Param('id') id: string,
+    @CurrentUser() user: SessionUser,
+    @Body() data: { body: string },
+  ) {
+    return this.communicationService.editMessage(id, user.id, data.body);
+  }
+
+  @Delete('messages/:id')
+  deleteMessage(
+    @Param('id') id: string,
+    @CurrentUser() user: SessionUser,
+  ) {
+    return this.communicationService.deleteMessage(id, user.id);
+  }
+
+  // ---- Legacy Messages (backward compat) ----
   @Get('messages')
   listMessages(@CurrentUser() user: SessionUser) {
     return this.communicationService.listMessages(user.id);

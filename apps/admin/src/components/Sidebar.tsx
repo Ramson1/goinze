@@ -16,6 +16,7 @@ import {
   Globe,
   IdCard,
   LayoutDashboard,
+  Bell,
   MessageSquare,
   MonitorSmartphone,
   Newspaper,
@@ -90,6 +91,8 @@ const navGroups: NavGroup[] = [
       { label: 'News', href: '/news', icon: Newspaper },
       { label: 'Events', href: '/events', icon: CalendarDays },
       { label: 'Announcements', href: '/communication', icon: MessageSquare },
+      { label: 'Messages', href: '/messages', icon: MessageSquare },
+      { label: 'Notifications', href: '/notifications', icon: Bell },
     ],
   },
   {

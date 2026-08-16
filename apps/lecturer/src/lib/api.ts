@@ -57,12 +57,15 @@ export const api = {
     request<T>(path, { method: 'POST', body: JSON.stringify(data ?? {}) }),
   patch: <T>(path: string, data?: unknown) =>
     request<T>(path, { method: 'PATCH', body: JSON.stringify(data ?? {}) }),
+  delete: <T>(path: string) =>
+    request<T>(path, { method: 'DELETE' }),
 };
 
 // ---- Types mirroring the API responses ----
 
 export interface LecturerProfile {
   id: string;
+  userId: string | null;
   staffNumber: string | null;
   firstName: string;
   lastName: string;
@@ -253,6 +256,51 @@ export interface NotificationRecord {
   createdAt: string;
 }
 
+// ---- Conversations ----
+
+export interface ConversationSummary {
+  id: string;
+  title: string | null;
+  isGroup: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastMessage: { body: string; createdAt: string; senderId: string } | null;
+  unreadCount: number;
+  participants: { id: string; userId: string; user: { id: string; firstName: string; lastName: string; avatarUrl?: string | null } }[];
+}
+
+export interface ConversationDetail {
+  id: string;
+  title: string | null;
+  isGroup: boolean;
+  createdAt: string;
+  participants: { id: string; userId: string; user: { id: string; firstName: string; lastName: string } }[];
+  messages: ConversationMessage[];
+}
+
+export interface ConversationMessage {
+  id: string;
+  senderId: string;
+  body: string;
+  conversationId: string;
+  replyToId: string | null;
+  editedAt: string | null;
+  deletedAt: string | null;
+  readAt: string | null;
+  createdAt: string;
+  sender: { id: string; firstName: string; lastName: string; avatarUrl?: string | null } | null;
+  replyTo: { id: string; body: string; sender: { id: string; firstName: string; lastName: string } | null } | null;
+}
+
+export interface ContactItem {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: string;
+  avatarUrl: string | null;
+}
+
 // ---- School events (website CMS, used by the calendar) ----
 
 export interface SchoolEvent {
@@ -360,13 +408,31 @@ export const lecturerApi = {
   examAttempts: (examId: string) =>
     api.get<ExamAttemptRecord[]>(`/cbt/exams/${examId}/attempts`),
 
-  // Messages
+  // Messages (legacy)
   messages: () => api.get<InboxMessage[]>('/communication/messages'),
   sendMessage: (payload: { recipientId?: string; subject?: string; body: string }) =>
     api.post<InboxMessage>('/communication/messages', payload),
   markMessageRead: (id: string) =>
     api.patch<InboxMessage>(`/communication/messages/${id}/read`),
   contacts: () => api.get<Contact[]>('/lecturers/me/contacts'),
+
+  // Conversations
+  conversations: {
+    list: () => api.get<ConversationSummary[]>('/communication/conversations'),
+    get: (id: string) => api.get<ConversationDetail>(`/communication/conversations/${id}`),
+    create: (data: { recipientIds: string[]; title?: string; isGroup?: boolean }) =>
+      api.post<ConversationDetail>('/communication/conversations', data),
+    messages: (id: string) => api.get<ConversationMessage[]>(`/communication/conversations/${id}/messages`),
+    sendMessage: (id: string, data: { body: string; replyToId?: string }) =>
+      api.post<ConversationMessage>(`/communication/conversations/${id}/messages`, data),
+    editMessage: (id: string, body: string) =>
+      api.patch<ConversationMessage>(`/communication/messages/${id}`, { body }),
+    deleteMessage: (id: string) =>
+      api.delete<unknown>(`/communication/messages/${id}`),
+    markRead: (id: string) =>
+      api.patch(`/communication/conversations/${id}/read`),
+    contacts: (q?: string) => api.get<ContactItem[]>(`/communication/contacts?q=${q ?? ''}`),
+  },
 
   // Notifications
   notifications: () => api.get<NotificationRecord[]>('/communication/notifications'),

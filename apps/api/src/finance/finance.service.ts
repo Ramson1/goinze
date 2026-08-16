@@ -13,6 +13,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { paginated } from '../common/utils/pagination.util';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { FlutterwaveGateway } from './flutterwave.gateway';
+import { CommunicationService } from '../communication/communication.service';
 import {
   CreateFeeStructureDto,
   UpdateFeeStructureDto,
@@ -20,6 +21,7 @@ import {
   VerifyPaymentDto,
   RefundDto,
   CreateScholarshipDto,
+  CreateManualPaymentDto,
 } from './dto/finance.dto';
 
 @Injectable()
@@ -30,6 +32,7 @@ export class FinanceService {
     private readonly prisma: PrismaService,
     private readonly gateway: FlutterwaveGateway,
     private readonly config: ConfigService,
+    private readonly comms: CommunicationService,
   ) {}
 
   // ---- Fee structures ----
@@ -197,6 +200,11 @@ export class FinanceService {
   async verifyPayment(dto: VerifyPaymentDto) {
     const payment = await this.prisma.db.payment.findUnique({
       where: { reference: dto.reference },
+      include: {
+        school: true,
+        student: { include: { department: true, programme: true } },
+        feeStructure: true,
+      },
     });
     if (!payment) throw new NotFoundException('Payment not found');
 
@@ -272,7 +280,30 @@ export class FinanceService {
       return { ...pay, receipt };
     });
 
-    return updated;
+    // Return with full relations for the receipt
+    const response = {
+      ...payment,
+      ...updated,
+      receipt: (updated as any).receipt,
+    };
+
+    // Notify admin about the payment
+    if (payment.schoolId && !(updated as any).alreadyProcessed) {
+      const studentName = payment.student
+        ? `${payment.student.firstName} ${payment.student.lastName}`
+        : 'A student';
+      const feeName = payment.feeStructure?.name ?? 'fees';
+      this.comms
+        .notifyUsersByRole(
+          payment.schoolId,
+          'SCHOOL_ADMIN',
+          'Payment Received',
+          `${studentName} made a payment of ${Number(payment.amount).toLocaleString()} for ${feeName}.`,
+        )
+        .catch((err) => this.logger.error('Failed to send payment notification', err instanceof Error ? err.stack : ''));
+    }
+
+    return response;
   }
 
   /**
@@ -298,6 +329,55 @@ export class FinanceService {
         }),
       ]);
     }
+  }
+
+  /** Create a manual (cash/admin) payment for a student — immediately marked SUCCESS. */
+  async createManualPayment(schoolId: string | null, dto: CreateManualPaymentDto, adminId: string) {
+    const student = await this.prisma.db.student.findUnique({
+      where: { id: dto.studentId },
+    });
+    if (!student) throw new NotFoundException('Student not found');
+
+    const resolvedSchoolId = schoolId ?? student.schoolId;
+    const reference = dto.reference || generatePaymentRef();
+
+    const payment = await this.prisma.db.payment.create({
+      data: {
+        schoolId: resolvedSchoolId,
+        studentId: dto.studentId,
+        feeStructureId: dto.feeStructureId,
+        reference,
+        amount: dto.amount,
+        currency: 'NGN',
+        gateway: 'CASH',
+        status: 'SUCCESS',
+        paidAt: new Date(),
+        metadata: { description: dto.description, narration: dto.narration, createdBy: adminId },
+      },
+    });
+
+    // Credit the student ledger
+    await this.prisma.db.ledgerEntry.create({
+      data: {
+        studentId: dto.studentId,
+        paymentId: payment.id,
+        credit: Number(dto.amount),
+        balance: Number(dto.amount),
+        narration: dto.narration || `Manual payment: ${dto.description}`,
+      },
+    });
+
+    // Auto-generate receipt
+    const receipt = await this.prisma.db.receipt.create({
+      data: {
+        paymentId: payment.id,
+        receiptNumber: generateReceiptNumber(),
+        verificationCode: generateVerificationCode(),
+        qrData: `goinzeschool://receipt/${generateVerificationCode()}`,
+      },
+    });
+
+    return { ...payment, receipt };
   }
 
   /** Process a Flutterwave webhook event (charge.completed). */
@@ -419,6 +499,13 @@ export class FinanceService {
       where: { schoolId: student.schoolId, isCurrent: true },
     });
 
+    // Fetch ALL sessions for chronological ordering (used by two-level locking)
+    const allSessions = await this.prisma.db.academicSession.findMany({
+      where: { schoolId: student.schoolId },
+      orderBy: { startDate: 'asc' },
+    });
+    const sessionOrder = new Map(allSessions.map((ses, idx) => [ses.id, idx]));
+
     // Determine current semester from latest course registration
     const latestReg = await this.prisma.db.courseRegistration.findFirst({
       where: { studentId: student.id, sessionId: currentSession?.id },
@@ -433,10 +520,9 @@ export class FinanceService {
           AND: [
             { OR: [{ departmentId: null }, { departmentId: student.departmentId }] },
             { OR: [{ level: null }, { level: student.currentLevel }] },
-            { OR: [{ sessionId: null }, { sessionId: currentSession?.id }] },
-            { OR: [{ semester: null }, { semester: currentSemester }] } as any,
           ],
-        } as any,
+        },
+        include: { session: true },
         orderBy: { createdAt: 'asc' },
       }),
       this.prisma.db.payment.findMany({
@@ -446,72 +532,136 @@ export class FinanceService {
       }),
     ]);
 
-    // Filter out optional fees that student hasn't paid for
-    const paidFeeStructureIds = new Set(
-      payments.filter((p) => p.feeStructureId).map((p) => p.feeStructureId!),
-    );
+    // Include all fee structures — mandatory and optional (optional fees shown for student opt-in)
+    const applicableFees = structures;
 
-    const applicableFees = structures.filter((f) => {
-      if (f.isMandatory) return true;
-      return paidFeeStructureIds.has(f.id);
-    });
-
-    // Define display order
+    // Define display order within a semester: Portal Access first, Tuition (SCHOOL) last
     const typeOrder: Record<string, number> = {
       PORTAL_ACCESS: 0,
-      SCHOOL: 1,
-      LIBRARY: 2,
-      MEDICAL: 3,
-      SPORTS_WEAR: 4,
-      MATRICULATION: 5,
-      HOSTEL: 6,
-      GRADUATION: 7,
-      ACCEPTANCE: 8,
-      OTHER: 9,
+      LIBRARY: 1,
+      MEDICAL: 2,
+      SPORTS_WEAR: 3,
+      MATRICULATION: 4,
+      HOSTEL: 5,
+      GRADUATION: 6,
+      ACCEPTANCE: 7,
+      OTHER: 8,
+      SCHOOL: 99, // Tuition is always last
     };
 
-    const sorted = [...applicableFees].sort((a, b) => {
-      const oa = typeOrder[a.type] ?? 9;
-      const ob = typeOrder[b.type] ?? 9;
-      if (oa !== ob) return oa - ob;
-      if (a.programmeId && !b.programmeId) return 1;
-      if (!a.programmeId && b.programmeId) return -1;
-      return a.name.localeCompare(b.name);
-    });
+    const semesterOrder: Record<string, number> = { FIRST: 0, SECOND: 1, THIRD: 2 };
+
+    // Build payment lookup maps for O(1) matching instead of O(n×m)
+    const paymentsByFeeId = new Map<string, typeof payments>();
+    const paymentsWithoutFeeId: typeof payments = [];
+    for (const p of payments) {
+      if (p.feeStructureId) {
+        const arr = paymentsByFeeId.get(p.feeStructureId) ?? [];
+        arr.push(p);
+        paymentsByFeeId.set(p.feeStructureId, arr);
+      } else {
+        paymentsWithoutFeeId.push(p);
+      }
+    }
 
     // Track which payments have been matched so we don't double-count
     const matchedPaymentIds = new Set<string>();
 
-    const items = sorted.map((f) => {
-      let paid = payments.find(
-        (p) => p.feeStructureId === f.id && !matchedPaymentIds.has(p.id),
-      );
+    // Build items with session/semester metadata
+    const items = applicableFees.map((f) => {
+      // First: exact match by feeStructureId (O(1) lookup)
+      let paid: typeof payments[0] | undefined;
+      const candidates = paymentsByFeeId.get(f.id);
+      if (candidates) {
+        paid = candidates.find((p) => !matchedPaymentIds.has(p.id));
+      }
+      // Fallback: match by type + amount for payments not linked to a specific fee structure
       if (!paid) {
-        paid = payments.find(
+        paid = paymentsWithoutFeeId.find(
           (p) =>
-            !p.feeStructureId &&
             !matchedPaymentIds.has(p.id) &&
             p.feeStructure?.type === f.type &&
             Number(p.amount) === Number(f.amount),
         );
       }
       if (paid) matchedPaymentIds.add(paid.id);
+
+      // Application form and entrance exam fees are always paid during admission
+      const preAdmissionTypes = ['APPLICATION_FORM', 'ENTRANCE_EXAM'];
+      const isPreAdmissionFee = preAdmissionTypes.includes(f.type);
+
       return {
         id: f.id,
         description: f.name,
         type: f.type,
         amount: Number(f.amount),
-        status: paid ? ('PAID' as const) : ('PENDING' as const),
-        ref: paid?.reference ?? null,
+        status: (paid || isPreAdmissionFee) ? ('PAID' as const) : ('PENDING' as const),
+        ref: paid?.reference ?? (isPreAdmissionFee ? 'PRE-ADMISSION' : null),
         paidAt: paid?.paidAt ?? null,
         isOptional: !f.isMandatory,
+        sessionName: (f as any).session?.name ?? currentSession?.name ?? 'General',
+        semester: (f.semester ?? 'FIRST') as string,
+        sessionId: f.sessionId ?? currentSession?.id ?? null,
+        typeOrder: typeOrder[f.type] ?? 9,
       };
     });
 
-    const total = items.reduce((sum, i) => sum + i.amount, 0);
-    const paidTotal = items.filter((i) => i.status === 'PAID').reduce((sum, i) => sum + i.amount, 0);
+    // Group items by (sessionId, semester) for two-level locking
+    const groupMap = new Map<string, typeof items>();
+    for (const item of items) {
+      const key = `${item.sessionId}|||${item.semester}`;
+      if (!groupMap.has(key)) groupMap.set(key, []);
+      groupMap.get(key)!.push(item);
+    }
 
-    return { items, summary: { total, paid: paidTotal, outstanding: total - paidTotal } };
+    // Sort within each group by typeOrder, then name
+    for (const groupItems of groupMap.values()) {
+      groupItems.sort((a, b) => {
+        if (a.typeOrder !== b.typeOrder) return a.typeOrder - b.typeOrder;
+        return a.description.localeCompare(b.description);
+      });
+    }
+
+    // Sort groups chronologically: by session order, then semester order
+    const sortedGroups = [...groupMap.entries()].sort(([keyA], [keyB]) => {
+      const [sesA, semA] = keyA.split('|||');
+      const [sesB, semB] = keyB.split('|||');
+      const orderA = sessionOrder.get(sesA) ?? 999;
+      const orderB = sessionOrder.get(sesB) ?? 999;
+      if (orderA !== orderB) return orderA - orderB;
+      return (semesterOrder[semA] ?? 0) - (semesterOrder[semB] ?? 0);
+    });
+
+    // Two-level locking: semester-level + item-level within semester
+    let allPreviousSemestersPaid = true;
+    const allItems: (Omit<typeof items[0], 'typeOrder'> & { locked: boolean })[] = [];
+
+    for (const [, groupItems] of sortedGroups) {
+      let foundUnpaidInGroup = false;
+      for (const item of groupItems) {
+        let locked: boolean;
+        if (!allPreviousSemestersPaid) {
+          locked = true;
+        } else if (item.status === 'PAID') {
+          locked = false;
+        } else if (!foundUnpaidInGroup) {
+          foundUnpaidInGroup = true;
+          locked = false; // this is the next one to pay
+        } else {
+          locked = true;
+        }
+        const { typeOrder: _to, ...rest } = item;
+        allItems.push({ ...rest, locked });
+      }
+      if (groupItems.some((i) => i.status === 'PENDING')) {
+        allPreviousSemestersPaid = false;
+      }
+    }
+
+    const total = allItems.reduce((sum, i) => sum + i.amount, 0);
+    const paidTotal = allItems.filter((i) => i.status === 'PAID').reduce((sum, i) => sum + i.amount, 0);
+
+    return { items: allItems, summary: { total, paid: paidTotal, outstanding: total - paidTotal } };
   }
 
   // ---- Dashboard summary ----

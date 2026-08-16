@@ -2,6 +2,7 @@
 
 import {
   BarChart3,
+  Bell,
   BookOpen,
   CalendarDays,
   ClipboardCheck,
@@ -37,6 +38,7 @@ const navItems: NavItem[] = [
   { label: 'Exams', href: '/exams', icon: GraduationCap },
   { label: 'Results', href: '/results', icon: BarChart3 },
   { label: 'Messages', href: '/messages', icon: MessagesSquare },
+  { label: 'Notifications', href: '/notifications', icon: Bell },
   { label: 'Calendar', href: '/calendar', icon: CalendarDays },
   { label: 'Reports', href: '/reports', icon: FileBarChart },
   { label: 'Settings', href: '/settings', icon: Settings },

@@ -206,3 +206,28 @@ export class CreateScholarshipDto {
   @IsString()
   reason?: string;
 }
+
+export class CreateManualPaymentDto {
+  @IsString()
+  studentId!: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  amount!: number;
+
+  @IsString()
+  description!: string;
+
+  @IsOptional()
+  @IsString()
+  feeStructureId?: string;
+
+  @IsOptional()
+  @IsString()
+  reference?: string;
+
+  @IsOptional()
+  @IsString()
+  narration?: string;
+}

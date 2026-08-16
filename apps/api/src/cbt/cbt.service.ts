@@ -1,5 +1,6 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CommunicationService } from '../communication/communication.service';
 import {
   CreateQuestionBankDto,
   CreateQuestionDto,
@@ -18,7 +19,12 @@ import {
  */
 @Injectable()
 export class CbtService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(CbtService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly comms: CommunicationService,
+  ) {}
 
   // ---- Question banks ----
   listBanks(schoolId: string | null) {
@@ -240,15 +246,40 @@ export class CbtService {
       });
     }
 
-    return this.prisma.db.examAttempt.update({
+    const graded = await this.prisma.db.examAttempt.update({
       where: { id: attemptId },
       data: {
         status: 'GRADED',
         score: totalScore,
         submittedAt: new Date(),
       },
-      include: { responses: true },
+      include: { responses: true, exam: { include: { course: true } } },
     });
+
+    // Notify lecturers allocated to the exam's course
+    if (graded.exam?.course) {
+      const course = graded.exam.course;
+      const allocations = await this.prisma.db.courseAllocation.findMany({
+        where: { courseId: course.id },
+        include: { staff: { include: { user: true } } },
+      });
+      const lecturerUserIds = allocations
+        .map((a) => a.staff?.userId)
+        .filter((id): id is string => !!id);
+      if (lecturerUserIds.length) {
+        const student = await this.prisma.db.student.findUnique({ where: { id: attempt.studentId } });
+        const studentName = student ? `${student.firstName} ${student.lastName}` : 'A student';
+        this.comms
+          .notifyUsers(
+            lecturerUserIds,
+            'CBT Exam Graded',
+            `${studentName} completed the exam for ${course.code} — ${course.title} with a score of ${totalScore}.`,
+          )
+          .catch((err) => this.logger.error('Failed to send CBT notification', err instanceof Error ? err.stack : ''));
+      }
+    }
+
+    return graded;
   }
 
   listAttempts(examId: string) {

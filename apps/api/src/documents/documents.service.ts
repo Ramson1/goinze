@@ -47,11 +47,56 @@ export class DocumentsService {
     });
   }
 
-  listByStudent(studentId: string) {
-    return this.prisma.db.document.findMany({
-      where: { studentId },
+  async listByStudent(studentId: string) {
+    const student = await this.prisma.db.student.findUnique({
+      where: { id: studentId },
+      include: {
+        application: {
+          select: { id: true, admissionLetterUrl: true },
+        },
+      },
+    });
+
+    if (!student) return { documents: [], admissionLetterUrl: null };
+
+    // Build OR condition: documents linked to student OR to their application
+    const orConditions: any[] = [{ studentId }];
+    if (student.application?.id) {
+      orConditions.push({ applicationId: student.application.id });
+    }
+
+    const documents = await this.prisma.db.document.findMany({
+      where: { OR: orConditions },
       orderBy: { createdAt: 'desc' },
     });
+
+    // De-duplicate (a document could have both studentId and applicationId set)
+    const seen = new Set<string>();
+    const unique = documents.filter((d) => {
+      if (seen.has(d.id)) return false;
+      seen.add(d.id);
+      return true;
+    });
+
+    // Include the admission letter as a virtual document entry if it exists
+    const admissionLetterUrl = student.application?.admissionLetterUrl ?? null;
+    if (admissionLetterUrl) {
+      unique.unshift({
+        id: 'admission-letter',
+        schoolId: student.schoolId,
+        ownerUserId: null,
+        studentId,
+        applicationId: student.application?.id ?? null,
+        type: 'ADMISSION_LETTER',
+        name: 'Admission Letter',
+        url: admissionLetterUrl,
+        mimeType: 'text/html',
+        sizeBytes: null,
+        createdAt: new Date(),
+      } as any);
+    }
+
+    return { documents: unique, admissionLetterUrl };
   }
 
   list(schoolId: string | null) {

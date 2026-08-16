@@ -13,6 +13,7 @@ import { paginated } from '../common/utils/pagination.util';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { ApplyDto, ReviewApplicationDto, ApproveApplicationDto } from './dto/admission.dto';
 import { MailService } from '../mail/mail.service';
+import { CommunicationService } from '../communication/communication.service';
 import * as crypto from 'crypto';
 
 @Injectable()
@@ -23,6 +24,7 @@ export class AdmissionsService {
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
     private readonly config: ConfigService,
+    private readonly comms: CommunicationService,
   ) {}
 
   /**
@@ -70,6 +72,16 @@ export class AdmissionsService {
       },
       include: { documents: false },
     });
+
+    // Notify admin about new application
+    this.comms
+      .notifyUsersByRole(
+        school.id,
+        'SCHOOL_ADMIN',
+        'New Application Received',
+        `${application.firstName} ${application.lastName} has submitted an application (${application.applicationNo}).`,
+      )
+      .catch((err) => this.logger.error('Failed to send application notification', err instanceof Error ? err.stack : ''));
 
     return {
       id: application.id,
@@ -274,6 +286,21 @@ export class AdmissionsService {
     await this.sendAdmissionEmail(result.updated.id, result.tempPassword).catch((err) =>
       this.logger.error('Failed to send admission email after approval', err instanceof Error ? err.stack : ''),
     );
+
+    // Notify the admitted student
+    const studentEmail = result.updated.student?.email ?? undefined;
+    const studentUser = studentEmail
+      ? await this.prisma.db.user.findFirst({ where: { email: studentEmail } })
+      : null;
+    if (studentUser) {
+      this.comms
+        .notifyUser(
+          studentUser.id,
+          'Admission Approved',
+          `Congratulations! Your admission has been approved. Check your email for details and your login credentials.`,
+        )
+        .catch((err) => this.logger.error('Failed to send admission approval notification', err instanceof Error ? err.stack : ''));
+    }
 
     return result.updated;
   }

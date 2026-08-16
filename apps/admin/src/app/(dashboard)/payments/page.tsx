@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   AlertCircle,
+  Banknote,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -86,6 +87,17 @@ export default function PaymentsPage() {
   const [studentPaymentsLoadingId, setStudentPaymentsLoadingId] = useState<string | null>(null);
   const [studentFeeBreakdown, setStudentFeeBreakdown] = useState<StudentFeeBreakdown | null>(null);
 
+  // Manual payment modal
+  const [manualModalOpen, setManualModalOpen] = useState(false);
+  const [manualStudentSearch, setManualStudentSearch] = useState('');
+  const [manualStudentResults, setManualStudentResults] = useState<Student[]>([]);
+  const [manualStudentSearching, setManualStudentSearching] = useState(false);
+  const [manualSelectedStudent, setManualSelectedStudent] = useState<Student | null>(null);
+  const [manualAmount, setManualAmount] = useState('');
+  const [manualDescription, setManualDescription] = useState('');
+  const [manualNarration, setManualNarration] = useState('');
+  const [manualSubmitting, setManualSubmitting] = useState(false);
+
   const loadDashboard = useCallback(() => {
     financeApi
       .dashboard()
@@ -132,6 +144,60 @@ export default function PaymentsPage() {
     } finally {
       setStudentPaymentsLoading(false);
       setStudentPaymentsLoadingId(null);
+    }
+  }
+
+  /** Open the manual payment modal and reset form state. */
+  function openManualModal() {
+    setManualModalOpen(true);
+    setManualStudentSearch('');
+    setManualStudentResults([]);
+    setManualSelectedStudent(null);
+    setManualAmount('');
+    setManualDescription('');
+    setManualNarration('');
+    setError(null);
+    setNotice(null);
+  }
+
+  /** Search students for the manual payment student picker. */
+  useEffect(() => {
+    if (!manualModalOpen || !manualStudentSearch.trim() || manualSelectedStudent) return;
+    const timer = setTimeout(async () => {
+      setManualStudentSearching(true);
+      try {
+        const res = await studentsApi.list({ search: manualStudentSearch, pageSize: 8 });
+        setManualStudentResults(res.items);
+      } catch {
+        setManualStudentResults([]);
+      } finally {
+        setManualStudentSearching(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [manualStudentSearch, manualModalOpen, manualSelectedStudent]);
+
+  /** Submit a manual payment. */
+  async function handleManualPayment(e: React.FormEvent) {
+    e.preventDefault();
+    if (!manualSelectedStudent || !manualAmount || !manualDescription) return;
+    setManualSubmitting(true);
+    setError(null);
+    try {
+      await financeApi.createManualPayment({
+        studentId: manualSelectedStudent.id,
+        amount: Number(manualAmount),
+        description: manualDescription,
+        narration: manualNarration || undefined,
+      });
+      setNotice(`Payment of ${formatNaira(Number(manualAmount))} recorded for ${manualSelectedStudent.firstName} ${manualSelectedStudent.lastName}.`);
+      setManualModalOpen(false);
+      loadPayments();
+      loadDashboard();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to record payment.');
+    } finally {
+      setManualSubmitting(false);
     }
   }
 
@@ -201,6 +267,11 @@ export default function PaymentsPage() {
       <PageHeader
         title="Payments"
         subtitle="Track fees, collections and transaction status."
+        action={
+          <button onClick={openManualModal} className="btn-primary flex items-center gap-2 text-sm">
+            <Banknote className="h-4 w-4" /> Record Payment
+          </button>
+        }
       />
 
       {error && (
@@ -426,6 +497,7 @@ export default function PaymentsPage() {
                                   <thead className="bg-green-50 text-xs uppercase tracking-wide text-green-700">
                                     <tr>
                                       <th className="px-3 py-2">Fee Name</th>
+                                      <th className="px-3 py-2">Session</th>
                                       <th className="px-3 py-2">Type</th>
                                       <th className="px-3 py-2 text-right">Amount</th>
                                       <th className="px-3 py-2 text-center">Status</th>
@@ -435,6 +507,9 @@ export default function PaymentsPage() {
                                     {paidItems.map((item) => (
                                       <tr key={item.id} className="hover:bg-green-50">
                                         <td className="px-3 py-2 font-medium">{item.description}</td>
+                                        <td className="px-3 py-2 text-xs text-gray-600">
+                                          {item.sessionName ?? '—'}{item.semester ? ` — ${titleCase(item.semester)}` : ''}
+                                        </td>
                                         <td className="px-3 py-2 text-xs text-gray-600">{item.type}</td>
                                         <td className="px-3 py-2 text-right font-semibold text-green-700">₦{item.amount.toLocaleString()}</td>
                                         <td className="px-3 py-2 text-center">
@@ -461,6 +536,7 @@ export default function PaymentsPage() {
                                   <thead className="bg-red-50 text-xs uppercase tracking-wide text-red-700">
                                     <tr>
                                       <th className="px-3 py-2">Fee Name</th>
+                                      <th className="px-3 py-2">Session</th>
                                       <th className="px-3 py-2">Type</th>
                                       <th className="px-3 py-2 text-right">Amount</th>
                                       <th className="px-3 py-2 text-center">Status</th>
@@ -470,6 +546,9 @@ export default function PaymentsPage() {
                                     {unpaidItems.map((item) => (
                                       <tr key={item.id} className="hover:bg-red-50">
                                         <td className="px-3 py-2 font-medium">{item.description}</td>
+                                        <td className="px-3 py-2 text-xs text-gray-600">
+                                          {item.sessionName ?? '—'}{item.semester ? ` — ${titleCase(item.semester)}` : ''}
+                                        </td>
                                         <td className="px-3 py-2 text-xs text-gray-600">{item.type}</td>
                                         <td className="px-3 py-2 text-right font-semibold text-red-700">₦{item.amount.toLocaleString()}</td>
                                         <td className="px-3 py-2 text-center">
@@ -508,6 +587,167 @@ export default function PaymentsPage() {
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Payment Modal */}
+      {manualModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setManualModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Record Manual Payment</h2>
+                <p className="text-xs text-gray-500">Record a cash or offline payment for a student.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setManualModalOpen(false)}
+                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleManualPayment} className="px-6 py-5">
+              {/* Student Search */}
+              <div className="mb-4">
+                <label className="mb-1 block text-sm font-medium text-gray-700">Student</label>
+                {manualSelectedStudent ? (
+                  <div className="flex items-center justify-between rounded-lg border border-green-200 bg-green-50 px-4 py-2.5">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">
+                        {manualSelectedStudent.firstName} {manualSelectedStudent.lastName}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {manualSelectedStudent.matricNumber ?? 'No matric no.'}
+                        {manualSelectedStudent.department?.name ? ` — ${manualSelectedStudent.department.name}` : ''}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setManualSelectedStudent(null); setManualStudentSearch(''); }}
+                      className="rounded-md p-1 text-gray-400 hover:bg-gray-100"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="text"
+                        value={manualStudentSearch}
+                        onChange={(e) => setManualStudentSearch(e.target.value)}
+                        placeholder="Search by name or matric number…"
+                        className="input w-full pl-9"
+                        autoFocus
+                      />
+                    </div>
+                    {manualStudentSearching && (
+                      <div className="mt-2 flex items-center gap-2 text-xs text-gray-400">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Searching…
+                      </div>
+                    )}
+                    {!manualStudentSearching && manualStudentSearch.trim() && manualStudentResults.length === 0 && (
+                      <p className="mt-2 text-xs text-gray-400">No students found.</p>
+                    )}
+                    {manualStudentResults.length > 0 && (
+                      <div className="mt-2 max-h-40 overflow-y-auto rounded-lg border border-gray-200">
+                        {manualStudentResults.map((s) => (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => { setManualSelectedStudent(s); setManualStudentSearch(''); }}
+                            className="flex w-full items-center justify-between border-b border-gray-50 px-3 py-2 text-left last:border-0 hover:bg-gray-50"
+                          >
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">{s.firstName} {s.lastName}</p>
+                              <p className="text-xs text-gray-500">{s.matricNumber ?? '—'}</p>
+                            </div>
+                            <span className="text-xs text-gray-400">{s.department?.name ?? ''}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Amount */}
+              <div className="mb-4">
+                <label className="mb-1 block text-sm font-medium text-gray-700">Amount (₦)</label>
+                <input
+                  type="number"
+                  min={1}
+                  step="0.01"
+                  value={manualAmount}
+                  onChange={(e) => setManualAmount(e.target.value)}
+                  placeholder="0.00"
+                  className="input w-full"
+                  required
+                />
+              </div>
+
+              {/* Description */}
+              <div className="mb-4">
+                <label className="mb-1 block text-sm font-medium text-gray-700">Description</label>
+                <input
+                  type="text"
+                  value={manualDescription}
+                  onChange={(e) => setManualDescription(e.target.value)}
+                  placeholder="e.g. School fees, Hostel fee, etc."
+                  className="input w-full"
+                  required
+                />
+              </div>
+
+              {/* Narration (optional) */}
+              <div className="mb-5">
+                <label className="mb-1 block text-sm font-medium text-gray-700">Narration <span className="text-xs font-normal text-gray-400">(optional)</span></label>
+                <textarea
+                  value={manualNarration}
+                  onChange={(e) => setManualNarration(e.target.value)}
+                  placeholder="Additional notes about this payment…"
+                  rows={2}
+                  className="input w-full resize-none"
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setManualModalOpen(false)}
+                  className="btn-secondary px-4 py-2 text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!manualSelectedStudent || !manualAmount || !manualDescription || manualSubmitting}
+                  className="btn-primary flex items-center gap-2 px-4 py-2 text-sm disabled:opacity-50"
+                >
+                  {manualSubmitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" /> Recording…
+                    </>
+                  ) : (
+                    <>
+                      <Banknote className="h-4 w-4" /> Record Payment
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

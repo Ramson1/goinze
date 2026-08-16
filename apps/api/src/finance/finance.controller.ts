@@ -22,6 +22,7 @@ import {
   VerifyPaymentDto,
   RefundDto,
   CreateScholarshipDto,
+  CreateManualPaymentDto,
 } from './dto/finance.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -125,6 +126,16 @@ export class FinanceController {
     @Headers('verifi-hash') signature?: string,
   ) {
     return this.financeService.handleWebhook(payload, signature);
+  }
+
+  // ---- Manual payment (admin) ----
+  @Post('payments/manual')
+  @Roles('SCHOOL_ADMIN', 'ACCOUNTANT')
+  createManualPayment(
+    @CurrentUser() user: SessionUser,
+    @Body() dto: CreateManualPaymentDto,
+  ) {
+    return this.financeService.createManualPayment(user.schoolId, dto, user.id);
   }
 
   // ---- Refunds ----

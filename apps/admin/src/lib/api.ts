@@ -250,6 +250,10 @@ export interface StudentFeeItem {
   ref: string | null;
   paidAt: string | null;
   isOptional: boolean;
+  locked?: boolean;
+  sessionName?: string;
+  semester?: string | null;
+  sessionId?: string | null;
 }
 
 export interface StudentFeeBreakdown {
@@ -324,6 +328,14 @@ export const financeApi = {
     api.post<{ id: string; amount: string }>('/finance/refunds', { paymentId, reason }),
   studentFees: (studentId: string) =>
     api.get<StudentFeeBreakdown>(`/finance/student-fees/${studentId}`),
+  createManualPayment: (data: {
+    studentId: string;
+    amount: number;
+    description: string;
+    feeStructureId?: string;
+    reference?: string;
+    narration?: string;
+  }) => api.post<Payment>('/finance/payments/manual', data),
 };
 
 // ---- Results (admin approval workflow) ----
@@ -1220,6 +1232,68 @@ export const notificationApi = {
   list: () => api.get<NotificationRecord[]>('/communication/notifications'),
   markRead: (id: string) =>
     api.patch<NotificationRecord>(`/communication/notifications/${id}/read`),
+};
+
+// ---- Conversations / Messaging ----
+
+export interface ConversationSummary {
+  id: string;
+  title: string | null;
+  isGroup: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastMessage: { body: string; createdAt: string; senderId: string } | null;
+  unreadCount: number;
+  participants: { id: string; userId: string; user: { id: string; firstName: string; lastName: string; role?: string; avatarUrl?: string | null } }[];
+}
+
+export interface ConversationDetail {
+  id: string;
+  title: string | null;
+  isGroup: boolean;
+  createdAt: string;
+  participants: { id: string; userId: string; user: { id: string; firstName: string; lastName: string; role?: string; avatarUrl?: string | null } }[];
+  messages: MessageItem[];
+}
+
+export interface MessageItem {
+  id: string;
+  senderId: string;
+  body: string;
+  conversationId: string;
+  replyToId: string | null;
+  editedAt: string | null;
+  deletedAt: string | null;
+  readAt: string | null;
+  createdAt: string;
+  sender: { id: string; firstName: string; lastName: string; avatarUrl?: string | null } | null;
+  replyTo: { id: string; body: string; sender: { id: string; firstName: string; lastName: string } | null } | null;
+}
+
+export interface ContactItem {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: string;
+  avatarUrl: string | null;
+}
+
+export const conversationApi = {
+  list: () => api.get<ConversationSummary[]>('/communication/conversations'),
+  get: (id: string) => api.get<ConversationDetail>(`/communication/conversations/${id}`),
+  create: (data: { recipientIds: string[]; title?: string; isGroup?: boolean }) =>
+    api.post<ConversationDetail>('/communication/conversations', data),
+  messages: (id: string) => api.get<MessageItem[]>(`/communication/conversations/${id}/messages`),
+  sendMessage: (id: string, data: { body: string; replyToId?: string }) =>
+    api.post<MessageItem>(`/communication/conversations/${id}/messages`, data),
+  editMessage: (id: string, body: string) =>
+    api.patch<MessageItem>(`/communication/messages/${id}`, { body }),
+  deleteMessage: (id: string) =>
+    api.delete(`/communication/messages/${id}`),
+  markRead: (id: string) =>
+    api.patch(`/communication/conversations/${id}/read`),
+  contacts: (q?: string) => api.get<ContactItem[]>(`/communication/contacts?q=${q ?? ''}`),
 };
 
 // ---- Security ----

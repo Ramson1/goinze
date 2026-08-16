@@ -11,7 +11,6 @@ import {
   Wallet,
   Receipt,
   GraduationCap,
-  FileSearch,
   CalendarDays,
   MonitorSmartphone,
   Bell,
@@ -64,7 +63,6 @@ const NAV_GROUPS: NavGroup[] = [
     title: 'Results & Exams',
     items: [
       { label: 'Results', href: '/results', icon: GraduationCap },
-      { label: 'Result Checker', href: '/result-checker', icon: FileSearch },
       { label: 'Academic Calendar', href: '/academic-calendar', icon: CalendarDays },
       { label: 'CBT Dashboard', href: '/cbt', icon: MonitorSmartphone },
     ],

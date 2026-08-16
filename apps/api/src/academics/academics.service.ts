@@ -1,8 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { Paginated } from '@goinze/shared-types';
 import { PrismaService } from '../prisma/prisma.service';
 import { paginated } from '../common/utils/pagination.util';
 import { PaginationDto } from '../common/dto/pagination.dto';
+import { CommunicationService } from '../communication/communication.service';
 
 /**
  * Academic management: faculties, departments, programmes, sessions,
@@ -10,7 +11,12 @@ import { PaginationDto } from '../common/dto/pagination.dto';
  */
 @Injectable()
 export class AcademicsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(AcademicsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly comms: CommunicationService,
+  ) {}
 
   // ---- Faculties ----
   listFaculties(schoolId: string | null) {
@@ -208,8 +214,8 @@ export class AcademicsService {
     });
   }
 
-  createCourse(schoolId: string | null, data: Record<string, any>) {
-    return this.prisma.db.course.create({
+  async createCourse(schoolId: string | null, data: Record<string, any>) {
+    const course = await this.prisma.db.course.create({
       data: {
         schoolId: schoolId ?? '',
         departmentId: data.departmentId,
@@ -221,6 +227,20 @@ export class AcademicsService {
         description: data.description,
       },
     });
+
+    // Notify admin + lecturers in department about new course
+    if (schoolId) {
+      this.comms
+        .notifyUsersByRole(
+          schoolId,
+          'SCHOOL_ADMIN',
+          'New Course Created',
+          `${course.code} — ${course.title} has been added to the course catalogue.`,
+        )
+        .catch((err) => this.logger.error('Failed to send course notification', err instanceof Error ? err.stack : ''));
+    }
+
+    return course;
   }
 
   async getCourse(id: string) {

@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import Topbar from '@/components/Topbar';
+import PortalAccessGuard from '@/components/PortalAccessGuard';
+import TuitionGuard from '@/components/TuitionGuard';
 import { StudentProvider } from '@/lib/student-context';
 import { cn } from '@/lib/utils';
 
@@ -76,34 +78,38 @@ export default function PortalLayout({
 
   return (
     <StudentProvider>
-      <div className="min-h-screen bg-slate-50">
-        <Sidebar
-          open={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
-          collapsed={sidebarCollapsed}
-          onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
-        />
+      <PortalAccessGuard>
+        <TuitionGuard>
+          <div className="min-h-screen bg-slate-50">
+            <Sidebar
+              open={sidebarOpen}
+              onClose={() => setSidebarOpen(false)}
+              collapsed={sidebarCollapsed}
+              onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
+            />
 
-        <div className={cn('flex min-h-screen flex-col transition-all duration-200', sidebarCollapsed ? 'lg:pl-[68px]' : 'lg:pl-72')}>
-          <Topbar onMenuClick={() => setSidebarOpen(true)} />
-          <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
-          <footer className="border-t border-slate-200/80 px-4 py-4 text-center text-xs text-slate-400 sm:px-6 lg:px-8">
-            <p>Goinzeschool Student Portal · Enterprise School ERP</p>
-            <p className="mt-1 text-[11px] text-slate-400">
-              Designed &amp; developed by{' '}
-              <a
-                href="https://rhemaexpertsolutions.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-medium text-brand hover:underline"
-              >
-                Rhema Expert Solutions
-              </a>
-              {' '}| +234 803 522 6642
-            </p>
-          </footer>
-        </div>
-      </div>
+            <div className={cn('flex min-h-screen flex-col transition-all duration-200', sidebarCollapsed ? 'lg:pl-[68px]' : 'lg:pl-72')}>
+              <Topbar onMenuClick={() => setSidebarOpen(true)} />
+              <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+              <footer className="border-t border-slate-200/80 px-4 py-4 text-center text-xs text-slate-400 sm:px-6 lg:px-8">
+                <p>Goinzeschool Student Portal · Enterprise School ERP</p>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Designed &amp; developed by{' '}
+                  <a
+                    href="https://rhemaexpertsolutions.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-brand hover:underline"
+                  >
+                    Rhema Expert Solutions
+                  </a>
+                  {' '}| +234 803 522 6642
+                </p>
+              </footer>
+            </div>
+          </div>
+        </TuitionGuard>
+      </PortalAccessGuard>
     </StudentProvider>
   );
 }

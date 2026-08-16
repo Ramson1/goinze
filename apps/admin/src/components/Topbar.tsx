@@ -76,6 +76,8 @@ const allNavItems: NavItem[] = [
   { label: 'News', href: '/news', icon: Newspaper, group: 'Content', keywords: ['articles', 'announcements'] },
   { label: 'Events', href: '/events', icon: CalendarDays, group: 'Content', keywords: ['calendar', 'activities'] },
   { label: 'Announcements', href: '/communication', icon: MessageSquare, group: 'Content', keywords: ['messages', 'notifications', 'notice board', 'communication'] },
+  { label: 'Messages', href: '/messages', icon: MessageSquare, group: 'Content', keywords: ['chat', 'inbox', 'direct messages'] },
+  { label: 'Notifications', href: '/notifications', icon: Bell, group: 'Content', keywords: ['alerts', 'updates', 'activity'] },
   { label: 'Digital ID Cards', href: '/digital-id-cards', icon: IdCard, group: 'System', keywords: ['identity', 'badges'], roles: ['SUPER_ADMIN'] },
   { label: 'Settings', href: '/settings', icon: Settings, group: 'System', keywords: ['preferences', 'configuration', 'school profile'] },
   { label: 'Audit Logs', href: '/audit-logs', icon: ScrollText, group: 'System', keywords: ['security', 'history', 'activity'] },
@@ -147,10 +149,14 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
 
   const debouncedQuery = useDebouncedValue(searchQuery, 300);
 
-  // Fetch user profile and notifications on mount
+  // Fetch user profile and notifications on mount, then poll every 30s
   useEffect(() => {
     authApi.me().then(setProfile).catch(() => undefined);
     notificationApi.list().then(setNotifications).catch(() => undefined);
+    const interval = setInterval(() => {
+      notificationApi.list().then(setNotifications).catch(() => undefined);
+    }, 30_000);
+    return () => clearInterval(interval);
   }, []);
 
   // ── Search logic ────────────────────────────────────────────────

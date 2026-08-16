@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Download, FileText, FileSpreadsheet, FileType2, FolderDown, Loader2 } from 'lucide-react';
+import { Download, FileText, FileSpreadsheet, FileType2, FolderDown, Loader2, GraduationCap } from 'lucide-react';
 import Card from '@/components/Card';
 import PageHeader from '@/components/PageHeader';
 import { documentsApi, type DocumentRecord } from '@/lib/api';
@@ -39,9 +39,14 @@ function titleCase(s: string) {
     .join(' ');
 }
 
+interface DocumentsData {
+  documents: DocumentRecord[];
+  admissionLetterUrl: string | null;
+}
+
 export default function DownloadsPage() {
   const { profile } = useStudent();
-  const [docs, setDocs] = useState<DocumentRecord[]>([]);
+  const [data, setData] = useState<DocumentsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [category, setCategory] = useState('All');
@@ -50,13 +55,21 @@ export default function DownloadsPage() {
     if (!profile?.id) return;
     documentsApi
       .mine(profile.id)
-      .then(setDocs)
+      .then(setData)
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load documents.'))
       .finally(() => setLoading(false));
   }, [profile?.id]);
 
-  const categories = ['All', ...Array.from(new Set(docs.map((d) => d.type)))];
-  const list = docs.filter((d) => category === 'All' || d.type === category);
+  // Exclude ADMISSION_LETTER from category tabs — it's shown in the banner
+  const docs = data?.documents ?? [];
+  const categories = [
+    'All',
+    ...Array.from(new Set(docs.filter((d) => d.type !== 'ADMISSION_LETTER').map((d) => d.type))),
+  ];
+  const list = docs.filter((d) => {
+    if (d.type === 'ADMISSION_LETTER') return false; // shown in banner
+    return category === 'All' || d.type === category;
+  });
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -80,6 +93,35 @@ export default function DownloadsPage() {
 
       {!loading && !error && (
         <>
+          {/* Admission letter banner — always visible */}
+          {data?.admissionLetterUrl && (
+            <Card className="mb-5 overflow-hidden border-teal-200 bg-gradient-to-r from-teal-50 to-emerald-50">
+              <div className="flex items-center justify-between gap-4 p-5">
+                <div className="flex min-w-0 items-center gap-4">
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-teal-100 text-teal-700">
+                    <GraduationCap className="h-6 w-6" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-teal-900">Admission Letter</p>
+                    <p className="mt-0.5 text-xs text-teal-600">
+                      Official · System-generated
+                    </p>
+                  </div>
+                </div>
+                <a
+                  href={data.admissionLetterUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 rounded-lg bg-teal-700 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-teal-800"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Download className="h-3.5 w-3.5" /> View Letter
+                  </span>
+                </a>
+              </div>
+            </Card>
+          )}
+
           {/* Category filter */}
           <div className="mb-5 flex flex-wrap gap-2">
             {categories.map((c) => (
@@ -134,7 +176,7 @@ export default function DownloadsPage() {
               );
             })}
 
-            {list.length === 0 && (
+            {list.length === 0 && !data?.admissionLetterUrl && (
               <Card className="p-10 text-center">
                 <FolderDown className="mx-auto h-10 w-10 text-slate-300" />
                 <p className="mt-3 text-sm font-medium text-slate-600">No documents here yet</p>
