@@ -1,7 +1,7 @@
 "use client";
 
 import { CheckCircle2, ClipboardList, CreditCard, Download, FileText } from "lucide-react";
-import { currentAcademicSession } from "@goinze/shared-utils";
+import { currentAcademicSession } from "@/lib/utils";
 import PageHeader from "@/components/PageHeader";
 import Section from "@/components/Section";
 import Card from "@/components/Card";

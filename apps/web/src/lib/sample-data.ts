@@ -2,7 +2,7 @@
  * Central sample/mock data for the Goinze International School of Medical Health Science and Technology public website.
  * Everything here is static demo content — no backend calls are made.
  */
-import { currentAcademicSession } from "@goinze/shared-utils";
+import { currentAcademicSession } from "./utils";
 
 /* ---------------------------------- Types --------------------------------- */
 

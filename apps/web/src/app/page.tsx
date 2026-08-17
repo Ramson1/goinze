@@ -11,7 +11,7 @@ import {
   Megaphone,
   Quote,
 } from "lucide-react";
-import { currentAcademicSession } from "@goinze/shared-utils";
+import { currentAcademicSession } from "@/lib/utils";
 import Container from "@/components/Container";
 import Section from "@/components/Section";
 import Card from "@/components/Card";
