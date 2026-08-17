@@ -1002,7 +1002,7 @@ export default function CbtPage() {
 
                 {codes[codesFor] && codes[codesFor].length === 0 && (
                   <p className="rounded-xl border border-dashed border-gray-200 py-8 text-center text-sm text-gray-400">
-                    No codes generated yet. Click "Generate 10 Codes" to create access codes for this exam.
+                    No codes generated yet. Click &quot;Generate 10 Codes&quot; to create access codes for this exam.
                   </p>
                 )}
               </div>

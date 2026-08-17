@@ -533,7 +533,7 @@ export default function AdmissionsPage() {
               {/* O'Level Results */}
               {viewingApplication.educationData?.olevelResults && viewingApplication.educationData.olevelResults.length > 0 && (
                 <section className="mb-6">
-                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">O' Level Results</h3>
+                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">O&apos; Level Results</h3>
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200 text-sm">
                       <thead className="bg-gray-50">
@@ -564,7 +564,7 @@ export default function AdmissionsPage() {
               {/* A'Level Results */}
               {viewingApplication.educationData?.alevelResults && viewingApplication.educationData.alevelResults.length > 0 && (
                 <section className="mb-6">
-                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">A' Level Results</h3>
+                  <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">A&apos; Level Results</h3>
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200 text-sm">
                       <thead className="bg-gray-50">
@@ -736,7 +736,7 @@ export default function AdmissionsPage() {
                 approvalTarget.application.secondChoice ||
                 approvalTarget.application.thirdChoice) && (
                 <div>
-                  <label className="label font-semibold text-gray-700">Applicant's Course Choices</label>
+                  <label className="label font-semibold text-gray-700">Applicant&apos;s Course Choices</label>
                   <div className="space-y-1 text-sm text-gray-600">
                     {approvalTarget.application.firstChoice && (
                       <p>1st Choice: <span className="font-medium text-gray-900">{approvalTarget.application.firstChoice}</span></p>

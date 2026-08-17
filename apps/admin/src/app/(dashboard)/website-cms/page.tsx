@@ -454,7 +454,7 @@ export default function WebsiteCmsPage() {
                       <div key={i} className="flex items-start gap-4 px-5 py-4">
                         <Quote className="mt-1 h-5 w-5 shrink-0 text-brand-light" />
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm italic text-gray-700">"{t.quote}"</p>
+                          <p className="text-sm italic text-gray-700">&ldquo;{t.quote}&rdquo;</p>
                           <p className="mt-1.5 text-xs font-semibold text-gray-900">{t.name} <span className="font-normal text-gray-400">— {t.role}</span></p>
                         </div>
                       </div>
@@ -684,7 +684,7 @@ export default function WebsiteCmsPage() {
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-semibold text-gray-900">{s.name}</p>
                           <p className="text-xs text-brand">{s.currentRole} {s.programme && `· ${s.programme}`} {s.graduationYear && `· Class of ${s.graduationYear}`}</p>
-                          {s.story && <p className="mt-1 line-clamp-2 text-xs text-gray-500">"{s.story}"</p>}
+                          {s.story && <p className="mt-1 line-clamp-2 text-xs text-gray-500">&ldquo;{s.story}&rdquo;</p>}
                         </div>
                       </div>
                     ))}
