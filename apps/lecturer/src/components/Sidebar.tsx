@@ -19,7 +19,7 @@ import {
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { currentAcademicSession } from '@goinze/shared-utils';
+import { currentAcademicSession } from '@/lib/utils';
 import { cn } from '@/lib/cn';
 
 interface NavItem {

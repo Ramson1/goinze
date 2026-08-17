@@ -12,8 +12,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@goinze/shared-types": "workspace:*",
-    "@goinze/shared-utils": "workspace:*",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "lucide-react": "^0.454.0",

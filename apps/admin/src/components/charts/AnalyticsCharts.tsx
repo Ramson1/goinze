@@ -17,7 +17,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { formatNaira } from '@goinze/shared-utils';
+import { formatNaira } from '@/lib/utils';
 import type {
   NameValue,
   RevenuePoint,

@@ -14,7 +14,7 @@ import Card from '@/components/Card';
 import PageHeader from '@/components/PageHeader';
 import { studentApi, type ReceiptItem } from '@/lib/api';
 import { useStudent } from '@/lib/student-context';
-import { formatNaira } from '@goinze/shared-utils';
+import { formatNaira } from '@/lib/utils';
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', {

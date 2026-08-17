@@ -1,6 +1,4 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {
-  transpilePackages: ['@goinze/shared-types', '@goinze/shared-utils'],
-};
+const nextConfig = {};
 
 export default nextConfig;

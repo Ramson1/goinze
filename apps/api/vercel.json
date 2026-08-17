@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "pnpm --filter @goinze/database generate && nest build",
+  "buildCommand": "prisma generate && nest build",
   "outputDirectory": "dist",
   "functions": {
     "dist/vercel.js": {

@@ -4,7 +4,7 @@
 // (${NEXT_PUBLIC_API_URL}) — this module powers the UI scaffold.
 // ============================================================
 
-import { computeGpa } from '@goinze/shared-utils';
+import { computeGpa } from '@/lib/utils';
 
 // ------------------------------------------------------------
 // Student identity

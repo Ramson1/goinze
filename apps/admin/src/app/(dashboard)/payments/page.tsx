@@ -16,7 +16,7 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
-import { formatNaira } from '@goinze/shared-utils';
+import { formatNaira } from '@/lib/utils';
 import PageHeader from '@/components/PageHeader';
 import Card from '@/components/Card';
 import StatCard from '@/components/StatCard';

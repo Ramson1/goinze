@@ -20,7 +20,7 @@ import PageHeader from '@/components/PageHeader';
 import PaymentModal, { type FlutterwaveResponse } from '@/components/PaymentModal';
 import { studentApi, financeApi, type FeesResponse, type FeeItem, type VerifyPaymentResult } from '@/lib/api';
 import { useStudent } from '@/lib/student-context';
-import { formatNaira } from '@goinze/shared-utils';
+import { formatNaira } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 
 type FeeStatus = 'PAID' | 'PENDING';

@@ -16,7 +16,7 @@ import PageHeader from '@/components/PageHeader';
 import Card from '@/components/Card';
 import DataTable, { type Column } from '@/components/DataTable';
 import StatusBadge from '@/components/StatusBadge';
-import { currentAcademicSession } from '@goinze/shared-utils';
+import { currentAcademicSession } from '@/lib/utils';
 import { sessionsApi, type AcademicSessionRecord } from '@/lib/api';
 
 function formatDate(iso: string | null): string {

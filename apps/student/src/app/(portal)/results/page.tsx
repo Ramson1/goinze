@@ -6,7 +6,7 @@ import Card from '@/components/Card';
 import PageHeader from '@/components/PageHeader';
 import { studentApi, type ResultsResponse, type SemesterResult } from '@/lib/api';
 import { useStudent } from '@/lib/student-context';
-import { resolveGrade, computeGpa } from '@goinze/shared-utils';
+import { resolveGrade, computeGpa } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 
 function classificationBadge(cls: string) {

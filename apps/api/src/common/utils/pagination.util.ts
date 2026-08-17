@@ -1,5 +1,5 @@
-import { paginate } from '@goinze/shared-utils';
-import type { Paginated } from '@goinze/shared-types';
+import { paginate } from '../../../lib/utils';
+import type { Paginated } from '../../../lib/types';
 
 interface PrismaDelegate {
   findMany(args?: any): Promise<any[]>;

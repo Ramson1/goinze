@@ -27,7 +27,7 @@ import {
 import Card from '@/components/Card';
 import StatCard from '@/components/StatCard';
 import { studentApi, type DashboardResponse, type ResultsResponse } from '@/lib/api';
-import { formatNaira } from '@goinze/shared-utils';
+import { formatNaira } from '@/lib/utils';
 
 const quickLinks = [
   { label: 'Register Courses', href: '/course-registration', icon: ClipboardList },

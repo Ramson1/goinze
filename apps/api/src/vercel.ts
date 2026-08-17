@@ -1,11 +1,10 @@
 /**
  * Vercel serverless entry-point for the NestJS API.
  *
- * `ts-node/register` is required FIRST so that workspace packages
- * (e.g. @goinze/database) that ship raw TypeScript are transpiled
- * on-the-fly when NestJS loads its modules.
+ * tsconfig-paths is registered FIRST so that TypeScript path
+ * aliases (@/lib/*) resolve correctly at runtime.
  */
-require('ts-node/register');
+require('tsconfig-paths/register');
 
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';

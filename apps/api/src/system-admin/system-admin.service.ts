@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import type { Paginated } from '@goinze/shared-types';
-import { slugify } from '@goinze/shared-utils';
+import type { Paginated } from '../lib/types';
+import { slugify } from '../lib/utils';
 import { PrismaService } from '../prisma/prisma.service';
 import { paginated } from '../common/utils/pagination.util';
 import { PaginationDto } from '../common/dto/pagination.dto';

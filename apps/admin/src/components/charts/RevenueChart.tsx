@@ -9,7 +9,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { formatNaira } from '@goinze/shared-utils';
+import { formatNaira } from '@/lib/utils';
 import type { RevenuePoint } from '@/lib/api';
 
 export default function RevenueChart({ data }: { data: RevenuePoint[] }) {
