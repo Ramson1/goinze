@@ -89,6 +89,7 @@ export default function PaymentsPage() {
   const [verifying, setVerifying] = useState(false);
   const [receipt, setReceipt] = useState<VerifyPaymentResult | null>(null);
   const [publicKey, setPublicKey] = useState('');
+  const [portalAccessPublicKey, setPortalAccessPublicKey] = useState('');
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const searchParams = useSearchParams();
   const [showAccessBanner, setShowAccessBanner] = useState(
@@ -117,6 +118,10 @@ export default function PaymentsPage() {
     // Fetch Flutterwave public key from API
     financeApi.getFlutterwaveConfig()
       .then((cfg) => alive && setPublicKey(cfg.publicKey))
+      .catch(() => {});
+    // Fetch Portal Access public key from API
+    financeApi.getPortalAccessPublicKey()
+      .then((cfg) => alive && setPortalAccessPublicKey(cfg.publicKey))
       .catch(() => {});
     return () => { alive = false; };
   }, []);
@@ -474,7 +479,7 @@ export default function PaymentsPage() {
           amount={payingItem.amount}
           email={profile?.email ?? ''}
           txRef={payingItem.ref ?? ''}
-          publicKey={publicKey}
+          publicKey={payingItem.type === 'PORTAL_ACCESS' ? portalAccessPublicKey : publicKey}
           title={`Pay ${payingItem.description}`}
           description={`Payment for ${payingItem.description}`}
           onSuccess={handlePaymentSuccess}

@@ -218,11 +218,32 @@ export class FinanceService {
 
     const result = await this.gateway.verify(dto.reference);
     if (result.status !== 'successful') {
+      // Try secondary account (Portal Access Fee) if primary fails
+      try {
+        const secondaryResult = await this.gateway.verifyWithPortalAccessKey(dto.reference);
+        if (secondaryResult.status === 'successful') {
+          return this.processSuccessfulPayment(payment, secondaryResult, dto);
+        }
+      } catch (err) {
+        this.logger.warn('Portal access key verification also failed');
+      }
       throw new BadRequestException(
         `Payment not successful (gateway status: ${result.status}).`,
       );
     }
 
+    return this.processSuccessfulPayment(payment, result, dto);
+  }
+
+  /**
+   * Process a successful payment verification: update payment status, credit ledger,
+   * handle application fees, generate receipt, and notify admin.
+   */
+  private async processSuccessfulPayment(
+    payment: any,
+    result: any,
+    dto: VerifyPaymentDto,
+  ) {
     // Use a transaction to prevent duplicate processing from concurrent webhooks
     const updated = await this.prisma.db.$transaction(async (tx) => {
       // Re-check status inside transaction (optimistic locking)

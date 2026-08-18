@@ -323,6 +323,8 @@ export interface FlutterwaveConfig {
 export const financeApi = {
   /** Fetch Flutterwave public key and config from the API. */
   getFlutterwaveConfig: () => api.get<FlutterwaveConfig>('/finance/flutterwave-config'),
+  /** Fetch Portal Access Flutterwave public key from the API. */
+  getPortalAccessPublicKey: () => api.get<{ publicKey: string }>('/finance/portal-access-public-key'),
   initPayment: (data: {
     feeStructureId?: string;
     studentId?: string;

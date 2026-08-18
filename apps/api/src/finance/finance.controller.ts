@@ -92,6 +92,15 @@ export class FinanceController {
     };
   }
 
+  /** Public endpoint to expose Portal Access Flutterwave public key. */
+  @Public()
+  @Get('portal-access-public-key')
+  portalAccessPublicKey() {
+    return {
+      publicKey: this.gateway.portalAccessPublicKey || '',
+    };
+  }
+
   // ---- Payments ----
   @Get('payments')
   @Roles('SCHOOL_ADMIN', 'ACCOUNTANT')
