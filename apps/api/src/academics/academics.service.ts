@@ -18,6 +18,15 @@ export class AcademicsService {
     private readonly comms: CommunicationService,
   ) {}
 
+  // ---- Schools ----
+  listSchools() {
+    return this.prisma.db.school.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, slug: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   // ---- Faculties ----
   listFaculties(schoolId: string | null) {
     return this.prisma.db.faculty.findMany({

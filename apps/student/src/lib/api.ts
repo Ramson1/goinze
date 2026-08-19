@@ -578,4 +578,36 @@ export const resultsApi = {
 export const authApi = {
   changePassword: (payload: { currentPassword: string; newPassword: string }) =>
     api.patch<{ success: boolean }>('/auth/change-password', payload),
+  selfRegister: (payload: {
+    matricNumber: string;
+    departmentId: string;
+    email: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+    phone?: string;
+    schoolId: string;
+  }) => api.post<{ success: boolean; message: string }>('/auth/self-register', payload),
+};
+
+// ---- Academics (public) ----
+
+export interface School {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+export interface Department {
+  id: string;
+  name: string;
+  code: string;
+  facultyId: string;
+  faculty: { id: string; name: string };
+}
+
+export const academicsApi = {
+  schools: () => api.get<School[]>('/academics/schools'),
+  departments: (schoolId: string) =>
+    api.get<Department[]>(`/academics/departments?schoolId=${encodeURIComponent(schoolId)}`),
 };

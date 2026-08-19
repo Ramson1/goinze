@@ -24,6 +24,13 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 export class AcademicsController {
   constructor(private readonly academicsService: AcademicsService) {}
 
+  // ---- Schools ----
+  @Public()
+  @Get('schools')
+  listSchools() {
+    return this.academicsService.listSchools();
+  }
+
   // ---- Faculties ----
   @Public()
   @Get('faculties')

@@ -201,6 +201,12 @@ export default function LoginPage() {
           </form>
 
           <p className="mt-6 text-center text-sm text-slate-500">
+            Already have a matric number?{' '}
+            <Link href="/self-register" className="font-medium text-brand hover:text-brand-dark">
+              Create your portal account
+            </Link>
+          </p>
+          <p className="mt-2 text-center text-sm text-slate-500">
             Need help signing in?{' '}
             <Link href="#" className="font-medium text-brand hover:text-brand-dark">
               Contact ICT Support

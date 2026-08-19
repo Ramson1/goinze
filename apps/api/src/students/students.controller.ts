@@ -45,6 +45,12 @@ export class StudentsController {
     );
   }
 
+  @Get('pending-approvals')
+  @Roles('SCHOOL_ADMIN')
+  pendingApprovals(@CurrentUser() user: SessionUser) {
+    return this.studentsService.findPendingApprovals(user.schoolId);
+  }
+
   @Get(':id')
   @Roles('SCHOOL_ADMIN', 'ADMISSION_OFFICER', 'LECTURER', 'STUDENT')
   findOne(@Param('id') id: string) {
@@ -112,5 +118,11 @@ export class StudentsController {
   @Roles('SCHOOL_ADMIN')
   resetPassword(@Param('id') id: string) {
     return this.studentsService.resetTempPassword(id);
+  }
+
+  @Patch(':id/approve-portal')
+  @Roles('SCHOOL_ADMIN')
+  approvePortal(@Param('id') id: string, @CurrentUser() user: SessionUser) {
+    return this.studentsService.approvePortalAccount(id, user.schoolId);
   }
 }

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import type { Paginated } from '../lib/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { paginated } from '../common/utils/pagination.util';
@@ -216,6 +216,57 @@ export class StudentsService {
       password += chars.charAt(Math.floor(Math.random() * chars.length));
     }
     return password;
+  }
+
+  /**
+   * Find all students with a portal account awaiting admin approval (User.status = PENDING).
+   */
+  async findPendingApprovals(schoolId: string | null) {
+    const where: Record<string, any> = {
+      userId: { not: null },
+      user: { status: 'PENDING' },
+    };
+    if (schoolId) where.schoolId = schoolId;
+    return this.prisma.db.student.findMany({
+      where,
+      include: {
+        user: { select: { id: true, email: true, firstName: true, lastName: true, createdAt: true } },
+        department: true,
+        programme: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /**
+   * Approve a self-registered student's portal account:
+   * activate both the Student and the linked User.
+   */
+  async approvePortalAccount(studentId: string, schoolId: string | null) {
+    const where: Record<string, any> = { id: studentId };
+    if (schoolId) where.schoolId = schoolId;
+    const student = await this.prisma.db.student.findFirst({
+      where,
+      include: { user: true },
+    });
+    if (!student) throw new NotFoundException('Student not found');
+    if (!student.userId) throw new BadRequestException('This student has no portal account linked.');
+    if (student.user?.status !== 'PENDING') {
+      throw new BadRequestException('This account is not pending approval.');
+    }
+
+    await this.prisma.db.$transaction(async (tx) => {
+      await tx.student.update({
+        where: { id: studentId },
+        data: { status: 'ACTIVE', matricActivatedAt: new Date() },
+      });
+      await tx.user.update({
+        where: { id: student.userId! },
+        data: { status: 'ACTIVE' },
+      });
+    });
+
+    return { success: true };
   }
 
   /**

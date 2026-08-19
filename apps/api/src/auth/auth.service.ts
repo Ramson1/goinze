@@ -4,6 +4,7 @@ import {
   ConflictException,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -11,16 +12,21 @@ import * as bcrypt from 'bcryptjs';
 import type { AuthTokens, JwtPayload, SessionUser } from '../lib/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { SecurityService } from '../security/security.service';
+import { CommunicationService } from '../communication/communication.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { SelfRegisterDto } from './dto/self-register.dto';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly security: SecurityService,
+    private readonly comms: CommunicationService,
   ) {}
 
   /** Register a new user account and issue tokens. */
@@ -97,6 +103,9 @@ export class AuthService {
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) {
       throw new UnauthorizedException('Invalid credentials');
+    }
+    if (user.status === 'PENDING') {
+      throw new UnauthorizedException('Your account is pending admin approval. Please contact the school admin.');
     }
     const { passwordHash, ...result } = user;
     return result;
@@ -286,5 +295,81 @@ export class AuthService {
     ]);
 
     return { accessToken, refreshToken, expiresIn: 900 };
+  }
+
+  /**
+   * Self-registration for existing students: verify identity via matric number + personal details,
+   * create a PENDING user account linked to the student record. Admin must approve before login.
+   */
+  async selfRegister(dto: SelfRegisterDto): Promise<{ success: true; message: string }> {
+    // 1. Look up the student by matric number + school
+    const student = await this.prisma.db.student.findFirst({
+      where: { matricNumber: dto.matricNumber, schoolId: dto.schoolId },
+      include: { department: true },
+    });
+    if (!student) {
+      throw new NotFoundException('No student record found with this matric number in this school.');
+    }
+
+    // 2. Check the student record is not already linked to a portal account
+    if (student.userId) {
+      throw new ConflictException('This student record already has a portal account. Contact the admin if you need help.');
+    }
+
+    // 3. Verify department matches the student record
+    if (student.departmentId && student.departmentId !== dto.departmentId) {
+      throw new BadRequestException('The department provided does not match our records.');
+    }
+
+    // 4. Verify first name and last name match (case-insensitive)
+    if (student.firstName.toLowerCase() !== dto.firstName.trim().toLowerCase() ||
+        student.lastName.toLowerCase() !== dto.lastName.trim().toLowerCase()) {
+      throw new BadRequestException('The names provided do not match our records.');
+    }
+
+    // 5. Check no User already exists with the provided email
+    const existingUser = await this.prisma.db.user.findUnique({
+      where: { email: dto.email.toLowerCase() },
+    });
+    if (existingUser) {
+      throw new ConflictException('A user with this email already exists.');
+    }
+
+    // 6. Create User + link to Student in a transaction
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+    const result = await this.prisma.db.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email: dto.email.toLowerCase(),
+          passwordHash,
+          firstName: dto.firstName.trim(),
+          lastName: dto.lastName.trim(),
+          phone: dto.phone,
+          schoolId: dto.schoolId,
+          role: 'STUDENT',
+          status: 'PENDING',
+        },
+      });
+      await tx.student.update({
+        where: { id: student.id },
+        data: { userId: user.id },
+      });
+      return user;
+    });
+
+    // 7. Notify admins about the new self-registration (fire-and-forget)
+    this.comms
+      .notifyUsersByRole(
+        dto.schoolId,
+        'SCHOOL_ADMIN',
+        'New Portal Account Registration',
+        `${dto.firstName} ${dto.lastName} (Matric: ${dto.matricNumber}) has registered for a portal account and is awaiting approval.`,
+      )
+      .catch((err) => this.logger.error('Failed to notify admins of self-registration', err instanceof Error ? err.stack : ''));
+
+    return {
+      success: true,
+      message: 'Registration submitted successfully. Your account is awaiting admin approval.',
+    };
   }
 }

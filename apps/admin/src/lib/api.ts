@@ -523,6 +523,19 @@ export const studentsApi = {
   graduateAll: () => api.post<{ graduated: number }>('/students/graduate-all'),
   resetPassword: (id: string) => api.post<{ tempPassword: string }>(`/students/${id}/reset-password`),
   departments: () => api.get<DepartmentRef[]>('/academics/departments'),
+  pendingApprovals: () =>
+    api.get<
+      {
+        id: string;
+        firstName: string;
+        lastName: string;
+        matricNumber: string | null;
+        department?: { name: string };
+        programme?: { name: string };
+        user?: { id: string; email: string; firstName: string; lastName: string; createdAt: string };
+      }[]
+    >('/students/pending-approvals'),
+  approvePortal: (id: string) => api.patch<{ success: boolean }>(`/students/${id}/approve-portal`),
 };
 
 // ---- Analytics (admin dashboard) ----
