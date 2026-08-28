@@ -325,6 +325,35 @@ export interface AttendanceRecord {
   student: { id: string; firstName: string; lastName: string; matricNumber: string | null } | null;
 }
 
+export interface QrScanResult {
+  student: { id: string; firstName: string; lastName: string; matricNumber: string | null };
+  record: { id: string; status: string; method: string; date: string };
+  duplicate: boolean;
+}
+
+export interface AttendanceSession {
+  courseId: string;
+  courseCode: string;
+  courseTitle: string;
+  date: string;
+  totalMarked: number;
+  presentCount: number;
+  absentCount: number;
+  lateCount: number;
+  methods: string[];
+}
+
+export interface AttendanceSessionDetail {
+  id: string;
+  studentId: string;
+  firstName: string;
+  lastName: string;
+  matricNumber: string | null;
+  status: string;
+  method: string;
+  date: string;
+}
+
 // ---- CBT ----
 
 export interface QuestionBank {
@@ -392,6 +421,12 @@ export const lecturerApi = {
   ) => api.post<{ marked: number }>('/attendance/mark', { courseId, date, records }),
   courseAttendance: (courseId: string) =>
     api.get<AttendanceRecord[]>(`/attendance?${new URLSearchParams({ courseId }).toString()}`),
+  scanQr: (qrData: string, courseId: string) =>
+    api.post<QrScanResult>('/attendance/scan-qr', { qrData, courseId }),
+  attendanceOverview: (courseId?: string) =>
+    api.get<AttendanceSession[]>(`/attendance/overview${courseId ? `?courseId=${encodeURIComponent(courseId)}` : ''}`),
+  attendanceSession: (courseId: string, date: string) =>
+    api.get<AttendanceSessionDetail[]>(`/attendance/session/${encodeURIComponent(courseId)}/${encodeURIComponent(date)}`),
 
   // CBT
   questionBanks: () => api.get<QuestionBank[]>('/cbt/question-banks'),
@@ -451,4 +486,41 @@ export const lecturerApi = {
 
   // School events (public CMS endpoint, used by the calendar)
   schoolEvents: () => api.get<SchoolEvent[]>('/website/events'),
+};
+
+// ---- Auth (public) ----
+
+export const authApi = {
+  selfRegisterLecturer: (payload: {
+    staffNumber: string;
+    departmentId: string;
+    email: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+    phone?: string;
+    schoolId: string;
+  }) => api.post<{ success: boolean; message: string }>('/auth/self-register-lecturer', payload),
+};
+
+// ---- Academics (public) ----
+
+export interface School {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+export interface Department {
+  id: string;
+  name: string;
+  code: string;
+  facultyId: string;
+  faculty: { id: string; name: string };
+}
+
+export const academicsApi = {
+  schools: () => api.get<School[]>('/academics/schools'),
+  departments: (schoolId: string) =>
+    api.get<Department[]>(`/academics/departments?schoolId=${encodeURIComponent(schoolId)}`),
 };

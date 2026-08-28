@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import { Eye, EyeOff, Loader2, Lock, Mail } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 
@@ -193,7 +194,10 @@ export default function LoginPage() {
         </div>
 
         <p className="mt-6 text-center text-xs text-blue-100/80">
-          Need an account? Contact your school administrator.
+          Already have a staff number?{' '}
+          <Link href="/self-register" className="font-medium text-white hover:underline">
+            Create your portal account
+          </Link>
         </p>
       </div>
     </div>
