@@ -120,9 +120,13 @@ export default function SettingsPage() {
   const [gradeBands, setGradeBands] = useState<GradeBand[]>(DEFAULT_HIGHER_ED_GRADES);
   const [editingGrade, setEditingGrade] = useState<number | null>(null);
 
-  // Payment gateways
+  // Payment gateways — student payments (all admins)
   const [flutterwaveEnabled, setFlutterwaveEnabled] = useState(true);
   const [paystackEnabled, setPaystackEnabled] = useState(true);
+  // Payment gateways — portal access fee (super admin only)
+  const [portalFlutterwaveEnabled, setPortalFlutterwaveEnabled] = useState(true);
+  const [portalPaystackEnabled, setPortalPaystackEnabled] = useState(true);
+  // Developer payment toggle (super admin only)
   const [developerPaymentEnabled, setDeveloperPaymentEnabled] = useState(true);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
@@ -158,12 +162,19 @@ export default function SettingsPage() {
           setGradeBands(grading);
         }
 
-        // Load payment gateway settings
+        // Load payment gateway settings — student payments
         if (settings['payment.flutterwave_enabled'] !== undefined) {
           setFlutterwaveEnabled(settings['payment.flutterwave_enabled'] !== false);
         }
         if (settings['payment.paystack_enabled'] !== undefined) {
           setPaystackEnabled(settings['payment.paystack_enabled'] !== false);
+        }
+        // Load payment gateway settings — portal access fee (super admin)
+        if (settings['payment.portal_access_flutterwave_enabled'] !== undefined) {
+          setPortalFlutterwaveEnabled(settings['payment.portal_access_flutterwave_enabled'] !== false);
+        }
+        if (settings['payment.portal_access_paystack_enabled'] !== undefined) {
+          setPortalPaystackEnabled(settings['payment.portal_access_paystack_enabled'] !== false);
         }
         if (settings['payment.developer_payment_enabled'] !== undefined) {
           setDeveloperPaymentEnabled(settings['payment.developer_payment_enabled'] !== false);
@@ -241,11 +252,17 @@ export default function SettingsPage() {
     setSaving('payments');
     setError(null);
     try {
-      await settingsApi.updateMany({
+      const entries: Record<string, any> = {
         'payment.flutterwave_enabled': flutterwaveEnabled,
         'payment.paystack_enabled': paystackEnabled,
-        'payment.developer_payment_enabled': developerPaymentEnabled,
-      });
+      };
+      // Portal access toggles only saved by super admin
+      if (isSuperAdmin) {
+        entries['payment.portal_access_flutterwave_enabled'] = portalFlutterwaveEnabled;
+        entries['payment.portal_access_paystack_enabled'] = portalPaystackEnabled;
+        entries['payment.developer_payment_enabled'] = developerPaymentEnabled;
+      }
+      await settingsApi.updateMany(entries);
       flash('Payment gateway settings saved successfully.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save payment settings.');
@@ -530,15 +547,16 @@ export default function SettingsPage() {
             {tab === 'payments' && (
               <Card
                 title="Payment Gateways"
-                subtitle="Configure which payment options are available to students"
+                subtitle="Configure which payment options are available for student payments and portal access fees"
               >
                 <div className="space-y-6 p-5">
                   {/* Explanation */}
                   <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-                    <p className="font-medium">How payment gateways work</p>
+                    <p className="font-medium">Student payment gateways</p>
                     <p className="mt-1 text-blue-700">
-                      Choose which payment options are available to students. Both options work the same way — students simply pick their preferred one.
-                      There is no difference in security or reliability. If only one gateway is enabled, students will use that option automatically.
+                      Choose which payment options are available to students on the website and student dashboard for tuition, acceptance fees, and other student payments.
+                      Both options work the same way — students simply pick their preferred one.
+                      If only one gateway is enabled, students will use that option automatically.
                     </p>
                   </div>
 
@@ -610,6 +628,77 @@ export default function SettingsPage() {
                       </div>
                     )}
                   </div>
+
+                  {/* Super admin only: Portal Access Fee gateway toggles */}
+                  {isSuperAdmin && (
+                    <div className="border-t border-gray-200 pt-5">
+                      <div className="mb-3 rounded-lg border border-purple-200 bg-purple-50 px-4 py-3 text-sm text-purple-800">
+                        <p className="font-medium">Portal Access Fee payment gateways</p>
+                        <p className="mt-1 text-purple-700">
+                          These controls apply only to the portal access fee payment. Disable gateways here without affecting regular student payments.
+                        </p>
+                      </div>
+                      <div className="space-y-4">
+                        {/* Portal Access Flutterwave toggle */}
+                        <div className="flex items-center justify-between rounded-lg border border-gray-200 p-4">
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900">Flutterwave (Portal Access)</p>
+                            <p className="mt-0.5 text-xs text-gray-500">
+                              Enable Flutterwave for portal access fee payments
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setPortalFlutterwaveEnabled(!portalFlutterwaveEnabled)}
+                            className={cn(
+                              'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2',
+                              portalFlutterwaveEnabled ? 'bg-brand' : 'bg-gray-300',
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                'pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out',
+                                portalFlutterwaveEnabled ? 'translate-x-5' : 'translate-x-0',
+                              )}
+                            />
+                          </button>
+                        </div>
+
+                        {/* Portal Access Paystack toggle */}
+                        <div className="flex items-center justify-between rounded-lg border border-gray-200 p-4">
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900">Paystack (Portal Access)</p>
+                            <p className="mt-0.5 text-xs text-gray-500">
+                              Enable Paystack for portal access fee payments
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setPortalPaystackEnabled(!portalPaystackEnabled)}
+                            className={cn(
+                              'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2',
+                              portalPaystackEnabled ? 'bg-brand' : 'bg-gray-300',
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                'pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out',
+                                portalPaystackEnabled ? 'translate-x-5' : 'translate-x-0',
+                              )}
+                            />
+                          </button>
+                        </div>
+
+                        {/* Portal access both disabled warning */}
+                        {!portalFlutterwaveEnabled && !portalPaystackEnabled && (
+                          <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800">
+                            <AlertCircle className="h-4 w-4 shrink-0 text-red-500" />
+                            <span>All portal access payment gateways are disabled. Students will not be able to pay the portal access fee online.</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Super admin: Developer payment toggle */}
                   {isSuperAdmin && (
