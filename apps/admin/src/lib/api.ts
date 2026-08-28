@@ -281,11 +281,12 @@ export interface Payment {
 
 export const financeApi = {
   // Acceptance-fee flow (used by the admissions page)
-  initAcceptanceFee: (applicationId: string, amount: number, redirectUrl?: string) =>
+  initAcceptanceFee: (applicationId: string, amount: number, redirectUrl?: string, gateway?: string) =>
     api.post<InitPaymentResult>('/finance/payments/init', {
       applicationId,
       amount,
       redirectUrl,
+      gateway,
     }),
   verify: (reference: string) =>
     api.post<{ id: string; status: string }>('/finance/payments/verify', { reference }),
@@ -679,6 +680,16 @@ export const staffApi = {
     api.patch<StaffRecord>(`/staff/${id}`, payload),
   remove: (id: string) => request<{ deleted: boolean }>(`/staff/${id}`, { method: 'DELETE' }),
   toggleActive: (id: string) => api.patch<StaffRecord>(`/staff/${id}/toggle-active`),
+  pendingApprovals: () =>
+    api.get<{
+      id: string;
+      firstName: string;
+      lastName: string;
+      staffNumber: string | null;
+      department?: { name: string };
+      user?: { id: string; email: string; firstName: string; lastName: string; createdAt: string };
+    }[]>('/staff/pending-approvals'),
+  approvePortal: (id: string) => api.patch<{ success: boolean }>(`/staff/${id}/approve-portal`),
 };
 
 // ---- Academics (faculties / departments / programmes / courses) ----

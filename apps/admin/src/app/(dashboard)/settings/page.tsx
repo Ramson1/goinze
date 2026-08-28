@@ -5,6 +5,7 @@ import {
   AlertCircle,
   Building2,
   CheckCircle2,
+  CreditCard,
   GraduationCap,
   Loader2,
   Pencil,
@@ -24,11 +25,12 @@ import {
   type SchoolProfile,
 } from '@/lib/api';
 
-type TabKey = 'profile' | 'grading';
+type TabKey = 'profile' | 'grading' | 'payments';
 
 const tabs: { key: TabKey; label: string; icon: LucideIcon }[] = [
   { key: 'profile', label: 'School Profile', icon: Building2 },
   { key: 'grading', label: 'Grading', icon: GraduationCap },
+  { key: 'payments', label: 'Payment Gateways', icon: CreditCard },
 ];
 
 interface GradeBand {
@@ -83,6 +85,23 @@ function Field({
   );
 }
 
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]+)'));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function decodeRoleFromToken(token: string): string | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1]));
+    return payload.role ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export default function SettingsPage() {
   const [tab, setTab] = useState<TabKey>('profile');
   const [loading, setLoading] = useState(true);
@@ -100,6 +119,12 @@ export default function SettingsPage() {
   // Grading form
   const [gradeBands, setGradeBands] = useState<GradeBand[]>(DEFAULT_HIGHER_ED_GRADES);
   const [editingGrade, setEditingGrade] = useState<number | null>(null);
+
+  // Payment gateways
+  const [flutterwaveEnabled, setFlutterwaveEnabled] = useState(true);
+  const [paystackEnabled, setPaystackEnabled] = useState(true);
+  const [developerPaymentEnabled, setDeveloperPaymentEnabled] = useState(true);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   function flash(message: string) {
     setNotice(message);
@@ -132,6 +157,17 @@ export default function SettingsPage() {
         if (grading.length > 0) {
           setGradeBands(grading);
         }
+
+        // Load payment gateway settings
+        if (settings['payment.flutterwave_enabled'] !== undefined) {
+          setFlutterwaveEnabled(settings['payment.flutterwave_enabled'] !== false);
+        }
+        if (settings['payment.paystack_enabled'] !== undefined) {
+          setPaystackEnabled(settings['payment.paystack_enabled'] !== false);
+        }
+        if (settings['payment.developer_payment_enabled'] !== undefined) {
+          setDeveloperPaymentEnabled(settings['payment.developer_payment_enabled'] !== false);
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Failed to load settings.');
@@ -145,6 +181,13 @@ export default function SettingsPage() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // Check user role on mount
+  useEffect(() => {
+    const token = getCookie('access_token');
+    const role = token ? decodeRoleFromToken(token) : null;
+    setIsSuperAdmin(role === 'SUPER_ADMIN');
   }, []);
 
   async function handleSaveProfile(e: FormEvent<HTMLFormElement>) {
@@ -189,6 +232,23 @@ export default function SettingsPage() {
       flash('Grading scale saved successfully.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save grading.');
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function handleSavePaymentGateways() {
+    setSaving('payments');
+    setError(null);
+    try {
+      await settingsApi.updateMany({
+        'payment.flutterwave_enabled': flutterwaveEnabled,
+        'payment.paystack_enabled': paystackEnabled,
+        'payment.developer_payment_enabled': developerPaymentEnabled,
+      });
+      flash('Payment gateway settings saved successfully.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save payment settings.');
     } finally {
       setSaving(null);
     }
@@ -461,6 +521,135 @@ export default function SettingsPage() {
                     >
                       <Save className="h-4 w-4" />
                       {saving === 'grading' ? 'Saving…' : 'Save Grading Scale'}
+                    </button>
+                  </div>
+                </div>
+              </Card>
+            )}
+
+            {tab === 'payments' && (
+              <Card
+                title="Payment Gateways"
+                subtitle="Configure which payment options are available to students"
+              >
+                <div className="space-y-6 p-5">
+                  {/* Explanation */}
+                  <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+                    <p className="font-medium">How payment gateways work</p>
+                    <p className="mt-1 text-blue-700">
+                      Choose which payment options are available to students. Both options work the same way — students simply pick their preferred one.
+                      There is no difference in security or reliability. If only one gateway is enabled, students will use that option automatically.
+                    </p>
+                  </div>
+
+                  {/* Gateway toggles */}
+                  <div className="space-y-4">
+                    {/* Flutterwave toggle */}
+                    <div className="flex items-center justify-between rounded-lg border border-gray-200 p-4">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">Flutterwave</p>
+                        <p className="mt-0.5 text-xs text-gray-500">
+                          Card, bank transfer, USSD, and mobile money payments
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setFlutterwaveEnabled(!flutterwaveEnabled)}
+                        className={cn(
+                          'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2',
+                          flutterwaveEnabled ? 'bg-brand' : 'bg-gray-300',
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            'pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out',
+                            flutterwaveEnabled ? 'translate-x-5' : 'translate-x-0',
+                          )}
+                        />
+                      </button>
+                    </div>
+
+                    {/* Paystack toggle */}
+                    <div className="flex items-center justify-between rounded-lg border border-gray-200 p-4">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">Paystack</p>
+                        <p className="mt-0.5 text-xs text-gray-500">
+                          Card, bank transfer, and USSD payments via Paystack
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setPaystackEnabled(!paystackEnabled)}
+                        className={cn(
+                          'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2',
+                          paystackEnabled ? 'bg-brand' : 'bg-gray-300',
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            'pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out',
+                            paystackEnabled ? 'translate-x-5' : 'translate-x-0',
+                          )}
+                        />
+                      </button>
+                    </div>
+
+                    {/* Single gateway info banner */}
+                    {((flutterwaveEnabled && !paystackEnabled) || (!flutterwaveEnabled && paystackEnabled)) && (
+                      <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+                        <AlertCircle className="h-4 w-4 shrink-0 text-amber-500" />
+                        <span>Only one payment gateway is active. Students will use this option automatically.</span>
+                      </div>
+                    )}
+
+                    {/* Both disabled warning */}
+                    {!flutterwaveEnabled && !paystackEnabled && (
+                      <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800">
+                        <AlertCircle className="h-4 w-4 shrink-0 text-red-500" />
+                        <span>All payment gateways are disabled. Students will not be able to make online payments.</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Super admin: Developer payment toggle */}
+                  {isSuperAdmin && (
+                    <div className="border-t border-gray-200 pt-5">
+                      <div className="flex items-center justify-between rounded-lg border border-gray-200 p-4">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">Developer Account Payments</p>
+                          <p className="mt-0.5 text-xs text-gray-500">
+                            When disabled, developer account creation will not require payment.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setDeveloperPaymentEnabled(!developerPaymentEnabled)}
+                          className={cn(
+                            'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2',
+                            developerPaymentEnabled ? 'bg-brand' : 'bg-gray-300',
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              'pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out',
+                              developerPaymentEnabled ? 'translate-x-5' : 'translate-x-0',
+                            )}
+                          />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Save button */}
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleSavePaymentGateways}
+                      disabled={saving === 'payments'}
+                      className="btn-primary disabled:opacity-60"
+                    >
+                      <Save className="h-4 w-4" />
+                      {saving === 'payments' ? 'Saving…' : 'Save Payment Settings'}
                     </button>
                   </div>
                 </div>

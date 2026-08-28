@@ -433,7 +433,22 @@ export default function AttendancePage() {
                             </span>
                             <div>
                               <p className="text-sm font-medium text-slate-900">{name}</p>
-                              <p className="text-xs text-slate-400">{s.matricNo ?? '—'}</p>
+                              <p className="text-xs text-slate-400">
+                                {s.matricNo ?? '—'}
+                                {s.attendance && (
+                                  <span className="ml-2 inline-flex items-center gap-1">
+                                    <span className="rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600">
+                                      {s.attendance.present + s.attendance.late}/{s.attendance.total}
+                                    </span>
+                                    <span className={cn(
+                                      'font-semibold',
+                                      s.attendance.rate >= 75 ? 'text-emerald-600' : s.attendance.rate >= 50 ? 'text-amber-600' : 'text-red-600',
+                                    )}>
+                                      {s.attendance.rate}%
+                                    </span>
+                                  </span>
+                                )}
+                              </p>
                             </div>
                           </div>
                           <div className="inline-flex rounded-lg border border-slate-200 p-1">
@@ -708,7 +723,7 @@ function SessionRow({
       {/* Expanded detail row */}
       {isExpanded && (
         <tr>
-          <td colSpan={9} className="bg-slate-50/70 px-5 py-4">
+          <td colSpan={10} className="bg-slate-50/70 px-5 py-4">
             {detailsLoading ? (
               <div className="flex items-center gap-2 py-4 text-sm text-slate-400">
                 <Loader2 className="h-4 w-4 animate-spin" /> Loading details…
@@ -721,7 +736,8 @@ function SessionRow({
                       <th className="py-2 pr-4">Student</th>
                       <th className="py-2 pr-4">Matric No</th>
                       <th className="py-2 pr-4">Status</th>
-                      <th className="py-2">Method</th>
+                      <th className="py-2 pr-4">Method</th>
+                      <th className="py-2">Attendance</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -745,8 +761,23 @@ function SessionRow({
                             {d.status}
                           </span>
                         </td>
-                        <td className="py-1.5 text-slate-500">
+                        <td className="py-1.5 pr-4 text-slate-500">
                           {d.method === 'QR_CODE' ? 'QR Scan' : d.method === 'MANUAL' ? 'Manual' : d.method}
+                        </td>
+                        <td className="py-1.5">
+                          {d.overallAttendance && (
+                            <span className="inline-flex items-center gap-1.5">
+                              <span className="rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600">
+                                {d.overallAttendance.present + d.overallAttendance.late}/{d.overallAttendance.total}
+                              </span>
+                              <span className={cn(
+                                'text-[10px] font-semibold',
+                                d.overallAttendance.rate >= 75 ? 'text-emerald-600' : d.overallAttendance.rate >= 50 ? 'text-amber-600' : 'text-red-600',
+                              )}>
+                                {d.overallAttendance.rate}%
+                              </span>
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))}

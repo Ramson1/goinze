@@ -289,6 +289,7 @@ export interface VerifyPaymentResult {
   id: string;
   status: string;
   reference: string;
+  gateway?: string;
   gatewayRef: string | null;
   amount: string;
   paidAt: string | null;
@@ -320,10 +321,25 @@ export interface FlutterwaveConfig {
   isConfigured: boolean;
 }
 
+export interface GatewayConfig {
+  id: string;
+  name: string;
+  publicKey: string;
+  enabled: boolean;
+}
+
+export interface PaymentGatewaysResponse {
+  gateways: GatewayConfig[];
+}
+
 export const financeApi = {
-  /** Fetch Flutterwave public key and config from the API. */
+  /** Fetch available payment gateways from the API. */
+  getPaymentGateways: () => api.get<PaymentGatewaysResponse>('/finance/payment-gateways'),
+  /** Fetch Portal Access payment gateways from the API. */
+  getPortalAccessGateways: () => api.get<PaymentGatewaysResponse>('/finance/portal-access-gateways'),
+  /** @deprecated Use getPaymentGateways instead. */
   getFlutterwaveConfig: () => api.get<FlutterwaveConfig>('/finance/flutterwave-config'),
-  /** Fetch Portal Access Flutterwave public key from the API. */
+  /** @deprecated Use getPortalAccessGateways instead. */
   getPortalAccessPublicKey: () => api.get<{ publicKey: string }>('/finance/portal-access-public-key'),
   initPayment: (data: {
     feeStructureId?: string;
@@ -332,6 +348,7 @@ export const financeApi = {
     customerEmail?: string;
     redirectUrl?: string;
     purpose?: string;
+    gateway?: string;
   }) => api.post<InitPaymentResult>('/finance/payments/init', data),
   verifyPayment: (reference: string) =>
     api.post<VerifyPaymentResult>('/finance/payments/verify', { reference }),

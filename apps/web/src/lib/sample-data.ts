@@ -377,7 +377,7 @@ export const testimonials: Testimonial[] = [
   {
     id: 2,
     name: "Tunde Bakare",
-    role: "Alumnus, Class of 2022",
+    role: "Alumnus, Class of 2026",
     quote:
       "Goinze gave me a foundation of discipline and curiosity. The career fair in my final year led directly to my first job offer.",
     initials: "TB",
@@ -406,7 +406,7 @@ export const stats: Stat[] = [
   { label: "Students", value: "12,500+" },
   { label: "Programmes", value: "40+" },
   { label: "Academic Staff", value: "650+" },
-  { label: "Years of Excellence", value: "35" },
+  { label: "Years of Excellence", value: "2" },
 ];
 
 /* --------------------------------- Faculty -------------------------------- */
@@ -590,7 +590,7 @@ export const alumniStories: AlumniStory[] = [
   {
     id: 1,
     name: "Linda Eze",
-    graduationYear: "2010",
+    graduationYear: "2025",
     programme: "B.Sc. Computer Science",
     currentRole: "Founder & CEO, BrightPay Technologies",
     story:
@@ -600,7 +600,7 @@ export const alumniStories: AlumniStory[] = [
   {
     id: 2,
     name: "Kwame Mensah",
-    graduationYear: "2014",
+    graduationYear: "2026",
     programme: "B.Eng. Civil Engineering",
     currentRole: "Lead Structural Engineer, Meridian Builds",
     story:
@@ -610,7 +610,7 @@ export const alumniStories: AlumniStory[] = [
   {
     id: 3,
     name: "Aisha Bello",
-    graduationYear: "2017",
+    graduationYear: "2026",
     programme: "B.Sc. Nursing",
     currentRole: "Public Health Specialist, WHO Regional Office",
     story:
@@ -620,7 +620,7 @@ export const alumniStories: AlumniStory[] = [
   {
     id: 4,
     name: "Tunde Bakare",
-    graduationYear: "2022",
+    graduationYear: "2027",
     programme: "B.Sc. Accounting",
     currentRole: "Audit Associate, Global Assurance Firm",
     story:

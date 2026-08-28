@@ -604,8 +604,8 @@ export interface Alumni {
 }
 
 export const alumni: Alumni[] = [
-  { id: 'al_1', name: 'Chinedu Obi', graduationYear: '2018', programme: 'B.Sc. Computer Science', currentRole: 'Senior Software Engineer', company: 'Paystack', story: 'Chinedu started as a teaching assistant and now leads a payments engineering team. He mentors final-year students every summer.' },
-  { id: 'al_2', name: 'Fatima Bello', graduationYear: '2019', programme: 'B.Sc. Computer Science', currentRole: 'Data Scientist', company: 'Flutterwave', story: 'Fatima discovered data science through a departmental workshop and now builds fraud detection models used across Africa.' },
-  { id: 'al_3', name: 'Tunde Adebayo', graduationYear: '2020', programme: 'B.Sc. Computer Science', currentRole: 'Founder & CEO', company: 'Klassroom (EdTech startup)', story: 'Tunde founded an edtech startup during NYSC and has raised seed funding to expand across three countries.' },
-  { id: 'al_4', name: 'Grace Nwachukwu', graduationYear: '2021', programme: 'B.Sc. Computer Science', currentRole: 'Security Analyst', company: 'Deloitte', story: 'Grace specialised in cybersecurity and now helps enterprises defend against emerging threats.' },
+  { id: 'al_1', name: 'Chinedu Obi', graduationYear: '2025', programme: 'B.Sc. Computer Science', currentRole: 'Senior Software Engineer', company: 'Paystack', story: 'Chinedu started as a teaching assistant and now leads a payments engineering team. He mentors final-year students every summer.' },
+  { id: 'al_2', name: 'Fatima Bello', graduationYear: '2025', programme: 'B.Sc. Computer Science', currentRole: 'Data Scientist', company: 'Flutterwave', story: 'Fatima discovered data science through a departmental workshop and now builds fraud detection models used across Africa.' },
+  { id: 'al_3', name: 'Tunde Adebayo', graduationYear: '2026', programme: 'B.Sc. Computer Science', currentRole: 'Founder & CEO', company: 'Klassroom (EdTech startup)', story: 'Tunde founded an edtech startup during NYSC and has raised seed funding to expand across three countries.' },
+  { id: 'al_4', name: 'Grace Nwachukwu', graduationYear: '2026', programme: 'B.Sc. Computer Science', currentRole: 'Security Analyst', company: 'Deloitte', story: 'Grace specialised in cybersecurity and now helps enterprises defend against emerging threats.' },
 ];

@@ -22,7 +22,7 @@ const defaultSlides: Slide[] = [
     eyebrow: "Welcome",
     title: "Goinze International School of Medical Health Science and Technology",
     subtitle:
-      "Learn how to maintain a good health — training health professionals who take primary health care down to the grass roots, from our campus along Verita University Road Zuma 1, Bwari Area Council, Abuja.",
+      "Learn how to maintain a good health — training health professionals who take primary health care down to the grass roots.",
     cta: { label: "Apply Now", href: "/admission" },
   },
   {

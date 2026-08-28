@@ -28,34 +28,34 @@ const defaultPillars = {
 
 const defaultCertificates = [
   {
-    image: "/certificates/licence-to-operate.png",
-    title: "Licence to Operate",
-    issuer:
-      "National Board for Technical Education (NBTE) — approved by the Honourable Minister of Education to operate as a College of Health Sciences, 2024.",
-  },
-  {
     image: "/certificates/certificate-of-incorporation.jpeg",
     title: "Certificate of Incorporation",
     issuer:
-      "Corporate Affairs Commission (CAC) — incorporated under the Companies and Allied Matters Act 2020, RC No. 6954838.",
-  },
-  {
-    image: "/certificates/council-certificate-of-accreditation.jpeg",
-    title: "Council Certificate of Accreditation",
-    issuer:
-      "Council of Health Assistants/Technicians and Public Health Registration Board of Nigeria — approval to run Public Health Technicians and Health Technology.",
-  },
-  {
-    image: "/certificates/national-certificate-of-accreditation.jpeg",
-    title: "National Certificate of Accreditation",
-    issuer:
-      "National Association of Public Health Practitioners Council of Nigeria — approval to run Public Health Assistant, Technician and Technology programmes.",
+      "Corporate Affairs Commission (CAC) — incorporated under the Companies and Allied Matters Act 2024, RC No. 6954838.",
   },
   {
     image: "/certificates/joint-tax-board.jpeg",
     title: "Taxpayer Identification Certificate",
     issuer:
       "Joint Tax Board / Federal Inland Revenue Service — TIN 1070586753, Bwari Area Council, FCT Abuja.",
+  },
+  {
+    image: "",
+    title: "Licence to Operate",
+    issuer:
+      "National Board for Technical Education (NBTE) — approved by the Honourable Minister of Education to operate as a College of Health Sciences, 2024.",
+  },
+  {
+    image: "",
+    title: "Council Certificate of Accreditation",
+    issuer:
+      "Council of Health Assistants/Technicians and Public Health Registration Board of Nigeria — approval to run Public Health Technicians and Health Technology.",
+  },
+  {
+    image: "",
+    title: "National Certificate of Accreditation",
+    issuer:
+      "National Association of Public Health Practitioners Council of Nigeria — approval to run Public Health Assistant, Technician and Technology programmes.",
   },
 ];
 
@@ -180,22 +180,24 @@ export default function AboutPage() {
       >
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {certificates.map((cert: { image: string; title: string; issuer: string }, idx: number) => (
-            <Card key={cert.image || idx} hover className="flex flex-col overflow-hidden">
-              <a
-                href={cert.image}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block bg-slate-100 p-3"
-                aria-label={`View ${cert.title} in full size`}
-              >
-                <Image
-                  src={cert.image}
-                  alt={cert.title}
-                  width={640}
-                  height={480}
-                  className="mx-auto h-64 w-full rounded-lg object-contain"
-                />
-              </a>
+            <Card key={cert.image || idx} className="flex flex-col overflow-hidden">
+              {cert.image && (
+                <a
+                  href={cert.image}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block bg-slate-100 p-3"
+                  aria-label={`View ${cert.title} in full size`}
+                >
+                  <Image
+                    src={cert.image}
+                    alt={cert.title}
+                    width={640}
+                    height={480}
+                    className="mx-auto h-64 w-full rounded-lg object-contain"
+                  />
+                </a>
+              )}
               <div className="flex-1 p-5">
                 <h3 className="text-lg font-bold text-slate-900">{cert.title}</h3>
                 <p className="mt-2 text-sm leading-relaxed text-slate-600">{cert.issuer}</p>

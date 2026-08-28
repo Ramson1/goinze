@@ -16,6 +16,7 @@ import { CommunicationService } from '../communication/communication.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { SelfRegisterDto } from './dto/self-register.dto';
+import { LecturerSelfRegisterDto } from './dto/lecturer-self-register.dto';
 
 @Injectable()
 export class AuthService {
@@ -366,6 +367,86 @@ export class AuthService {
         `${dto.firstName} ${dto.lastName} (Matric: ${dto.matricNumber}) has registered for a portal account and is awaiting approval.`,
       )
       .catch((err) => this.logger.error('Failed to notify admins of self-registration', err instanceof Error ? err.stack : ''));
+
+    return {
+      success: true,
+      message: 'Registration submitted successfully. Your account is awaiting admin approval.',
+    };
+  }
+
+  /**
+   * Self-registration for existing lecturers: verify identity via staff number + personal details,
+   * create a PENDING user account linked to the staff record. Admin must approve before login.
+   */
+  async selfRegisterLecturer(dto: LecturerSelfRegisterDto): Promise<{ success: true; message: string }> {
+    // 1. Look up the staff record by staff number + school
+    const staff = await this.prisma.db.staff.findFirst({
+      where: { staffNumber: dto.staffNumber, schoolId: dto.schoolId },
+      include: { department: true },
+    });
+    if (!staff) {
+      throw new NotFoundException('No staff record found with this staff number in this school.');
+    }
+
+    // 2. Check the staff record is not already linked to a portal account
+    if (staff.userId) {
+      throw new ConflictException('This staff record already has a portal account. Contact the admin if you need help.');
+    }
+
+    // 3. Verify this is a lecturer
+    if (!staff.isLecturer) {
+      throw new BadRequestException('This staff record is not marked as a lecturer. Contact the admin.');
+    }
+
+    // 4. Verify department matches the staff record
+    if (staff.departmentId && staff.departmentId !== dto.departmentId) {
+      throw new BadRequestException('The department provided does not match our records.');
+    }
+
+    // 5. Verify first name and last name match (case-insensitive)
+    if (staff.firstName.toLowerCase() !== dto.firstName.trim().toLowerCase() ||
+        staff.lastName.toLowerCase() !== dto.lastName.trim().toLowerCase()) {
+      throw new BadRequestException('The names provided do not match our records.');
+    }
+
+    // 6. Check no User already exists with the provided email
+    const existingUser = await this.prisma.db.user.findUnique({
+      where: { email: dto.email.toLowerCase() },
+    });
+    if (existingUser) {
+      throw new ConflictException('A user with this email already exists.');
+    }
+
+    // 7. Create User + link to Staff in a transaction
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+    await this.prisma.db.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email: dto.email.toLowerCase(),
+          passwordHash,
+          firstName: dto.firstName.trim(),
+          lastName: dto.lastName.trim(),
+          phone: dto.phone,
+          schoolId: dto.schoolId,
+          role: 'LECTURER',
+          status: 'PENDING',
+        },
+      });
+      await tx.staff.update({
+        where: { id: staff.id },
+        data: { userId: user.id },
+      });
+    });
+
+    // 8. Notify admins about the new self-registration (fire-and-forget)
+    this.comms
+      .notifyUsersByRole(
+        dto.schoolId,
+        'SCHOOL_ADMIN',
+        'New Lecturer Portal Account Registration',
+        `${dto.firstName} ${dto.lastName} (Staff: ${dto.staffNumber}) has registered for a lecturer portal account and is awaiting approval.`,
+      )
+      .catch((err) => this.logger.error('Failed to notify admins of lecturer self-registration', err instanceof Error ? err.stack : ''));
 
     return {
       success: true,

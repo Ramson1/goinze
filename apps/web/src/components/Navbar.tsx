@@ -43,7 +43,13 @@ const navItems: NavItem[] = [
 export default function Navbar() {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [portalDropdown, setPortalDropdown] = useState(false);
   const pathname = usePathname();
+
+  // Determine portal URLs based on environment
+  const isProd = typeof window !== 'undefined' && window.location.hostname !== 'localhost';
+  const studentPortalUrl = isProd ? 'https://student.goinzeschool.edu.ng/' : 'http://localhost:3002';
+  const lecturerPortalUrl = isProd ? 'https://lecturer.goinzeschool.edu.ng/' : 'http://localhost:3003';
 
   // Flip to the blue variant only after the user scrolls past the hero
   // (or top banner) section; fall back to a viewport-height threshold.
@@ -144,16 +150,34 @@ export default function Navbar() {
           </div>
 
           <div className="hidden items-center gap-2 xl:flex">
-            <a
-              href="http://localhost:3002"
-              className={`rounded-full border-2 px-4 py-2 text-sm font-semibold transition-colors ${
-                onBlue
-                  ? "border-white bg-white text-brand hover:bg-blue-50"
-                  : "border-brand bg-brand text-white hover:bg-brand-dark"
-              }`}
-            >
-              Portal
-            </a>
+            <div className="group relative">
+              <button
+                type="button"
+                className={`rounded-full border-2 px-4 py-2 text-sm font-semibold transition-colors ${
+                  onBlue
+                    ? "border-white bg-white text-brand hover:bg-blue-50"
+                    : "border-brand bg-brand text-white hover:bg-brand-dark"
+                }`}
+              >
+                Portal
+              </button>
+              <div className="invisible absolute right-0 top-full z-50 pt-2 opacity-0 transition-all duration-150 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
+                <div className="w-48 rounded-2xl border border-slate-100 bg-white p-2 shadow-xl">
+                  <a
+                    href={studentPortalUrl}
+                    className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-blue-50 hover:text-brand"
+                  >
+                    Student Portal
+                  </a>
+                  <a
+                    href={lecturerPortalUrl}
+                    className="block rounded-xl px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-blue-50 hover:text-brand"
+                  >
+                    Lecturer Portal
+                  </a>
+                </div>
+              </div>
+            </div>
             <Link
               href="/admission"
               className="rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
@@ -209,12 +233,23 @@ export default function Navbar() {
               ),
             )}
             <div className="flex flex-col gap-3 pt-3">
-              <a
-                href="http://localhost:3002"
-                className="rounded-full border-2 border-brand bg-brand px-4 py-2 text-center text-sm font-semibold text-white transition-colors hover:bg-brand-dark"
-              >
-                Portal
-              </a>
+              <div className="space-y-2">
+                <p className="px-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Portal
+                </p>
+                <a
+                  href={studentPortalUrl}
+                  className="block rounded-full border-2 border-brand bg-brand px-4 py-2 text-center text-sm font-semibold text-white transition-colors hover:bg-brand-dark"
+                >
+                  Student Portal
+                </a>
+                <a
+                  href={lecturerPortalUrl}
+                  className="block rounded-full border-2 border-brand bg-brand px-4 py-2 text-center text-sm font-semibold text-white transition-colors hover:bg-brand-dark"
+                >
+                  Lecturer Portal
+                </a>
+              </div>
               <Link
                 href="/admission"
                 onClick={() => setOpen(false)}

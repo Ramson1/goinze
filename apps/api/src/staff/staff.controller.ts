@@ -43,6 +43,16 @@ export class StaffController {
     return this.staffService.directory(schoolId ?? null);
   }
 
+  @Get('pending-approvals')
+  pendingApprovals(@CurrentUser() user: SessionUser) {
+    return this.staffService.findPendingApprovals(user.schoolId);
+  }
+
+  @Patch(':id/approve-portal')
+  approvePortal(@Param('id') id: string, @CurrentUser() user: SessionUser) {
+    return this.staffService.approvePortalAccount(id, user.schoolId);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.staffService.findOne(id);

@@ -129,6 +129,14 @@ export interface RosterStudent {
   totalScore: number | null;
   grade: string | null;
   resultStatus: string | null;
+  attendance?: {
+    present: number;
+    absent: number;
+    late: number;
+    excused: number;
+    total: number;
+    rate: number;
+  };
 }
 
 export interface CourseRosterResponse {
@@ -345,13 +353,20 @@ export interface AttendanceSession {
 
 export interface AttendanceSessionDetail {
   id: string;
-  studentId: string;
+  studentId: string | null;
   firstName: string;
   lastName: string;
   matricNumber: string | null;
   status: string;
   method: string;
   date: string;
+  overallAttendance?: {
+    present: number;
+    absent: number;
+    late: number;
+    total: number;
+    rate: number;
+  };
 }
 
 // ---- CBT ----

@@ -150,7 +150,7 @@ export const defaultTestimonials = [
 
 export const defaultManagementTeam = [
   {
-    name: "Suleman Abdullahi Galadiman",
+    name: "Mr Habila Audu",
     role: "Provost",
     photo: "/staffs/provost.jpeg",
     bio: "Provides academic leadership across all departments and chairs the day-to-day running of the college.",
@@ -194,7 +194,7 @@ export const defaultFees = [
 export const defaultAlumniStories = [
   {
     name: "Linda Eze",
-    graduationYear: "2018",
+    graduationYear: "2025",
     programme: "ND Community Health",
     currentRole: "Community Health Extension Worker, Bwari PHC",
     story:
@@ -202,7 +202,7 @@ export const defaultAlumniStories = [
   },
   {
     name: "Kwame Mensah",
-    graduationYear: "2019",
+    graduationYear: "2025",
     programme: "ND Public Health (PH)",
     currentRole: "Public Health Officer, FCT Health Services",
     story:
@@ -210,7 +210,7 @@ export const defaultAlumniStories = [
   },
   {
     name: "Aisha Bello",
-    graduationYear: "2020",
+    graduationYear: "2026",
     programme: "ND Pharmacy Technician (PT)",
     currentRole: "Health Records Officer, General Hospital Bwari",
     story:
@@ -218,7 +218,7 @@ export const defaultAlumniStories = [
   },
   {
     name: "Tunde Bakare",
-    graduationYear: "2021",
+    graduationYear: "2026",
     programme: "ND Medical Lab Technician (MLT)",
     currentRole: "Laboratory Technician, Private Diagnostics Centre",
     story:

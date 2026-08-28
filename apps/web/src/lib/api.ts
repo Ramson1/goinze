@@ -280,6 +280,7 @@ export interface VerifyPaymentResult {
   id: string;
   status: string;
   reference: string;
+  gateway?: string;
   amount: string;
   paidAt: string | null;
   receipt?: ReceiptData;
@@ -290,10 +291,23 @@ export interface FlutterwaveConfig {
   isConfigured: boolean;
 }
 
+export interface GatewayConfig {
+  id: string;
+  name: string;
+  publicKey: string;
+  enabled: boolean;
+}
+
+export interface PaymentGatewaysResponse {
+  gateways: GatewayConfig[];
+}
+
 export const financeApi = {
   getApplicationFees: () =>
     api.get<ApplicationFee[]>("/finance/application-fees"),
-  /** Fetch Flutterwave public key and config from the API. */
+  /** Fetch available payment gateways from the API. */
+  getPaymentGateways: () => api.get<PaymentGatewaysResponse>("/finance/payment-gateways"),
+  /** @deprecated Use getPaymentGateways instead. */
   getFlutterwaveConfig: () => api.get<FlutterwaveConfig>("/finance/flutterwave-config"),
   initPayment: (data: {
     schoolSlug?: string;
@@ -302,6 +316,7 @@ export const financeApi = {
     customerEmail?: string;
     redirectUrl?: string;
     purpose?: string;
+    gateway?: string;
   }) => api.post<InitPaymentResult>("/finance/payments/init", data),
   verifyPayment: (reference: string) =>
     api.post<VerifyPaymentResult>("/finance/payments/verify", { reference }),

@@ -20,8 +20,11 @@ import {
   type ApplicationFee,
   type TrackResult,
   type WebsiteContentRecord,
+  type GatewayConfig,
 } from "@/lib/api";
 import { asArray, getBlockBody } from "@/lib/content";
+
+type GatewayId = 'FLUTTERWAVE' | 'PAYSTACK';
 
 /* ─── helpers ─── */
 const inputCls =
@@ -53,7 +56,7 @@ const NIGERIAN_STATES = [
 ];
 
 const DOC_TYPES = [
-  { key: "PASSPORT_PHOTO", label: "Passport Photographs (2)", required: true },
+  { key: "PASSPORT_PHOTO", label: "Passport Photographs", required: true },
   { key: "BIRTH_CERTIFICATE", label: "Birth Certificate / Declaration of Age", required: true },
   { key: "CERTIFICATE", label: "Photocopies of Educational Certificates", required: true },
   { key: "TESTIMONIAL", label: "Testimonial from Last Institution", required: false },
@@ -118,7 +121,7 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
   const [employment, setEmployment] = useState([{ employer: "", position: "", from: "", to: "" }]);
 
   // Documents
-  const [docFiles, setDocFiles] = useState<Record<string, File | null>>({});
+  const [docFiles, setDocFiles] = useState<Record<string, File[]>>({});
 
   // Declaration
   const [declaredAgreed, setDeclaredAgreed] = useState(false);
@@ -127,7 +130,8 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
 
   // Payment state
   const [appFees, setAppFees] = useState<ApplicationFee[]>([]);
-  const [flutterwaveKey, setFlutterwaveKey] = useState("");
+  const [activeGateways, setActiveGateways] = useState<GatewayConfig[]>([]);
+  const [selectedGateway, setSelectedGateway] = useState<GatewayId>('FLUTTERWAVE');
   const [paying, setPaying] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const paymentTxRef = useRef("");
@@ -147,12 +151,20 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
 
   const formRef = useRef<HTMLFormElement>(null);
 
-  // Load application fees and Flutterwave config on mount
+  // Load application fees and available payment gateways on mount
   useEffect(() => {
     financeApi.getApplicationFees().then(setAppFees).catch(() => {});
-    financeApi.getFlutterwaveConfig().then((cfg) => {
-      if (cfg.publicKey) setFlutterwaveKey(cfg.publicKey);
-    }).catch(() => {});
+    financeApi.getPaymentGateways()
+      .then((res) => {
+        setActiveGateways(res.gateways);
+        if (res.gateways.length > 0) {
+          setSelectedGateway(res.gateways[0].id as GatewayId);
+        }
+      })
+      .catch(() => {
+        // Fallback: assume Flutterwave is available
+        setActiveGateways([{ id: 'FLUTTERWAVE', name: 'Flutterwave', publicKey: '', enabled: true }]);
+      });
   }, []);
 
   /* ── dynamic table helpers ── */
@@ -166,7 +178,19 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
     const c = [...arr]; c[idx] = { ...c[idx], [key]: val }; setter(c);
   }
 
-  /* ── Flutterwave script loader ── */
+  /* ── Gateway script loaders ── */
+  const loadPaystackScript = useCallback((): Promise<void> => {
+    if ((window as any).PaystackPop) return Promise.resolve();
+    return new Promise<void>((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://js.paystack.co/v1/inline.js";
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error("Failed to load Paystack"));
+      document.head.appendChild(script);
+    });
+  }, []);
+
   const loadFlutterwaveScript = useCallback((): Promise<void> => {
     if ((window as any).FlutterwaveCheckout) return Promise.resolve();
     return new Promise<void>((resolve, reject) => {
@@ -174,7 +198,7 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
       script.src = "https://checkout.flutterwave.com/v3.js";
       script.async = true;
       script.onload = () => resolve();
-      script.onerror = () => reject(new Error("Failed to load payment gateway"));
+      script.onerror = () => reject(new Error("Failed to load Flutterwave"));
       document.head.appendChild(script);
     });
   }, []);
@@ -215,7 +239,7 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
 
     // Required documents
     for (const dt of DOC_TYPES) {
-      if (dt.required && !docFiles[dt.key]) {
+      if (dt.required && (!docFiles[dt.key] || docFiles[dt.key].length === 0)) {
         missing.push(dt.label);
       }
     }
@@ -231,7 +255,7 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
       await submitApplication();
       return;
     }
-    if (!flutterwaveKey) {
+    if (activeGateways.length === 0) {
       setError("Payment system not configured. Please refresh the page or contact support.");
       return;
     }
@@ -251,6 +275,7 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
         amount: totalFees,
         customerEmail: email,
         purpose: `Application fees: ${appFees.map(f => f.name).join(", ")}`,
+        gateway: selectedGateway,
       });
       paymentRef = initResult.reference;
       paymentTxRef.current = paymentRef;
@@ -260,9 +285,13 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
       return;
     }
 
-    // Step 2: Load Flutterwave script
+    // Step 2: Load the appropriate gateway script
     try {
-      await loadFlutterwaveScript();
+      if (selectedGateway === 'PAYSTACK') {
+        await loadPaystackScript();
+      } else {
+        await loadFlutterwaveScript();
+      }
     } catch {
       setPaying(false);
       setError("Could not load payment gateway. Please check your connection and try again.");
@@ -270,55 +299,95 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
     }
 
     const win = window as any;
-    if (typeof win.FlutterwaveCheckout !== "function") {
-      setPaying(false);
-      setError("Payment gateway could not initialize. Please try again.");
-      return;
-    }
+    const gwPublicKey = activeGateways.find(g => g.id === selectedGateway)?.publicKey ?? '';
 
-    // Step 3: Open Flutterwave checkout with the backend-generated reference
-    win.FlutterwaveCheckout({
-      public_key: flutterwaveKey,
-      tx_ref: paymentRef,
-      amount: totalFees,
-      currency: "NGN",
-      payment_options: "card, bank_transfer, ussd",
-      customer: { email, name: `${surname} ${otherNames}` },
-      customizations: {
-        title: "Application Fee Payment",
-        description: `Admission application — ${appFees.map(f => f.name).join(", ")}`,
-        logo: "",
-      },
-      async callback(data: any) {
-        // Flutterwave v3 callback fires when checkout completes.
-        // We do NOT check data.status here because Flutterwave's inline
-        // callback doesn't always include it — we verify server-side instead.
+    if (selectedGateway === 'PAYSTACK') {
+      // ── Paystack checkout ──
+      if (typeof win.PaystackPop?.setup !== "function") {
         setPaying(false);
-        setVerifying(true);
-        try {
-          const verification = await financeApi.verifyPayment(paymentRef);
-          const verifyStatus = verification.status?.toUpperCase?.() ?? "";
-          if (verifyStatus !== "SUCCESS" && verifyStatus !== "SUCCESSFUL") {
-            setError("Payment verification returned status: " + (verification.status ?? "unknown") + ". Please contact support with reference: " + paymentRef);
+        setError("Payment gateway could not initialize. Please try again.");
+        return;
+      }
+      win.PaystackPop.setup({
+        key: gwPublicKey,
+        email,
+        amount: Math.round(totalFees * 100), // Paystack uses kobo
+        currency: 'NGN',
+        ref: paymentRef,
+        metadata: {
+          custom_fields: [
+            { display_name: "Applicant", variable_name: "applicant_name", value: `${surname} ${otherNames}` },
+            { display_name: "Purpose", variable_name: "purpose", value: `Application fees: ${appFees.map(f => f.name).join(', ')}` },
+          ],
+        },
+        callback: async (response: any) => {
+          setPaying(false);
+          setVerifying(true);
+          try {
+            const verification = await financeApi.verifyPayment(paymentRef);
+            const verifyStatus = verification.status?.toUpperCase?.() ?? "";
+            if (verifyStatus !== "SUCCESS" && verifyStatus !== "SUCCESSFUL") {
+              setError("Payment verification returned status: " + (verification.status ?? "unknown") + ". Please contact support with reference: " + paymentRef);
+              setVerifying(false);
+              return;
+            }
+            await submitApplication();
+          } catch (err) {
             setVerifying(false);
-            return;
+            setError(err instanceof Error ? err.message : "Payment verification failed. Please contact support with reference: " + paymentRef);
           }
-          // Payment verified — submit the application
-          await submitApplication();
-        } catch (err) {
-          setVerifying(false);
-          setError(err instanceof Error ? err.message : "Payment verification failed. Please contact support with reference: " + paymentRef);
-        }
-      },
-      onclose() {
-        // User closed the checkout modal without completing payment
-        // Only reset if we're not in the middle of verifying
-        setVerifying((v) => {
-          if (!v) setPaying(false);
-          return v;
-        });
-      },
-    });
+        },
+        onclose: () => {
+          setVerifying((v) => {
+            if (!v) setPaying(false);
+            return v;
+          });
+        },
+      });
+    } else {
+      // ── Flutterwave checkout ──
+      if (typeof win.FlutterwaveCheckout !== "function") {
+        setPaying(false);
+        setError("Payment gateway could not initialize. Please try again.");
+        return;
+      }
+      win.FlutterwaveCheckout({
+        public_key: gwPublicKey,
+        tx_ref: paymentRef,
+        amount: totalFees,
+        currency: "NGN",
+        payment_options: "card, bank_transfer, ussd",
+        customer: { email, name: `${surname} ${otherNames}` },
+        customizations: {
+          title: "Application Fee Payment",
+          description: `Admission application — ${appFees.map(f => f.name).join(", ")}`,
+          logo: "",
+        },
+        async callback(data: any) {
+          setPaying(false);
+          setVerifying(true);
+          try {
+            const verification = await financeApi.verifyPayment(paymentRef);
+            const verifyStatus = verification.status?.toUpperCase?.() ?? "";
+            if (verifyStatus !== "SUCCESS" && verifyStatus !== "SUCCESSFUL") {
+              setError("Payment verification returned status: " + (verification.status ?? "unknown") + ". Please contact support with reference: " + paymentRef);
+              setVerifying(false);
+              return;
+            }
+            await submitApplication();
+          } catch (err) {
+            setVerifying(false);
+            setError(err instanceof Error ? err.message : "Payment verification failed. Please contact support with reference: " + paymentRef);
+          }
+        },
+        onclose() {
+          setVerifying((v) => {
+            if (!v) setPaying(false);
+            return v;
+          });
+        },
+      });
+    }
 
     // Reset paying after checkout opens (callback/onclose will handle state)
     setPaying(false);
@@ -361,11 +430,14 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
       });
 
       // Upload documents after application is created
-      const docs = Object.entries(docFiles).filter(([, f]) => f != null);
+      const docs = Object.entries(docFiles).filter(([, files]) => files.length > 0);
       if (docs.length > 0) {
-        for (const [type, file] of docs) {
-          setUploadProgress(`Uploading ${DOC_TYPES.find(d => d.key === type)?.label ?? type}…`);
-          await admissionsApi.uploadDocument(res.id, file!, type);
+        for (const [type, files] of docs) {
+          const label = DOC_TYPES.find(d => d.key === type)?.label ?? type;
+          for (const file of files) {
+            setUploadProgress(`Uploading ${label}…`);
+            await admissionsApi.uploadDocument(res.id, file, type);
+          }
         }
         setUploadProgress("");
       }
@@ -552,26 +624,46 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
             <h3 className="mb-2 text-base font-bold text-slate-900 border-b border-slate-100 pb-3">Supporting Documents</h3>
             <p className="mb-4 text-xs text-slate-500">Upload required documents marked with <span className="font-semibold text-rose-500">*</span>. Optional documents can be uploaded if available.</p>
             <div className="grid gap-4 sm:grid-cols-2">
-              {DOC_TYPES.map(dt => (
-                <label key={dt.key} className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3 transition-colors hover:border-brand hover:bg-blue-50">
-                  {docFiles[dt.key] ? (
-                    <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500" />
+              {DOC_TYPES.map(dt => {
+                const files = docFiles[dt.key] ?? [];
+                const isMulti = dt.key === 'CERTIFICATE';
+                return (
+                <div key={dt.key} className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3 transition-colors hover:border-brand hover:bg-blue-50">
+                  {files.length > 0 ? (
+                    <div className="flex flex-col gap-1.5">
+                      {files.map((f, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+                          <span className="flex-1 truncate text-xs text-slate-600">{f.name}</span>
+                          <button type="button" onClick={() => setDocFiles(prev => ({ ...prev, [dt.key]: prev[dt.key].filter((_, idx) => idx !== i) }))}
+                            className="flex h-5 w-5 items-center justify-center rounded text-red-400 hover:bg-red-50 hover:text-red-600">
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                      {isMulti && (
+                        <label className="mt-1 flex cursor-pointer items-center gap-2 text-xs text-brand hover:underline">
+                          <Upload className="h-3.5 w-3.5" />
+                          Add more files
+                          <input type="file" className="hidden" multiple accept=".pdf,.jpg,.jpeg,.png"
+                            onChange={e => { if (e.target.files?.length) setDocFiles(prev => ({ ...prev, [dt.key]: [...(prev[dt.key] ?? []), ...Array.from(e.target.files!)] })); e.target.value = ''; }} />
+                        </label>
+                      )}
+                    </div>
                   ) : (
-                    <Upload className="h-5 w-5 shrink-0 text-brand" />
+                    <label className="flex cursor-pointer items-center gap-3">
+                      <Upload className="h-5 w-5 shrink-0 text-brand" />
+                      <span className="flex-1 text-sm text-slate-600">
+                        {dt.label}{dt.required && <span className="text-rose-500 font-semibold"> *</span>}
+                        {isMulti && <span className="ml-1 text-xs text-slate-400">(multiple files allowed)</span>}
+                      </span>
+                      <input type="file" className="hidden" multiple={isMulti} accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={e => { if (e.target.files?.length) setDocFiles(prev => ({ ...prev, [dt.key]: Array.from(e.target.files!) })); }} />
+                    </label>
                   )}
-                  <span className="flex-1 text-sm text-slate-600">
-                    {docFiles[dt.key] ? docFiles[dt.key]!.name : <>{dt.label}{dt.required && <span className="text-rose-500 font-semibold"> *</span>}</>}
-                  </span>
-                  {docFiles[dt.key] && (
-                    <button type="button" onClick={(e) => { e.preventDefault(); setDocFiles(prev => { const c = { ...prev }; delete c[dt.key]; return c; }); }}
-                      className="flex h-6 w-6 items-center justify-center rounded text-red-400 hover:bg-red-50 hover:text-red-600">
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                  <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png"
-                    onChange={e => { if (e.target.files?.[0]) setDocFiles(prev => ({ ...prev, [dt.key]: e.target.files![0] })); }} />
-                </label>
-              ))}
+                </div>
+                );
+              })}
             </div>
           </div>
 
@@ -615,6 +707,35 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
                 </div>
               </div>
               <p className="mt-2 text-xs text-amber-600">Payment is required before your application can be submitted.</p>
+            </div>
+          )}
+
+          {/* Gateway selector — shown when multiple gateways are available */}
+          {appFees.length > 0 && activeGateways.length > 1 && (
+            <div className="rounded-lg border border-slate-200 bg-white p-4">
+              <p className="mb-2 text-sm font-medium text-slate-700">Choose payment method:</p>
+              <div className="flex flex-wrap gap-3">
+                {activeGateways.map((gw) => (
+                  <button
+                    key={gw.id}
+                    type="button"
+                    onClick={() => setSelectedGateway(gw.id as GatewayId)}
+                    disabled={paying || verifying || submitting}
+                    className={
+                      'flex items-center gap-2 rounded-lg border-2 px-4 py-2.5 text-sm font-semibold transition disabled:opacity-50 ' +
+                      (selectedGateway === gw.id
+                        ? 'border-blue-600 bg-blue-50 text-blue-700'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50')
+                    }
+                  >
+                    <CreditCard className="h-4 w-4" />
+                    {gw.name}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1.5 text-xs text-slate-400">
+                Both options are equally secure and work the same way. Choose whichever you prefer.
+              </p>
             </div>
           )}
 

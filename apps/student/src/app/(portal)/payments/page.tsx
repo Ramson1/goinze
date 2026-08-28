@@ -17,8 +17,8 @@ import {
 } from 'lucide-react';
 import Card from '@/components/Card';
 import PageHeader from '@/components/PageHeader';
-import PaymentModal, { type FlutterwaveResponse } from '@/components/PaymentModal';
-import { studentApi, financeApi, type FeesResponse, type FeeItem, type VerifyPaymentResult } from '@/lib/api';
+import PaymentModal, { type PaymentResponse, type GatewayId } from '@/components/PaymentModal';
+import { studentApi, financeApi, type FeesResponse, type FeeItem, type VerifyPaymentResult, type GatewayConfig } from '@/lib/api';
 import { useStudent } from '@/lib/student-context';
 import { formatNaira } from '@/lib/utils';
 import { cn } from '@/lib/utils';
@@ -90,6 +90,9 @@ export default function PaymentsPage() {
   const [receipt, setReceipt] = useState<VerifyPaymentResult | null>(null);
   const [publicKey, setPublicKey] = useState('');
   const [portalAccessPublicKey, setPortalAccessPublicKey] = useState('');
+  const [availableGateways, setAvailableGateways] = useState<GatewayConfig[]>([]);
+  const [portalAccessGateways, setPortalAccessGateways] = useState<GatewayConfig[]>([]);
+  const [selectedGateway, setSelectedGateway] = useState<GatewayId>('FLUTTERWAVE');
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const searchParams = useSearchParams();
   const [showAccessBanner, setShowAccessBanner] = useState(
@@ -115,14 +118,35 @@ export default function PaymentsPage() {
       .then((d) => alive && setData(d))
       .catch((err) => alive && setError(err instanceof Error ? err.message : 'Failed to load fees.'))
       .finally(() => alive && setLoading(false));
-    // Fetch Flutterwave public key from API
-    financeApi.getFlutterwaveConfig()
-      .then((cfg) => alive && setPublicKey(cfg.publicKey))
-      .catch(() => {});
-    // Fetch Portal Access public key from API
-    financeApi.getPortalAccessPublicKey()
-      .then((cfg) => alive && setPortalAccessPublicKey(cfg.publicKey))
-      .catch(() => {});
+    // Fetch available payment gateways from API
+    financeApi.getPaymentGateways()
+      .then((res) => {
+        alive && setAvailableGateways(res.gateways);
+        if (res.gateways.length > 0) {
+          setPublicKey(res.gateways[0].publicKey);
+          setSelectedGateway(res.gateways[0].id as GatewayId);
+        }
+      })
+      .catch(() => {
+        // Fallback to legacy endpoint
+        financeApi.getFlutterwaveConfig()
+          .then((cfg) => alive && setPublicKey(cfg.publicKey))
+          .catch(() => {});
+      });
+    // Fetch Portal Access payment gateways from API
+    financeApi.getPortalAccessGateways()
+      .then((res) => {
+        alive && setPortalAccessGateways(res.gateways);
+        if (res.gateways.length > 0) {
+          setPortalAccessPublicKey(res.gateways[0].publicKey);
+        }
+      })
+      .catch(() => {
+        // Fallback to legacy endpoint
+        financeApi.getPortalAccessPublicKey()
+          .then((cfg) => alive && setPortalAccessPublicKey(cfg.publicKey))
+          .catch(() => {});
+      });
     return () => { alive = false; };
   }, []);
 
@@ -136,6 +160,7 @@ export default function PaymentsPage() {
         amount: item.amount,
         studentId: profile?.id,
         customerEmail: profile?.email ?? undefined,
+        gateway: selectedGateway,
       });
       // Open the Flutterwave modal with the txRef from the server
       setPayingItem({ ...item, ref: res.reference });
@@ -146,12 +171,12 @@ export default function PaymentsPage() {
     }
   }
 
-  /** Called when Flutterwave checkout completes successfully */
-  async function handlePaymentSuccess(response: FlutterwaveResponse) {
+  /** Called when payment checkout completes successfully */
+  async function handlePaymentSuccess(response: PaymentResponse) {
     setModalOpen(false);
     setVerifying(true);
     try {
-      const result = await financeApi.verifyPayment(response.tx_ref);
+      const result = await financeApi.verifyPayment(response.txRef);
       setReceipt(result);
       setShowAccessBanner(false);
       setShowTuitionBanner(false);
@@ -219,7 +244,7 @@ export default function PaymentsPage() {
     <div className="mx-auto max-w-5xl">
       <PageHeader
         title="Payments"
-        description="View your fee breakdown and make secure payments via Flutterwave."
+        description="View your fee breakdown and make secure online payments."
       />
 
       {/* Portal access required banner */}
@@ -285,6 +310,37 @@ export default function PaymentsPage() {
         </Card>
       </div>
 
+      {/* Gateway selector — shown when multiple gateways are available */}
+      {availableGateways.length > 1 && (
+        <div className="mb-6">
+          <p className="mb-2 text-sm font-medium text-slate-700">Choose payment method:</p>
+          <div className="flex flex-wrap gap-3">
+            {availableGateways.map((gw) => (
+              <button
+                key={gw.id}
+                type="button"
+                onClick={() => {
+                  setSelectedGateway(gw.id as GatewayId);
+                  setPublicKey(gw.publicKey);
+                }}
+                className={cn(
+                  'flex items-center gap-2 rounded-lg border-2 px-4 py-2.5 text-sm font-semibold transition',
+                  selectedGateway === gw.id
+                    ? 'border-blue-600 bg-blue-50 text-blue-700'
+                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50',
+                )}
+              >
+                <CreditCard className="h-4 w-4" />
+                {gw.name}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-slate-500">
+            Both options are equally secure and work the same way. Choose whichever you prefer.
+          </p>
+        </div>
+      )}
+
       {/* Payment sequence info banner */}
       {showSequenceBanner && (
         <div className="mb-4 flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
@@ -311,7 +367,7 @@ export default function PaymentsPage() {
             <Wallet className="h-4 w-4 text-brand" /> Fee Breakdown
           </h2>
           <span className="flex items-center gap-1.5 text-xs text-slate-400">
-            <ShieldCheck className="h-3.5 w-3.5 text-brand" /> Secured by Flutterwave
+            <ShieldCheck className="h-3.5 w-3.5 text-brand" /> Secured online payments
           </span>
         </div>
 
@@ -466,12 +522,12 @@ export default function PaymentsPage() {
         )}
 
         <div className="border-t border-slate-100 bg-slate-50 px-6 py-4 text-xs leading-relaxed text-slate-500">
-          Payments are processed securely by <strong>Flutterwave</strong>. Pay with card, bank transfer or USSD.
+          Payments are processed securely online. Pay with card, bank transfer or USSD.
           A receipt is generated automatically once payment is confirmed.
         </div>
       </Card>
 
-      {/* Flutterwave Payment Modal */}
+      {/* Payment Modal */}
       {payingItem && (
         <PaymentModal
           open={modalOpen}
@@ -479,9 +535,13 @@ export default function PaymentsPage() {
           amount={payingItem.amount}
           email={profile?.email ?? ''}
           txRef={payingItem.ref ?? ''}
-          publicKey={payingItem.type === 'PORTAL_ACCESS' ? portalAccessPublicKey : publicKey}
+          publicKey={payingItem.type === 'PORTAL_ACCESS'
+            ? (portalAccessGateways.find(g => g.id === selectedGateway)?.publicKey ?? portalAccessPublicKey)
+            : (availableGateways.find(g => g.id === selectedGateway)?.publicKey ?? publicKey)
+          }
           title={`Pay ${payingItem.description}`}
           description={`Payment for ${payingItem.description}`}
+          gateway={selectedGateway}
           onSuccess={handlePaymentSuccess}
           onError={(msg) => setError(msg)}
         />
@@ -628,13 +688,13 @@ export default function PaymentsPage() {
                     </div>
                     {receipt.gatewayRef && (
                       <div className="flex justify-between">
-                        <span className="text-slate-500">Flutterwave Transaction ID:</span>
+                        <span className="text-slate-500">Transaction ID:</span>
                         <span className="font-mono font-semibold text-slate-800">{receipt.gatewayRef}</span>
                       </div>
                     )}
                     <div className="flex justify-between">
                       <span className="text-slate-500">Payment Method:</span>
-                      <span className="font-semibold text-slate-800">Flutterwave (Online)</span>
+                      <span className="font-semibold text-slate-800">{receipt.gateway ? `${receipt.gateway} (Online)` : 'Online Payment'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Verification Code:</span>

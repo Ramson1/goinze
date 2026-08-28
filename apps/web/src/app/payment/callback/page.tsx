@@ -12,8 +12,8 @@ function CallbackContent() {
   const [message, setMessage] = useState("Verifying your payment…");
 
   useEffect(() => {
-    const txRef = searchParams.get("tx_ref");
-    const txStatus = searchParams.get("status");
+    // Support both Flutterwave (tx_ref) and Paystack (reference) query params
+    const txRef = searchParams.get("tx_ref") || searchParams.get("reference");
 
     if (!txRef) {
       setStatus("failed");
@@ -21,14 +21,7 @@ function CallbackContent() {
       return;
     }
 
-    // If Flutterwave reports a non-success status, fail immediately
-    if (txStatus && txStatus !== "successful") {
-      setStatus("failed");
-      setMessage("Payment was not successful. Please try again.");
-      return;
-    }
-
-    // Verify the payment on the backend
+    // Verify the payment on the backend (gateway-agnostic)
     financeApi
       .verifyPayment(txRef)
       .then(() => {

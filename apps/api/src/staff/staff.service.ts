@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import type { Paginated } from '../lib/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { paginated } from '../common/utils/pagination.util';
@@ -120,6 +120,53 @@ export class StaffService {
   async remove(id: string) {
     await this.findOne(id);
     return this.prisma.db.staff.delete({ where: { id } });
+  }
+
+  /**
+   * Find all lecturers with a portal account awaiting admin approval (User.status = PENDING).
+   */
+  async findPendingApprovals(schoolId: string | null) {
+    const where: Record<string, any> = {
+      userId: { not: null },
+      isLecturer: true,
+      user: { status: 'PENDING' },
+    };
+    if (schoolId) where.schoolId = schoolId;
+    return this.prisma.db.staff.findMany({
+      where,
+      include: {
+        user: { select: { id: true, email: true, firstName: true, lastName: true, createdAt: true } },
+        department: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /**
+   * Approve a self-registered lecturer's portal account:
+   * activate the linked User.
+   */
+  async approvePortalAccount(staffId: string, schoolId: string | null) {
+    const where: Record<string, any> = { id: staffId };
+    if (schoolId) where.schoolId = schoolId;
+    const staff = await this.prisma.db.staff.findFirst({
+      where,
+      include: { user: true },
+    });
+    if (!staff) throw new NotFoundException('Staff not found');
+    if (!staff.userId) throw new BadRequestException('This staff member has no portal account linked.');
+    if (staff.user?.status !== 'PENDING') {
+      throw new BadRequestException('This account is not pending approval.');
+    }
+
+    await this.prisma.db.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: staff.userId! },
+        data: { status: 'ACTIVE' },
+      });
+    });
+
+    return { success: true };
   }
 
   /** Toggle a staff member's active status (disable/enable). */

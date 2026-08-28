@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Loader2, X, CreditCard, ShieldCheck, AlertCircle } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+export type GatewayId = 'FLUTTERWAVE' | 'PAYSTACK';
 
 export interface PaymentModalProps {
   open: boolean;
@@ -17,10 +19,21 @@ export interface PaymentModalProps {
   currency?: string;
   title?: string;
   description?: string;
-  onSuccess: (response: FlutterwaveResponse) => void;
+  gateway?: GatewayId;
+  onSuccess: (response: PaymentResponse) => void;
   onError: (error: string) => void;
 }
 
+/** Unified payment response from either gateway. */
+export interface PaymentResponse {
+  txRef: string;
+  gatewayRef: string;
+  status: string;
+  amount: number;
+  currency: string;
+}
+
+/** @deprecated Use PaymentResponse instead. */
 export interface FlutterwaveResponse {
   amount: number;
   currency: string;
@@ -32,33 +45,54 @@ export interface FlutterwaveResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Script injection helper
+// Script injection helpers
 // ---------------------------------------------------------------------------
 
-let scriptPromise: Promise<void> | null = null;
+let flutterwaveScriptPromise: Promise<void> | null = null;
+let paystackScriptPromise: Promise<void> | null = null;
 
 function injectFlutterwaveScript(): Promise<void> {
-  // Already loaded
   if ((window as any).FlutterwaveCheckout) return Promise.resolve();
-  // Re-use in-flight promise
-  if (scriptPromise) return scriptPromise;
-  scriptPromise = new Promise<void>((resolve, reject) => {
+  if (flutterwaveScriptPromise) return flutterwaveScriptPromise;
+  flutterwaveScriptPromise = new Promise<void>((resolve, reject) => {
     const script = document.createElement('script');
     script.src = 'https://checkout.flutterwave.com/v3.js';
     script.async = true;
     script.onload = () => resolve();
     script.onerror = () => {
-      scriptPromise = null; // allow retry
+      flutterwaveScriptPromise = null;
       reject(new Error('Failed to load Flutterwave script'));
     };
     document.head.appendChild(script);
   });
-  return scriptPromise;
+  return flutterwaveScriptPromise;
+}
+
+function injectPaystackScript(): Promise<void> {
+  if ((window as any).PaystackPop) return Promise.resolve();
+  if (paystackScriptPromise) return paystackScriptPromise;
+  paystackScriptPromise = new Promise<void>((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://js.paystack.co/v1/inline.js';
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => {
+      paystackScriptPromise = null;
+      reject(new Error('Failed to load Paystack script'));
+    };
+    document.head.appendChild(script);
+  });
+  return paystackScriptPromise;
 }
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
+
+const GATEWAY_LABELS: Record<GatewayId, string> = {
+  FLUTTERWAVE: 'Flutterwave',
+  PAYSTACK: 'Paystack',
+};
 
 export default function PaymentModal({
   open,
@@ -69,13 +103,16 @@ export default function PaymentModal({
   publicKey,
   currency = 'NGN',
   title = 'Goinzeschool Payment',
-  description = 'Secure payment via Flutterwave',
+  description,
+  gateway = 'FLUTTERWAVE',
   onSuccess,
   onError,
 }: PaymentModalProps) {
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
   const initiatedRef = useRef(false);
+  const gatewayLabel = GATEWAY_LABELS[gateway] || 'Payment Gateway';
+  const desc = description ?? `Secure payment via ${gatewayLabel}`;
 
   // Reset state when modal opens
   useEffect(() => {
@@ -85,10 +122,9 @@ export default function PaymentModal({
     setFailed(false);
   }, [open, txRef]);
 
-  // Trigger Flutterwave checkout when modal opens
+  // Trigger checkout when modal opens
   useEffect(() => {
     if (!open || initiatedRef.current) return;
-    // Don't attempt checkout if public key is not yet loaded
     if (!publicKey) {
       setFailed(true);
       onError('Payment key not loaded. Please refresh the page and try again.');
@@ -97,49 +133,107 @@ export default function PaymentModal({
     initiatedRef.current = true;
     setLoading(true);
 
-    const doCheckout = () => {
-      const win = window as any;
-      if (typeof win.FlutterwaveCheckout === 'function') {
-        win.FlutterwaveCheckout({
-          public_key: publicKey,
-          tx_ref: txRef,
-          amount,
-          currency,
-          payment_options: 'card, bank_transfer, ussd',
-          customer: { email, name: email },
-          customizations: { title, description, logo: '' },
-          callback(data: any) {
+    if (gateway === 'PAYSTACK') {
+      // --- Paystack checkout ---
+      const doPaystack = () => {
+        const win = window as any;
+        if (typeof win.PaystackPop?.setup === 'function') {
+          const handler = win.PaystackPop.setup({
+            key: publicKey,
+            email,
+            amount: Math.round(amount * 100), // Paystack uses kobo
+            currency,
+            ref: txRef,
+            metadata: {
+              custom_fields: [
+                {
+                  display_name: 'Description',
+                  variable_name: 'description',
+                  value: title,
+                },
+              ],
+            },
+            callback(response: any) {
+              setLoading(false);
+              onSuccess({
+                txRef: response.reference || txRef,
+                gatewayRef: response.reference || txRef,
+                status: 'successful',
+                amount,
+                currency,
+              });
+            },
+            onClose() {
+              setLoading(false);
+              onClose();
+            },
+          });
+          if (handler) {
+            handler.openIframe();
+          } else {
+            setFailed(true);
             setLoading(false);
-            onSuccess({
-              amount: data.amount,
-              currency: data.currency,
-              customer: data.customer,
-              tx_ref: data.tx_ref,
-              flw_ref: data.flw_ref,
-              status: data.status,
-              transaction_id: data.transaction_id,
-            });
-          },
-          onclose() {
-            setLoading(false);
-            onClose();
-          },
-        });
-      } else {
-        setFailed(true);
-        setLoading(false);
-        onError('Flutterwave checkout could not load. Please try again.');
-      }
-    };
+            onError('Paystack checkout could not load. Please try again.');
+          }
+        } else {
+          setFailed(true);
+          setLoading(false);
+          onError('Paystack checkout could not load. Please try again.');
+        }
+      };
 
-    injectFlutterwaveScript()
-      .then(doCheckout)
-      .catch(() => {
-        setFailed(true);
-        setLoading(false);
-        onError('Could not load payment gateway. Please check your connection and try again.');
-      });
-  }, [open, publicKey, txRef, amount, currency, email, title, description, onSuccess, onError, onClose]);
+      injectPaystackScript()
+        .then(doPaystack)
+        .catch(() => {
+          setFailed(true);
+          setLoading(false);
+          onError('Could not load payment gateway. Please check your connection and try again.');
+        });
+    } else {
+      // --- Flutterwave checkout ---
+      const doCheckout = () => {
+        const win = window as any;
+        if (typeof win.FlutterwaveCheckout === 'function') {
+          win.FlutterwaveCheckout({
+            public_key: publicKey,
+            tx_ref: txRef,
+            amount,
+            currency,
+            payment_options: 'card, bank_transfer, ussd',
+            customer: { email, name: email },
+            custom_texts: { title, description: desc },
+            customizations: { title, description: desc, logo: '' },
+            callback(data: any) {
+              setLoading(false);
+              onSuccess({
+                txRef: data.tx_ref || txRef,
+                gatewayRef: data.flw_ref || '',
+                status: data.status || 'successful',
+                amount: data.amount ?? amount,
+                currency: data.currency ?? currency,
+              });
+            },
+            onclose() {
+              setLoading(false);
+              onClose();
+            },
+          });
+        } else {
+          setFailed(true);
+          setLoading(false);
+          onError(`${gatewayLabel} checkout could not load. Please try again.`);
+        }
+      };
+
+      injectFlutterwaveScript()
+        .then(doCheckout)
+        .catch(() => {
+          setFailed(true);
+          setLoading(false);
+          onError('Could not load payment gateway. Please check your connection and try again.');
+        });
+    }
+  }, [open, publicKey, txRef, amount, currency, email, title, desc, gateway, gatewayLabel, onSuccess, onError, onClose]);
 
   if (!open) return null;
 
@@ -183,6 +277,10 @@ export default function PaymentModal({
               <span>Email</span>
               <span>{email}</span>
             </div>
+            <div className="flex justify-between">
+              <span>Gateway</span>
+              <span className="font-medium text-slate-800">{gatewayLabel}</span>
+            </div>
           </div>
 
           {/* Payment methods */}
@@ -196,7 +294,7 @@ export default function PaymentModal({
           {loading && (
             <div className="flex items-center justify-center gap-2 rounded-lg bg-blue-50 py-3 text-sm font-medium text-blue-700">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Opening payment checkout…
+              Opening {gatewayLabel} checkout…
             </div>
           )}
 
@@ -206,7 +304,7 @@ export default function PaymentModal({
               <div>
                 <p className="font-medium">Payment gateway unavailable</p>
                 <p className="mt-1 text-xs text-red-600">
-                  Could not load the Flutterwave checkout. Please close this dialog and try again, or contact support.
+                  Could not load the {gatewayLabel} checkout. Please close this dialog and try again, or contact support.
                 </p>
               </div>
             </div>
@@ -216,7 +314,7 @@ export default function PaymentModal({
         {/* Footer */}
         <div className="flex items-center justify-center gap-1.5 border-t border-slate-100 px-6 py-3 text-xs text-slate-400">
           <ShieldCheck className="h-3.5 w-3.5 text-green-500" />
-          Secured by Flutterwave
+          Secured by {gatewayLabel}
         </div>
       </div>
     </div>

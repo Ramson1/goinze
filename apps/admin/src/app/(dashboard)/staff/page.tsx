@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import {
   AlertCircle,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Filter,
@@ -80,12 +81,65 @@ export default function StaffPage() {
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void } | null>(null);
 
+  // Pending portal approvals
+  const [pendingApprovals, setPendingApprovals] = useState<
+    {
+      id: string;
+      firstName: string;
+      lastName: string;
+      staffNumber: string | null;
+      department?: { name: string };
+      user?: { id: string; email: string; firstName: string; lastName: string; createdAt: string };
+    }[]
+  >([]);
+  const [showApprovals, setShowApprovals] = useState(false);
+  const [loadingApprovals, setLoadingApprovals] = useState(false);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+
   // Check user role on mount
   useEffect(() => {
     const token = getCookie('access_token');
     const role = token ? decodeRoleFromToken(token) : null;
     setIsSuperAdmin(role === 'SUPER_ADMIN');
   }, []);
+
+  const loadPendingApprovals = useCallback(() => {
+    setLoadingApprovals(true);
+    staffApi
+      .pendingApprovals()
+      .then(setPendingApprovals)
+      .catch(() => setPendingApprovals([]))
+      .finally(() => setLoadingApprovals(false));
+  }, []);
+
+  useEffect(() => {
+    loadPendingApprovals();
+  }, [loadPendingApprovals]);
+
+  async function handleApprovePortal(staffId: string, name: string) {
+    setConfirmDialog({
+      message: `Approve portal access for ${name}? This will activate their lecturer account.`,
+      onConfirm: () => {
+        setConfirmDialog(null);
+        doApprovePortal(staffId);
+      },
+    });
+  }
+
+  async function doApprovePortal(staffId: string) {
+    setApprovingId(staffId);
+    setError(null);
+    setNotice(null);
+    try {
+      await staffApi.approvePortal(staffId);
+      setNotice('Lecturer portal account approved successfully.');
+      loadPendingApprovals();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Approval failed.');
+    } finally {
+      setApprovingId(null);
+    }
+  }
 
   // Add-staff form
   const [showForm, setShowForm] = useState(false);
@@ -617,6 +671,96 @@ export default function StaffPage() {
               </button>
             </div>
           </form>
+        </Card>
+      )}
+
+      {/* Pending Portal Approvals Banner */}
+      {pendingApprovals.length > 0 && (
+        <Card className="mb-6">
+          <button
+            type="button"
+            onClick={() => setShowApprovals((v) => !v)}
+            className="flex w-full items-center justify-between px-5 py-4 text-left"
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+                <UserCheck className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-900">
+                  {pendingApprovals.length} lecturer account{pendingApprovals.length !== 1 ? 's' : ''} awaiting approval
+                </p>
+                <p className="text-xs text-gray-500">
+                  These lecturers have registered for portal access and are waiting for admin approval.
+                </p>
+              </div>
+            </div>
+            <ChevronDown
+              className={`h-5 w-5 text-gray-400 transition-transform ${showApprovals ? 'rotate-180' : ''}`}
+            />
+          </button>
+
+          {showApprovals && (
+            <div className="border-t border-gray-100 px-5 py-4">
+              {loadingApprovals ? (
+                <div className="flex items-center justify-center gap-2 py-6 text-sm text-gray-400">
+                  <Loader2 className="h-5 w-5 animate-spin" /> Loading approvals…
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="text-xs uppercase tracking-wide text-gray-500">
+                      <tr>
+                        <th className="px-3 py-2">Name</th>
+                        <th className="px-3 py-2">Staff No</th>
+                        <th className="px-3 py-2">Department</th>
+                        <th className="px-3 py-2">Email</th>
+                        <th className="px-3 py-2">Registered</th>
+                        <th className="px-3 py-2 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {pendingApprovals.map((s) => (
+                        <tr key={s.id} className="hover:bg-gray-50">
+                          <td className="px-3 py-2 font-medium text-gray-900">
+                            {s.firstName} {s.lastName}
+                          </td>
+                          <td className="px-3 py-2 font-mono text-xs text-gray-600">
+                            {s.staffNumber ?? '—'}
+                          </td>
+                          <td className="px-3 py-2 text-gray-600">{s.department?.name ?? '—'}</td>
+                          <td className="px-3 py-2 text-gray-600">{s.user?.email ?? '—'}</td>
+                          <td className="px-3 py-2 text-xs text-gray-500">
+                            {s.user?.createdAt
+                              ? new Date(s.user.createdAt).toLocaleDateString()
+                              : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleApprovePortal(s.id, `${s.firstName} ${s.lastName}`)
+                              }
+                              disabled={approvingId === s.id}
+                              className="btn-primary px-3 py-1.5 text-xs disabled:opacity-60"
+                            >
+                              {approvingId === s.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <>
+                                  <CheckCircle2 className="h-3.5 w-3.5" /> Approve
+                                </>
+                              )}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
         </Card>
       )}
 

@@ -72,9 +72,9 @@ export default function AlumniForm() {
             id="a-year"
             type="number"
             required
-            min={1970}
+            min={2025}
             max={2030}
-            placeholder="e.g. 2018"
+            placeholder="e.g. 2025"
             className={inputClasses}
           />
         </div>
