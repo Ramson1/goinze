@@ -126,8 +126,6 @@ export default function SettingsPage() {
   // Payment gateways — portal access fee (super admin only)
   const [portalFlutterwaveEnabled, setPortalFlutterwaveEnabled] = useState(true);
   const [portalPaystackEnabled, setPortalPaystackEnabled] = useState(true);
-  // Developer payment toggle (super admin only)
-  const [developerPaymentEnabled, setDeveloperPaymentEnabled] = useState(true);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   function flash(message: string) {
@@ -175,9 +173,6 @@ export default function SettingsPage() {
         }
         if (settings['payment.portal_access_paystack_enabled'] !== undefined) {
           setPortalPaystackEnabled(settings['payment.portal_access_paystack_enabled'] !== false);
-        }
-        if (settings['payment.developer_payment_enabled'] !== undefined) {
-          setDeveloperPaymentEnabled(settings['payment.developer_payment_enabled'] !== false);
         }
       } catch (err) {
         if (!cancelled) {
@@ -260,7 +255,6 @@ export default function SettingsPage() {
       if (isSuperAdmin) {
         entries['payment.portal_access_flutterwave_enabled'] = portalFlutterwaveEnabled;
         entries['payment.portal_access_paystack_enabled'] = portalPaystackEnabled;
-        entries['payment.developer_payment_enabled'] = developerPaymentEnabled;
       }
       await settingsApi.updateMany(entries);
       flash('Payment gateway settings saved successfully.');
@@ -696,35 +690,6 @@ export default function SettingsPage() {
                             <span>All portal access payment gateways are disabled. Students will not be able to pay the portal access fee online.</span>
                           </div>
                         )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Super admin: Developer payment toggle */}
-                  {isSuperAdmin && (
-                    <div className="border-t border-gray-200 pt-5">
-                      <div className="flex items-center justify-between rounded-lg border border-gray-200 p-4">
-                        <div>
-                          <p className="text-sm font-semibold text-gray-900">Developer Account Payments</p>
-                          <p className="mt-0.5 text-xs text-gray-500">
-                            When disabled, developer account creation will not require payment.
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setDeveloperPaymentEnabled(!developerPaymentEnabled)}
-                          className={cn(
-                            'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2',
-                            developerPaymentEnabled ? 'bg-brand' : 'bg-gray-300',
-                          )}
-                        >
-                          <span
-                            className={cn(
-                              'pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out',
-                              developerPaymentEnabled ? 'translate-x-5' : 'translate-x-0',
-                            )}
-                          />
-                        </button>
                       </div>
                     </div>
                   )}
