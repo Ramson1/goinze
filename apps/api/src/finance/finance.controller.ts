@@ -87,7 +87,10 @@ export class FinanceController {
   /** Public endpoint to expose available payment gateways. */
   @Public()
   @Get('payment-gateways')
-  async paymentGateways(@Query('schoolSlug') schoolSlug?: string) {
+  async paymentGateways(
+    @Query('schoolSlug') schoolSlug?: string,
+    @CurrentUser() user?: SessionUser,
+  ) {
     let schoolId: string | null = null;
     if (schoolSlug) {
       const school = await this.financeService['prisma'].db.school.findFirst({
@@ -96,13 +99,20 @@ export class FinanceController {
       });
       schoolId = school?.id ?? null;
     }
+    // Fall back to authenticated user's school
+    if (!schoolId && user?.schoolId) {
+      schoolId = user.schoolId;
+    }
     return this.financeService.getAvailableGateways(schoolId);
   }
 
   /** Public endpoint to expose Portal Access payment gateways. */
   @Public()
   @Get('portal-access-gateways')
-  async portalAccessGateways(@Query('schoolSlug') schoolSlug?: string) {
+  async portalAccessGateways(
+    @Query('schoolSlug') schoolSlug?: string,
+    @CurrentUser() user?: SessionUser,
+  ) {
     let schoolId: string | null = null;
     if (schoolSlug) {
       const school = await this.financeService['prisma'].db.school.findFirst({
@@ -110,6 +120,10 @@ export class FinanceController {
         select: { id: true },
       });
       schoolId = school?.id ?? null;
+    }
+    // Fall back to authenticated user's school
+    if (!schoolId && user?.schoolId) {
+      schoolId = user.schoolId;
     }
     return this.financeService.getPortalAccessGateways(schoolId);
   }

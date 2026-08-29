@@ -154,7 +154,7 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
   // Load application fees and available payment gateways on mount
   useEffect(() => {
     financeApi.getApplicationFees().then(setAppFees).catch(() => {});
-    financeApi.getPaymentGateways()
+    financeApi.getPaymentGateways("goinze-demo")
       .then((res) => {
         setActiveGateways(res.gateways);
         if (res.gateways.length > 0) {

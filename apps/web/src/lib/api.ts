@@ -306,7 +306,7 @@ export const financeApi = {
   getApplicationFees: () =>
     api.get<ApplicationFee[]>("/finance/application-fees"),
   /** Fetch available payment gateways from the API. */
-  getPaymentGateways: () => api.get<PaymentGatewaysResponse>("/finance/payment-gateways"),
+  getPaymentGateways: (schoolSlug?: string) => api.get<PaymentGatewaysResponse>(`/finance/payment-gateways${schoolSlug ? `?schoolSlug=${encodeURIComponent(schoolSlug)}` : ''}`),
   /** @deprecated Use getPaymentGateways instead. */
   getFlutterwaveConfig: () => api.get<FlutterwaveConfig>("/finance/flutterwave-config"),
   initPayment: (data: {
