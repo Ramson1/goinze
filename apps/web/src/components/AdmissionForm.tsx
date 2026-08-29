@@ -387,23 +387,30 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
       paystackHandler.openIframe();
       console.log('[Paystack] openIframe called');
 
-      // Polling fallback: check payment status every 3 seconds
-      // This handles cases where callbacks don't fire
+      // Polling fallback: attempt verification every 5 seconds
+      // This handles cases where callbacks don't fire and webhooks don't reach localhost
       console.log('[Paystack] Starting polling fallback...');
+      let pollCount = 0;
       const pollInterval = setInterval(async () => {
-        console.log('[Paystack] Polling payment status...');
+        pollCount++;
+        console.log(`[Paystack] Poll attempt #${pollCount}...`);
         try {
-          const status = await financeApi.getPaymentStatus(paymentRef);
-          console.log('[Paystack] Payment status:', status);
-          if (status === 'SUCCESS' || status === 'SUCCESSFUL') {
-            console.log('[Paystack] Payment detected via polling!');
+          // Try to verify directly with Paystack (this will update DB if successful)
+          const verification = await financeApi.verifyPayment(paymentRef);
+          console.log('[Paystack] Verification response:', verification);
+          const verifyStatus = verification.status?.toUpperCase?.() ?? "";
+          if (verifyStatus === 'SUCCESS' || verifyStatus === 'SUCCESSFUL') {
+            console.log('[Paystack] Payment verified via polling!');
             clearInterval(pollInterval);
             verifyAndSubmit();
+          } else {
+            console.log('[Paystack] Payment not yet successful:', verifyStatus);
           }
         } catch (err) {
-          console.error('[Paystack] Polling error:', err);
+          // Verification might fail if payment is still pending
+          console.log('[Paystack] Verification attempt:', err instanceof Error ? err.message : 'Payment not ready');
         }
-      }, 3000);
+      }, 5000);
 
       // Stop polling after 5 minutes to avoid infinite polling
       setTimeout(() => {
