@@ -206,9 +206,6 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
   /* ── submit ── */
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    console.log('[handleSubmit] Form submitted');
-    console.log('[handleSubmit] selectedGateway:', selectedGateway);
-    console.log('[handleSubmit] declaredAgreed:', declaredAgreed);
     if (!declaredAgreed) { setError("You must agree to the declaration before submitting."); return; }
 
     // ── Validate all required fields before allowing payment/submission ──
@@ -269,12 +266,10 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
 
     setPaying(true);
     setError(null);
-    console.log('[handleSubmit] Starting payment flow...');
 
     // Step 1: Initialize payment on the backend to create a DB record
     let paymentRef: string;
     try {
-      console.log('[handleSubmit] Initializing payment on backend...');
       const initResult = await financeApi.initPayment({
         schoolSlug: "goinze-demo",
         amount: totalFees,
@@ -284,9 +279,7 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
       });
       paymentRef = initResult.reference;
       paymentTxRef.current = paymentRef;
-      console.log('[handleSubmit] Payment initialized:', paymentRef);
     } catch (err) {
-      console.error('[handleSubmit] Payment initialization failed:', err);
       setPaying(false);
       setError(err instanceof Error ? err.message : "Could not initialize payment. Please try again.");
       return;
@@ -294,16 +287,12 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
 
     // Step 2: Load the appropriate gateway script
     try {
-      console.log('[handleSubmit] Loading gateway script...');
       if (selectedGateway === 'PAYSTACK') {
         await loadPaystackScript();
-        console.log('[handleSubmit] Paystack script loaded');
       } else {
         await loadFlutterwaveScript();
-        console.log('[handleSubmit] Flutterwave script loaded');
       }
-    } catch (err) {
-      console.error('[handleSubmit] Script loading failed:', err);
+    } catch {
       setPaying(false);
       setError("Could not load payment gateway. Please check your connection and try again.");
       return;
@@ -313,46 +302,30 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
     const gwPublicKey = activeGateways.find(g => g.id === selectedGateway)?.publicKey ?? '';
 
     if (selectedGateway === 'PAYSTACK') {
-      console.log('[Paystack] Starting Paystack checkout...');
-      console.log('[Paystack] Public key:', gwPublicKey);
-      console.log('[Paystack] Email:', email);
-      console.log('[Paystack] Amount:', totalFees);
-      console.log('[Paystack] Reference:', paymentRef);
-      
       // ── Paystack checkout ──
       if (typeof win.PaystackPop?.setup !== "function") {
-        console.error('[Paystack] PaystackPop.setup is not a function');
         setPaying(false);
         setError("Payment gateway could not initialize. Please try again.");
         return;
       }
-      console.log('[Paystack] PaystackPop.setup is available');
 
       // Extract verification logic to reuse
       let verificationStarted = false;
       const verifyAndSubmit = async () => {
-        if (verificationStarted) {
-          console.log('[Paystack] Verification already in progress, skipping...');
-          return;
-        }
+        if (verificationStarted) return;
         verificationStarted = true;
-        console.log('[Paystack] Verifying payment...');
         setPaying(false);
         setVerifying(true);
         try {
           const verification = await financeApi.verifyPayment(paymentRef);
-          console.log('[Paystack] Verification response:', verification);
           const verifyStatus = verification.status?.toUpperCase?.() ?? "";
           if (verifyStatus !== "SUCCESS" && verifyStatus !== "SUCCESSFUL") {
-            console.error('[Paystack] Verification failed with status:', verifyStatus);
             setError("Payment verification returned status: " + (verification.status ?? "unknown") + ". Please contact support with reference: " + paymentRef);
             setVerifying(false);
             return;
           }
-          console.log('[Paystack] Verification successful, submitting application...');
           await submitApplication();
         } catch (err) {
-          console.error('[Paystack] Error in verification/submission:', err);
           setVerifying(false);
           setError(err instanceof Error ? err.message : "Payment verification failed. Please contact support with reference: " + paymentRef);
         }
@@ -370,52 +343,36 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
             { display_name: "Purpose", variable_name: "purpose", value: `Application fees: ${appFees.map(f => f.name).join(', ')}` },
           ],
         },
-        onSuccess: (response: any) => {
-          console.log('[Paystack] onSuccess fired:', response);
+        onSuccess: () => {
           verifyAndSubmit();
         },
         onClose: () => {
-          console.log('[Paystack] onClose fired');
           if (!verificationStarted) {
-            console.log('[Paystack] Checking payment status after popup close...');
             setTimeout(() => verifyAndSubmit(), 1000);
           }
         },
       });
-      console.log('[Paystack] Handler created:', paystackHandler);
-      console.log('[Paystack] Calling openIframe...');
       paystackHandler.openIframe();
-      console.log('[Paystack] openIframe called');
 
       // Polling fallback: attempt verification every 5 seconds
       // This handles cases where callbacks don't fire and webhooks don't reach localhost
-      console.log('[Paystack] Starting polling fallback...');
-      let pollCount = 0;
       const pollInterval = setInterval(async () => {
-        pollCount++;
-        console.log(`[Paystack] Poll attempt #${pollCount}...`);
         try {
           // Try to verify directly with Paystack (this will update DB if successful)
           const verification = await financeApi.verifyPayment(paymentRef);
-          console.log('[Paystack] Verification response:', verification);
           const verifyStatus = verification.status?.toUpperCase?.() ?? "";
           if (verifyStatus === 'SUCCESS' || verifyStatus === 'SUCCESSFUL') {
-            console.log('[Paystack] Payment verified via polling!');
             clearInterval(pollInterval);
             verifyAndSubmit();
-          } else {
-            console.log('[Paystack] Payment not yet successful:', verifyStatus);
           }
-        } catch (err) {
-          // Verification might fail if payment is still pending
-          console.log('[Paystack] Verification attempt:', err instanceof Error ? err.message : 'Payment not ready');
+        } catch {
+          // Verification might fail if payment is still pending - ignore and keep polling
         }
       }, 5000);
 
       // Stop polling after 5 minutes to avoid infinite polling
       setTimeout(() => {
         clearInterval(pollInterval);
-        console.log('[Paystack] Polling stopped after timeout');
       }, 5 * 60 * 1000);
     } else {
       // ── Flutterwave checkout ──
@@ -468,11 +425,9 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
 
   /* ── Submit the actual application form ── */
   async function submitApplication() {
-    console.log('[submitApplication] Starting application submission...');
     setSubmitting(true); setError(null);
     try {
       const names = splitName(`${surname} ${otherNames}`);
-      console.log('[submitApplication] Calling admissionsApi.apply...');
       const res = await admissionsApi.apply({
         schoolSlug: "goinze-demo",
         firstName: names.firstName,
@@ -504,8 +459,6 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
         declarationAgreed: true,
       });
 
-      console.log('[submitApplication] Application created:', res.id);
-
       // Upload documents after application is created
       const docs = Object.entries(docFiles).filter(([, files]) => files.length > 0);
       if (docs.length > 0) {
@@ -522,9 +475,7 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
       setResult(res);
       setTrackNo(res.applicationNo);
       setTrackEmail(email);
-      console.log('[submitApplication] Application submission complete');
     } catch (err) {
-      console.error('[submitApplication] Error submitting application:', err);
       setError(err instanceof ApiError ? err.message : "Unable to submit right now. Please try again.");
     } finally {
       setSubmitting(false);
