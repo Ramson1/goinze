@@ -363,7 +363,7 @@ export class AuthService {
           role: 'STUDENT',
           status: 'PENDING',
           metadata: { matricNumber: dto.matricNumber, departmentId: dto.departmentId },
-        },
+        } as any,
       });
     }
 
@@ -451,7 +451,7 @@ export class AuthService {
           role: 'LECTURER',
           status: 'PENDING',
           metadata: { staffNumber: dto.staffNumber, departmentId: dto.departmentId },
-        },
+        } as any,
       });
     }
 

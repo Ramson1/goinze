@@ -295,7 +295,7 @@ export class StudentsService {
     });
     if (!user) throw new NotFoundException('Pending user not found');
 
-    const meta = user.metadata as { matricNumber?: string; departmentId?: string } | null;
+    const meta = (user as any).metadata as { matricNumber?: string; departmentId?: string } | null;
 
     await this.prisma.db.$transaction(async (tx) => {
       await tx.student.create({
