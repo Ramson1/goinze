@@ -206,6 +206,9 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
   /* ── submit ── */
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    console.log('[handleSubmit] Form submitted');
+    console.log('[handleSubmit] selectedGateway:', selectedGateway);
+    console.log('[handleSubmit] declaredAgreed:', declaredAgreed);
     if (!declaredAgreed) { setError("You must agree to the declaration before submitting."); return; }
 
     // ── Validate all required fields before allowing payment/submission ──
@@ -266,10 +269,12 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
 
     setPaying(true);
     setError(null);
+    console.log('[handleSubmit] Starting payment flow...');
 
     // Step 1: Initialize payment on the backend to create a DB record
     let paymentRef: string;
     try {
+      console.log('[handleSubmit] Initializing payment on backend...');
       const initResult = await financeApi.initPayment({
         schoolSlug: "goinze-demo",
         amount: totalFees,
@@ -279,7 +284,9 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
       });
       paymentRef = initResult.reference;
       paymentTxRef.current = paymentRef;
+      console.log('[handleSubmit] Payment initialized:', paymentRef);
     } catch (err) {
+      console.error('[handleSubmit] Payment initialization failed:', err);
       setPaying(false);
       setError(err instanceof Error ? err.message : "Could not initialize payment. Please try again.");
       return;
@@ -287,12 +294,16 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
 
     // Step 2: Load the appropriate gateway script
     try {
+      console.log('[handleSubmit] Loading gateway script...');
       if (selectedGateway === 'PAYSTACK') {
         await loadPaystackScript();
+        console.log('[handleSubmit] Paystack script loaded');
       } else {
         await loadFlutterwaveScript();
+        console.log('[handleSubmit] Flutterwave script loaded');
       }
-    } catch {
+    } catch (err) {
+      console.error('[handleSubmit] Script loading failed:', err);
       setPaying(false);
       setError("Could not load payment gateway. Please check your connection and try again.");
       return;
@@ -302,12 +313,20 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
     const gwPublicKey = activeGateways.find(g => g.id === selectedGateway)?.publicKey ?? '';
 
     if (selectedGateway === 'PAYSTACK') {
+      console.log('[Paystack] Starting Paystack checkout...');
+      console.log('[Paystack] Public key:', gwPublicKey);
+      console.log('[Paystack] Email:', email);
+      console.log('[Paystack] Amount:', totalFees);
+      console.log('[Paystack] Reference:', paymentRef);
+      
       // ── Paystack checkout ──
       if (typeof win.PaystackPop?.setup !== "function") {
+        console.error('[Paystack] PaystackPop.setup is not a function');
         setPaying(false);
         setError("Payment gateway could not initialize. Please try again.");
         return;
       }
+      console.log('[Paystack] PaystackPop.setup is available');
 
       // Extract verification logic to reuse
       const verifyAndSubmit = async () => {
@@ -362,7 +381,10 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
           });
         },
       });
+      console.log('[Paystack] Handler created:', paystackHandler);
+      console.log('[Paystack] Calling openIframe...');
       paystackHandler.openIframe();
+      console.log('[Paystack] openIframe called');
     } else {
       // ── Flutterwave checkout ──
       if (typeof win.FlutterwaveCheckout !== "function") {
