@@ -308,7 +308,7 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
         setError("Payment gateway could not initialize. Please try again.");
         return;
       }
-      win.PaystackPop.setup({
+      const paystackHandler = win.PaystackPop.setup({
         key: gwPublicKey,
         email,
         amount: Math.round(totalFees * 100), // Paystack uses kobo
@@ -320,30 +320,32 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
             { display_name: "Purpose", variable_name: "purpose", value: `Application fees: ${appFees.map(f => f.name).join(', ')}` },
           ],
         },
-        callback: async (response: any) => {
+        onSuccess: () => {
           setPaying(false);
           setVerifying(true);
-          try {
-            const verification = await financeApi.verifyPayment(paymentRef);
-            const verifyStatus = verification.status?.toUpperCase?.() ?? "";
-            if (verifyStatus !== "SUCCESS" && verifyStatus !== "SUCCESSFUL") {
-              setError("Payment verification returned status: " + (verification.status ?? "unknown") + ". Please contact support with reference: " + paymentRef);
+          financeApi.verifyPayment(paymentRef)
+            .then((verification) => {
+              const verifyStatus = verification.status?.toUpperCase?.() ?? "";
+              if (verifyStatus !== "SUCCESS" && verifyStatus !== "SUCCESSFUL") {
+                setError("Payment verification returned status: " + (verification.status ?? "unknown") + ". Please contact support with reference: " + paymentRef);
+                setVerifying(false);
+                return;
+              }
+              return submitApplication();
+            })
+            .catch((err) => {
               setVerifying(false);
-              return;
-            }
-            await submitApplication();
-          } catch (err) {
-            setVerifying(false);
-            setError(err instanceof Error ? err.message : "Payment verification failed. Please contact support with reference: " + paymentRef);
-          }
+              setError(err instanceof Error ? err.message : "Payment verification failed. Please contact support with reference: " + paymentRef);
+            });
         },
-        onclose: () => {
+        onClose: () => {
           setVerifying((v) => {
             if (!v) setPaying(false);
             return v;
           });
         },
       });
+      paystackHandler.openIframe();
     } else {
       // ── Flutterwave checkout ──
       if (typeof win.FlutterwaveCheckout !== "function") {
