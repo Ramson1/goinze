@@ -320,6 +320,8 @@ export const financeApi = {
   }) => api.post<InitPaymentResult>("/finance/payments/init", data),
   verifyPayment: (reference: string) =>
     api.post<VerifyPaymentResult>("/finance/payments/verify", { reference }),
+  getPaymentStatus: (reference: string) =>
+    api.get<{ status: string }>(`/finance/payments/status/${reference}`).then(r => r.status),
 };
 
 // ---- Staff directory (public) ----

@@ -159,6 +159,13 @@ export class FinanceController {
     return this.financeService.verifyPayment(dto);
   }
 
+  /** Public endpoint to check payment status by reference (for polling). */
+  @Public()
+  @Get('payments/status/:reference')
+  async getPaymentStatus(@Param('reference') reference: string) {
+    return this.financeService.getPaymentStatus(reference);
+  }
+
   /** Flutterwave webhook (charge.completed). */
   @Public()
   @Post('payments/webhook')

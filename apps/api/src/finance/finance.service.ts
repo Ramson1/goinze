@@ -210,6 +210,20 @@ export class FinanceService {
    * Verify a payment by reference, mark it successful, post a ledger credit,
    * and — for acceptance-fee payments — advance the linked application.
    */
+  /**
+   * Get payment status by reference (for polling fallback).
+   */
+  async getPaymentStatus(reference: string) {
+    const payment = await this.prisma.db.payment.findUnique({
+      where: { reference },
+      select: { status: true },
+    });
+    if (!payment) {
+      throw new NotFoundException('Payment not found');
+    }
+    return { status: payment.status };
+  }
+
   async verifyPayment(dto: VerifyPaymentDto) {
     const payment = await this.prisma.db.payment.findUnique({
       where: { reference: dto.reference },

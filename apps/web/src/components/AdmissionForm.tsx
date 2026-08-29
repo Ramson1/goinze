@@ -329,7 +329,13 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
       console.log('[Paystack] PaystackPop.setup is available');
 
       // Extract verification logic to reuse
+      let verificationStarted = false;
       const verifyAndSubmit = async () => {
+        if (verificationStarted) {
+          console.log('[Paystack] Verification already in progress, skipping...');
+          return;
+        }
+        verificationStarted = true;
         console.log('[Paystack] Verifying payment...');
         setPaying(false);
         setVerifying(true);
@@ -370,21 +376,40 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
         },
         onClose: () => {
           console.log('[Paystack] onClose fired');
-          // Check if verification already started (from onSuccess)
-          setVerifying((v) => {
-            if (!v) {
-              // onSuccess didn't fire, check payment status after a delay
-              console.log('[Paystack] Checking payment status after popup close...');
-              setTimeout(() => verifyAndSubmit(), 1000);
-            }
-            return v;
-          });
+          if (!verificationStarted) {
+            console.log('[Paystack] Checking payment status after popup close...');
+            setTimeout(() => verifyAndSubmit(), 1000);
+          }
         },
       });
       console.log('[Paystack] Handler created:', paystackHandler);
       console.log('[Paystack] Calling openIframe...');
       paystackHandler.openIframe();
       console.log('[Paystack] openIframe called');
+
+      // Polling fallback: check payment status every 3 seconds
+      // This handles cases where callbacks don't fire
+      console.log('[Paystack] Starting polling fallback...');
+      const pollInterval = setInterval(async () => {
+        console.log('[Paystack] Polling payment status...');
+        try {
+          const status = await financeApi.getPaymentStatus(paymentRef);
+          console.log('[Paystack] Payment status:', status);
+          if (status === 'SUCCESS' || status === 'SUCCESSFUL') {
+            console.log('[Paystack] Payment detected via polling!');
+            clearInterval(pollInterval);
+            verifyAndSubmit();
+          }
+        } catch (err) {
+          console.error('[Paystack] Polling error:', err);
+        }
+      }, 3000);
+
+      // Stop polling after 5 minutes to avoid infinite polling
+      setTimeout(() => {
+        clearInterval(pollInterval);
+        console.log('[Paystack] Polling stopped after timeout');
+      }, 5 * 60 * 1000);
     } else {
       // ── Flutterwave checkout ──
       if (typeof win.FlutterwaveCheckout !== "function") {
