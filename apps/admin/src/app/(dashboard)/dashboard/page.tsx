@@ -173,23 +173,27 @@ export default function DashboardPage() {
               title="Total Students"
               value={summary ? summary.counts.students.toLocaleString() : '—'}
               icon={Users}
+              href="/students"
             />
             <StatCard
               title="Applications"
               value={summary ? summary.counts.applications.toLocaleString() : '—'}
               icon={UserPlus}
               iconClassName="bg-amber-500/10 text-amber-600"
+              href="/admissions"
             />
             <StatCard
               title="Revenue Collected"
               value={summary ? formatNaira(summary.revenue) : '—'}
               icon={Wallet}
+              href="/payments"
             />
             <StatCard
               title="Pending Payments"
               value={summary ? summary.counts.pendingPayments.toLocaleString() : '—'}
               icon={ClipboardCheck}
               iconClassName="bg-rose-500/10 text-rose-600"
+              href="/payments"
             />
           </div>
 
@@ -200,24 +204,28 @@ export default function DashboardPage() {
               value={summary ? summary.counts.staff.toLocaleString() : '—'}
               icon={Briefcase}
               iconClassName="bg-teal-500/10 text-teal-600"
+              href="/staff"
             />
             <StatCard
               title="Lecturers"
               value={summary ? summary.staffCounts.lecturers.toLocaleString() : '—'}
               icon={GraduationCap}
               iconClassName="bg-indigo-500/10 text-indigo-600"
+              href="/staff"
             />
             <StatCard
               title="Non-Academic Staff"
               value={summary ? summary.staffCounts.nonAcademic.toLocaleString() : '—'}
               icon={Users}
               iconClassName="bg-orange-500/10 text-orange-600"
+              href="/staff"
             />
             <StatCard
               title="Administrative Staff"
               value={summary ? summary.staffCounts.administrative.toLocaleString() : '—'}
               icon={Briefcase}
               iconClassName="bg-violet-500/10 text-violet-600"
+              href="/staff"
             />
           </div>
 
