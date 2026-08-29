@@ -1,12 +1,13 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CommunicationService } from '../communication/communication.service';
 
 /**
  * Attendance: manual marking, QR scanning, digital-id stubs, overview and reports.
  */
 @Injectable()
 export class AttendanceService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly comms: CommunicationService) {}
 
   // -----------------------------------------------------------------------
   // Manual attendance — "replace all" semantics to prevent duplicates
@@ -53,7 +54,35 @@ export class AttendanceService {
       });
       return { marked: created.count };
     });
+
+    // Notify SCHOOL_ADMIN about attendance being marked (fire-and-forget)
+    this.notifyAttendanceMarked(schoolId, data.courseId, dayStart, result.marked).catch(() => {});
+
     return result;
+  }
+
+  private async notifyAttendanceMarked(
+    schoolId: string | null,
+    courseId: string | undefined,
+    dayStart: Date,
+    count: number,
+  ) {
+    if (!schoolId || !courseId) return;
+    const course = await this.prisma.db.course.findUnique({
+      where: { id: courseId },
+      select: { code: true, title: true },
+    });
+    const courseName = course ? `${course.code} — ${course.title}` : courseId;
+    const dateStr = dayStart.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    this.comms
+      .notifyUsersByRole(
+        schoolId,
+        'SCHOOL_ADMIN',
+        'Attendance Marked',
+        `Attendance for ${courseName} on ${dateStr} has been recorded (${count} student(s)).`,
+        { courseId, date: dateStr, count },
+      )
+      .catch(() => {});
   }
 
   // -----------------------------------------------------------------------
