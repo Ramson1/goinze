@@ -308,6 +308,31 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
         setError("Payment gateway could not initialize. Please try again.");
         return;
       }
+
+      // Extract verification logic to reuse
+      const verifyAndSubmit = async () => {
+        console.log('[Paystack] Verifying payment...');
+        setPaying(false);
+        setVerifying(true);
+        try {
+          const verification = await financeApi.verifyPayment(paymentRef);
+          console.log('[Paystack] Verification response:', verification);
+          const verifyStatus = verification.status?.toUpperCase?.() ?? "";
+          if (verifyStatus !== "SUCCESS" && verifyStatus !== "SUCCESSFUL") {
+            console.error('[Paystack] Verification failed with status:', verifyStatus);
+            setError("Payment verification returned status: " + (verification.status ?? "unknown") + ". Please contact support with reference: " + paymentRef);
+            setVerifying(false);
+            return;
+          }
+          console.log('[Paystack] Verification successful, submitting application...');
+          await submitApplication();
+        } catch (err) {
+          console.error('[Paystack] Error in verification/submission:', err);
+          setVerifying(false);
+          setError(err instanceof Error ? err.message : "Payment verification failed. Please contact support with reference: " + paymentRef);
+        }
+      };
+
       const paystackHandler = win.PaystackPop.setup({
         key: gwPublicKey,
         email,
@@ -321,31 +346,18 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
           ],
         },
         onSuccess: (response: any) => {
-          console.log('[Paystack] Payment successful:', response);
-          setPaying(false);
-          setVerifying(true);
-          financeApi.verifyPayment(paymentRef)
-            .then((verification) => {
-              console.log('[Paystack] Verification response:', verification);
-              const verifyStatus = verification.status?.toUpperCase?.() ?? "";
-              if (verifyStatus !== "SUCCESS" && verifyStatus !== "SUCCESSFUL") {
-                console.error('[Paystack] Verification failed with status:', verifyStatus);
-                setError("Payment verification returned status: " + (verification.status ?? "unknown") + ". Please contact support with reference: " + paymentRef);
-                setVerifying(false);
-                return;
-              }
-              console.log('[Paystack] Verification successful, submitting application...');
-              return submitApplication();
-            })
-            .catch((err) => {
-              console.error('[Paystack] Error in verification/submission:', err);
-              setVerifying(false);
-              setError(err instanceof Error ? err.message : "Payment verification failed. Please contact support with reference: " + paymentRef);
-            });
+          console.log('[Paystack] onSuccess fired:', response);
+          verifyAndSubmit();
         },
         onClose: () => {
+          console.log('[Paystack] onClose fired');
+          // Check if verification already started (from onSuccess)
           setVerifying((v) => {
-            if (!v) setPaying(false);
+            if (!v) {
+              // onSuccess didn't fire, check payment status after a delay
+              console.log('[Paystack] Checking payment status after popup close...');
+              setTimeout(() => verifyAndSubmit(), 1000);
+            }
             return v;
           });
         },
