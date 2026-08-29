@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import {
   AlertCircle,
   Check,
+  Download,
   Eye,
   FileText,
   Key,
@@ -625,20 +626,68 @@ export default function AdmissionsPage() {
               {viewingApplication.documents && viewingApplication.documents.length > 0 && (
                 <section className="mb-6">
                   <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">Uploaded Documents</h3>
-                  <div className="grid grid-cols-1 gap-2 text-sm md:grid-cols-2">
-                    {viewingApplication.documents.map((doc) => (
-                      <a
-                        key={doc.id}
-                        href={doc.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center gap-2 rounded-lg border px-3 py-2 text-blue-600 hover:bg-blue-50"
-                      >
-                        <FileText className="h-4 w-4 shrink-0" />
-                        <span className="truncate">{doc.name}</span>
-                        <span className="ml-auto text-xs text-gray-400">{doc.type}</span>
-                      </a>
-                    ))}
+                  <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2 lg:grid-cols-3">
+                    {viewingApplication.documents.map((doc) => {
+                      const isImage = /\.(jpe?g|png|gif|webp|bmp|svg)$/i.test(doc.name || '');
+                      return (
+                        <div key={doc.id} className="group relative overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+                          {isImage ? (
+                            <>
+                              <a
+                                href={doc.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="block"
+                              >
+                                <img
+                                  src={doc.url}
+                                  alt={doc.name}
+                                  className="h-40 w-full cursor-zoom-in object-contain bg-white transition group-hover:opacity-90"
+                                />
+                              </a>
+                              <div className="flex items-center justify-between border-t px-2 py-1.5">
+                                <span className="truncate text-xs text-gray-600" title={doc.name}>{doc.name}</span>
+                                <div className="flex items-center gap-1">
+                                  <span className="rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">{doc.type}</span>
+                                  <a
+                                    href={doc.url}
+                                    download
+                                    title="Download"
+                                    className="rounded p-1 text-gray-400 hover:bg-blue-100 hover:text-blue-600"
+                                  >
+                                    <Download className="h-3.5 w-3.5" />
+                                  </a>
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="flex items-center gap-2 px-3 py-2.5">
+                              <FileText className="h-4 w-4 shrink-0 text-gray-400" />
+                              <a
+                                href={doc.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="truncate text-blue-600 hover:underline"
+                                title={doc.name}
+                              >
+                                {doc.name}
+                              </a>
+                              <div className="ml-auto flex items-center gap-1">
+                                <span className="rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">{doc.type}</span>
+                                <a
+                                  href={doc.url}
+                                  download
+                                  title="Download"
+                                  className="rounded p-1 text-gray-400 hover:bg-blue-100 hover:text-blue-600"
+                                >
+                                  <Download className="h-3.5 w-3.5" />
+                                </a>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </section>
               )}
