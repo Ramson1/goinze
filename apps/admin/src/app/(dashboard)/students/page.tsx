@@ -42,6 +42,7 @@ import {
   type StudentPayment,
   type StudentResult,
   type StudentStatus,
+  type UserRecord,
 } from '@/lib/api';
 
 const STATUS_FILTERS: Array<StudentStatus | ''> = [
@@ -178,6 +179,12 @@ export default function StudentsPage() {
   const [loadingApprovals, setLoadingApprovals] = useState(false);
   const [approvingId, setApprovingId] = useState<string | null>(null);
 
+  // Unlinked pending portal requests (no Student record)
+  const [unlinkedPending, setUnlinkedPending] = useState<UserRecord[]>([]);
+  const [showUnlinked, setShowUnlinked] = useState(false);
+  const [loadingUnlinked, setLoadingUnlinked] = useState(false);
+  const [approvingUnlinkedId, setApprovingUnlinkedId] = useState<string | null>(null);
+
   const loadPendingApprovals = useCallback(() => {
     setLoadingApprovals(true);
     studentsApi
@@ -190,6 +197,19 @@ export default function StudentsPage() {
   useEffect(() => {
     loadPendingApprovals();
   }, [loadPendingApprovals]);
+
+  const loadUnlinkedPending = useCallback(() => {
+    setLoadingUnlinked(true);
+    studentsApi
+      .pendingUnlinked()
+      .then(setUnlinkedPending)
+      .catch(() => setUnlinkedPending([]))
+      .finally(() => setLoadingUnlinked(false));
+  }, []);
+
+  useEffect(() => {
+    loadUnlinkedPending();
+  }, [loadUnlinkedPending]);
 
   async function handleApprovePortal(studentId: string, name: string) {
     setConfirmDialog({
@@ -213,6 +233,31 @@ export default function StudentsPage() {
       setError(err instanceof Error ? err.message : 'Approval failed.');
     } finally {
       setApprovingId(null);
+    }
+  }
+
+  async function handleApproveUnlinked(userId: string, name: string) {
+    setConfirmDialog({
+      message: `Approve and create student record for ${name}? This will create their student record and activate their account.`,
+      onConfirm: () => {
+        setConfirmDialog(null);
+        doApproveUnlinked(userId);
+      },
+    });
+  }
+
+  async function doApproveUnlinked(userId: string) {
+    setApprovingUnlinkedId(userId);
+    setError(null);
+    setNotice(null);
+    try {
+      await studentsApi.approveUnlinkedUser(userId);
+      setNotice('Student account approved and record created successfully.');
+      loadUnlinkedPending();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Approval failed.');
+    } finally {
+      setApprovingUnlinkedId(null);
     }
   }
 
@@ -820,6 +865,95 @@ export default function StudentsPage() {
                           </td>
                         </tr>
                       ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Unlinked Portal Requests (no Student record) */}
+      {unlinkedPending.length > 0 && (
+        <Card className="mb-6">
+          <button
+            type="button"
+            onClick={() => setShowUnlinked((v) => !v)}
+            className="flex w-full items-center justify-between px-5 py-4 text-left"
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-100 text-violet-600">
+                <UserCheck className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-900">
+                  {unlinkedPending.length} portal request{unlinkedPending.length !== 1 ? 's' : ''} without student record
+                </p>
+                <p className="text-xs text-gray-500">
+                  These users registered without a pre-existing student record. Approving will create their student record.
+                </p>
+              </div>
+            </div>
+            <ChevronDown
+              className={`h-5 w-5 text-gray-400 transition-transform ${showUnlinked ? 'rotate-180' : ''}`}
+            />
+          </button>
+
+          {showUnlinked && (
+            <div className="border-t border-gray-100 px-5 py-4">
+              {loadingUnlinked ? (
+                <div className="flex items-center justify-center gap-2 py-6 text-sm text-gray-400">
+                  <Loader2 className="h-5 w-5 animate-spin" /> Loading requests…
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="text-xs uppercase tracking-wide text-gray-500">
+                      <tr>
+                        <th className="px-3 py-2">Name</th>
+                        <th className="px-3 py-2">Email</th>
+                        <th className="px-3 py-2">Matric No</th>
+                        <th className="px-3 py-2">Registered</th>
+                        <th className="px-3 py-2 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {unlinkedPending.map((u) => {
+                        const meta = u.metadata as { matricNumber?: string; departmentId?: string } | null;
+                        return (
+                          <tr key={u.id} className="hover:bg-gray-50">
+                            <td className="px-3 py-2 font-medium text-gray-900">
+                              {u.firstName} {u.lastName}
+                            </td>
+                            <td className="px-3 py-2 text-gray-600">{u.email}</td>
+                            <td className="px-3 py-2 font-mono text-xs text-gray-600">
+                              {meta?.matricNumber ?? '—'}
+                            </td>
+                            <td className="px-3 py-2 text-xs text-gray-500">
+                              {new Date(u.createdAt).toLocaleDateString()}
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleApproveUnlinked(u.id, `${u.firstName} ${u.lastName}`)
+                                }
+                                disabled={approvingUnlinkedId === u.id}
+                                className="btn-primary px-3 py-1.5 text-xs disabled:opacity-60"
+                              >
+                                {approvingUnlinkedId === u.id ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <>
+                                    <CheckCircle2 className="h-3.5 w-3.5" /> Approve
+                                  </>
+                                )}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

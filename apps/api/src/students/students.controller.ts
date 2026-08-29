@@ -51,6 +51,18 @@ export class StudentsController {
     return this.studentsService.findPendingApprovals(user.schoolId);
   }
 
+  @Get('pending-approvals/unlinked')
+  @Roles('SCHOOL_ADMIN')
+  pendingUnlinked(@CurrentUser() user: SessionUser) {
+    return this.studentsService.findUnlinkedPendingUsers(user.schoolId);
+  }
+
+  @Post('approve-user/:userId')
+  @Roles('SCHOOL_ADMIN')
+  approveUnlinkedUser(@Param('userId') userId: string, @CurrentUser() user: SessionUser) {
+    return this.studentsService.approveUnlinkedUser(userId, user.schoolId);
+  }
+
   @Get(':id')
   @Roles('SCHOOL_ADMIN', 'ADMISSION_OFFICER', 'LECTURER', 'STUDENT')
   findOne(@Param('id') id: string) {

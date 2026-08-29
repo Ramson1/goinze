@@ -303,32 +303,7 @@ export class AuthService {
    * create a PENDING user account linked to the student record. Admin must approve before login.
    */
   async selfRegister(dto: SelfRegisterDto): Promise<{ success: true; message: string }> {
-    // 1. Look up the student by matric number + school
-    const student = await this.prisma.db.student.findFirst({
-      where: { matricNumber: dto.matricNumber, schoolId: dto.schoolId },
-      include: { department: true },
-    });
-    if (!student) {
-      throw new NotFoundException('No student record found with this matric number in this school.');
-    }
-
-    // 2. Check the student record is not already linked to a portal account
-    if (student.userId) {
-      throw new ConflictException('This student record already has a portal account. Contact the admin if you need help.');
-    }
-
-    // 3. Verify department matches the student record
-    if (student.departmentId && student.departmentId !== dto.departmentId) {
-      throw new BadRequestException('The department provided does not match our records.');
-    }
-
-    // 4. Verify first name and last name match (case-insensitive)
-    if (student.firstName.toLowerCase() !== dto.firstName.trim().toLowerCase() ||
-        student.lastName.toLowerCase() !== dto.lastName.trim().toLowerCase()) {
-      throw new BadRequestException('The names provided do not match our records.');
-    }
-
-    // 5. Check no User already exists with the provided email
+    // 1. Check no User already exists with the provided email
     const existingUser = await this.prisma.db.user.findUnique({
       where: { email: dto.email.toLowerCase() },
     });
@@ -336,10 +311,48 @@ export class AuthService {
       throw new ConflictException('A user with this email already exists.');
     }
 
-    // 6. Create User + link to Student in a transaction
+    // 2. Try to find an existing student record by matric number + school
+    const student = await this.prisma.db.student.findFirst({
+      where: { matricNumber: dto.matricNumber, schoolId: dto.schoolId },
+      include: { department: true },
+    });
+
     const passwordHash = await bcrypt.hash(dto.password, 10);
-    const result = await this.prisma.db.$transaction(async (tx) => {
-      const user = await tx.user.create({
+
+    if (student) {
+      // --- Existing flow: verify identity + link to Student ---
+      if (student.userId) {
+        throw new ConflictException('This student record already has a portal account. Contact the admin if you need help.');
+      }
+      if (student.departmentId && student.departmentId !== dto.departmentId) {
+        throw new BadRequestException('The department provided does not match our records.');
+      }
+      if (student.firstName.toLowerCase() !== dto.firstName.trim().toLowerCase() ||
+          student.lastName.toLowerCase() !== dto.lastName.trim().toLowerCase()) {
+        throw new BadRequestException('The names provided do not match our records.');
+      }
+
+      await this.prisma.db.$transaction(async (tx) => {
+        const user = await tx.user.create({
+          data: {
+            email: dto.email.toLowerCase(),
+            passwordHash,
+            firstName: dto.firstName.trim(),
+            lastName: dto.lastName.trim(),
+            phone: dto.phone,
+            schoolId: dto.schoolId,
+            role: 'STUDENT',
+            status: 'PENDING',
+          },
+        });
+        await tx.student.update({
+          where: { id: student.id },
+          data: { userId: user.id },
+        });
+      });
+    } else {
+      // --- NEW: No student record — create standalone PENDING user with metadata ---
+      await this.prisma.db.user.create({
         data: {
           email: dto.email.toLowerCase(),
           passwordHash,
@@ -349,16 +362,12 @@ export class AuthService {
           schoolId: dto.schoolId,
           role: 'STUDENT',
           status: 'PENDING',
+          metadata: { matricNumber: dto.matricNumber, departmentId: dto.departmentId },
         },
       });
-      await tx.student.update({
-        where: { id: student.id },
-        data: { userId: user.id },
-      });
-      return user;
-    });
+    }
 
-    // 7. Notify admins about the new self-registration (fire-and-forget)
+    // 3. Notify admins about the new self-registration (fire-and-forget)
     this.comms
       .notifyUsersByRole(
         dto.schoolId,
@@ -379,37 +388,7 @@ export class AuthService {
    * create a PENDING user account linked to the staff record. Admin must approve before login.
    */
   async selfRegisterLecturer(dto: LecturerSelfRegisterDto): Promise<{ success: true; message: string }> {
-    // 1. Look up the staff record by staff number + school
-    const staff = await this.prisma.db.staff.findFirst({
-      where: { staffNumber: dto.staffNumber, schoolId: dto.schoolId },
-      include: { department: true },
-    });
-    if (!staff) {
-      throw new NotFoundException('No staff record found with this staff number in this school.');
-    }
-
-    // 2. Check the staff record is not already linked to a portal account
-    if (staff.userId) {
-      throw new ConflictException('This staff record already has a portal account. Contact the admin if you need help.');
-    }
-
-    // 3. Verify this is a lecturer
-    if (!staff.isLecturer) {
-      throw new BadRequestException('This staff record is not marked as a lecturer. Contact the admin.');
-    }
-
-    // 4. Verify department matches the staff record
-    if (staff.departmentId && staff.departmentId !== dto.departmentId) {
-      throw new BadRequestException('The department provided does not match our records.');
-    }
-
-    // 5. Verify first name and last name match (case-insensitive)
-    if (staff.firstName.toLowerCase() !== dto.firstName.trim().toLowerCase() ||
-        staff.lastName.toLowerCase() !== dto.lastName.trim().toLowerCase()) {
-      throw new BadRequestException('The names provided do not match our records.');
-    }
-
-    // 6. Check no User already exists with the provided email
+    // 1. Check no User already exists with the provided email
     const existingUser = await this.prisma.db.user.findUnique({
       where: { email: dto.email.toLowerCase() },
     });
@@ -417,10 +396,51 @@ export class AuthService {
       throw new ConflictException('A user with this email already exists.');
     }
 
-    // 7. Create User + link to Staff in a transaction
+    // 2. Try to find an existing staff record by staff number + school
+    const staff = await this.prisma.db.staff.findFirst({
+      where: { staffNumber: dto.staffNumber, schoolId: dto.schoolId },
+      include: { department: true },
+    });
+
     const passwordHash = await bcrypt.hash(dto.password, 10);
-    await this.prisma.db.$transaction(async (tx) => {
-      const user = await tx.user.create({
+
+    if (staff) {
+      // --- Existing flow: verify identity + link to Staff ---
+      if (staff.userId) {
+        throw new ConflictException('This staff record already has a portal account. Contact the admin if you need help.');
+      }
+      if (!staff.isLecturer) {
+        throw new BadRequestException('This staff record is not marked as a lecturer. Contact the admin.');
+      }
+      if (staff.departmentId && staff.departmentId !== dto.departmentId) {
+        throw new BadRequestException('The department provided does not match our records.');
+      }
+      if (staff.firstName.toLowerCase() !== dto.firstName.trim().toLowerCase() ||
+          staff.lastName.toLowerCase() !== dto.lastName.trim().toLowerCase()) {
+        throw new BadRequestException('The names provided do not match our records.');
+      }
+
+      await this.prisma.db.$transaction(async (tx) => {
+        const user = await tx.user.create({
+          data: {
+            email: dto.email.toLowerCase(),
+            passwordHash,
+            firstName: dto.firstName.trim(),
+            lastName: dto.lastName.trim(),
+            phone: dto.phone,
+            schoolId: dto.schoolId,
+            role: 'LECTURER',
+            status: 'PENDING',
+          },
+        });
+        await tx.staff.update({
+          where: { id: staff.id },
+          data: { userId: user.id },
+        });
+      });
+    } else {
+      // --- NEW: No staff record — create standalone PENDING user with metadata ---
+      await this.prisma.db.user.create({
         data: {
           email: dto.email.toLowerCase(),
           passwordHash,
@@ -430,15 +450,12 @@ export class AuthService {
           schoolId: dto.schoolId,
           role: 'LECTURER',
           status: 'PENDING',
+          metadata: { staffNumber: dto.staffNumber, departmentId: dto.departmentId },
         },
       });
-      await tx.staff.update({
-        where: { id: staff.id },
-        data: { userId: user.id },
-      });
-    });
+    }
 
-    // 8. Notify admins about the new self-registration (fire-and-forget)
+    // 3. Notify admins about the new self-registration (fire-and-forget)
     this.comms
       .notifyUsersByRole(
         dto.schoolId,

@@ -270,6 +270,59 @@ export class StudentsService {
   }
 
   /**
+   * Find all PENDING student-role Users that have no linked Student record
+   * (i.e. self-registered without a pre-existing student record).
+   */
+  async findUnlinkedPendingUsers(schoolId: string | null) {
+    return this.prisma.db.user.findMany({
+      where: {
+        schoolId: schoolId ?? undefined,
+        role: 'STUDENT',
+        status: 'PENDING',
+        student: null,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /**
+   * Approve an unlinked PENDING user: create a Student record from the User + metadata,
+   * link them, and activate both.
+   */
+  async approveUnlinkedUser(userId: string, schoolId: string | null) {
+    const user = await this.prisma.db.user.findFirst({
+      where: { id: userId, schoolId: schoolId ?? undefined, role: 'STUDENT', status: 'PENDING', student: null },
+    });
+    if (!user) throw new NotFoundException('Pending user not found');
+
+    const meta = user.metadata as { matricNumber?: string; departmentId?: string } | null;
+
+    await this.prisma.db.$transaction(async (tx) => {
+      await tx.student.create({
+        data: {
+          schoolId: user.schoolId!,
+          userId: user.id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          phone: user.phone,
+          matricNumber: meta?.matricNumber ?? null,
+          departmentId: meta?.departmentId ?? null,
+          currentLevel: 100,
+          status: 'ACTIVE',
+          matricActivatedAt: new Date(),
+        },
+      });
+      await tx.user.update({
+        where: { id: userId },
+        data: { status: 'ACTIVE' },
+      });
+    });
+
+    return { success: true };
+  }
+
+  /**
    * Reset a student's temporary password and update their user account.
    * Returns the new temp password so it can be communicated to the student.
    */

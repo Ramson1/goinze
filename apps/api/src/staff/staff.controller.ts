@@ -48,6 +48,16 @@ export class StaffController {
     return this.staffService.findPendingApprovals(user.schoolId);
   }
 
+  @Get('pending-approvals/unlinked')
+  pendingUnlinked(@CurrentUser() user: SessionUser) {
+    return this.staffService.findUnlinkedPendingUsers(user.schoolId);
+  }
+
+  @Post('approve-user/:userId')
+  approveUnlinkedUser(@Param('userId') userId: string, @CurrentUser() user: SessionUser) {
+    return this.staffService.approveUnlinkedUser(userId, user.schoolId);
+  }
+
   @Patch(':id/approve-portal')
   approvePortal(@Param('id') id: string, @CurrentUser() user: SessionUser) {
     return this.staffService.approvePortalAccount(id, user.schoolId);

@@ -113,6 +113,20 @@ export const api = {
     request<T>(path, { method: 'DELETE', body: data ? JSON.stringify(data) : undefined }),
 };
 
+// ---- Shared types ----
+
+export interface UserRecord {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  phone?: string;
+  role: string;
+  status: string;
+  metadata?: any;
+  createdAt: string;
+}
+
 // ---- Admissions ----
 
 export interface ApplicationRecord {
@@ -537,6 +551,8 @@ export const studentsApi = {
       }[]
     >('/students/pending-approvals'),
   approvePortal: (id: string) => api.patch<{ success: boolean }>(`/students/${id}/approve-portal`),
+  pendingUnlinked: () => api.get<UserRecord[]>('/students/pending-approvals/unlinked'),
+  approveUnlinkedUser: (userId: string) => api.post<{ success: boolean }>(`/students/approve-user/${userId}`),
 };
 
 // ---- Analytics (admin dashboard) ----
@@ -690,6 +706,8 @@ export const staffApi = {
       user?: { id: string; email: string; firstName: string; lastName: string; createdAt: string };
     }[]>('/staff/pending-approvals'),
   approvePortal: (id: string) => api.patch<{ success: boolean }>(`/staff/${id}/approve-portal`),
+  pendingUnlinked: () => api.get<UserRecord[]>('/staff/pending-approvals/unlinked'),
+  approveUnlinkedUser: (userId: string) => api.post<{ success: boolean }>(`/staff/approve-user/${userId}`),
 };
 
 // ---- Academics (faculties / departments / programmes / courses) ----

@@ -169,7 +169,56 @@ export class StaffService {
     return { success: true };
   }
 
-  /** Toggle a staff member's active status (disable/enable). */
+  /**
+   * Find all PENDING lecturer-role Users that have no linked Staff record.
+   */
+  async findUnlinkedPendingUsers(schoolId: string | null) {
+    return this.prisma.db.user.findMany({
+      where: {
+        schoolId: schoolId ?? undefined,
+        role: 'LECTURER',
+        status: 'PENDING',
+        staff: null,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /**
+   * Approve an unlinked PENDING lecturer user: create a Staff record from the User + metadata,
+   * link them, and activate the User.
+   */
+  async approveUnlinkedUser(userId: string, schoolId: string | null) {
+    const user = await this.prisma.db.user.findFirst({
+      where: { id: userId, schoolId: schoolId ?? undefined, role: 'LECTURER', status: 'PENDING', staff: null },
+    });
+    if (!user) throw new NotFoundException('Pending user not found');
+
+    const meta = user.metadata as { staffNumber?: string; departmentId?: string } | null;
+
+    await this.prisma.db.$transaction(async (tx) => {
+      await tx.staff.create({
+        data: {
+          schoolId: user.schoolId!,
+          userId: user.id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          phone: user.phone,
+          staffNumber: meta?.staffNumber ?? null,
+          departmentId: meta?.departmentId ?? null,
+          isLecturer: true,
+          isActive: true,
+        },
+      });
+      await tx.user.update({
+        where: { id: userId },
+        data: { status: 'ACTIVE' },
+      });
+    });
+
+    return { success: true };
+  }
   async toggleActive(id: string) {
     const staff = await this.prisma.db.staff.findUnique({ where: { id } });
     if (!staff) throw new NotFoundException('Staff not found');
