@@ -320,20 +320,25 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
             { display_name: "Purpose", variable_name: "purpose", value: `Application fees: ${appFees.map(f => f.name).join(', ')}` },
           ],
         },
-        onSuccess: () => {
+        onSuccess: (response: any) => {
+          console.log('[Paystack] Payment successful:', response);
           setPaying(false);
           setVerifying(true);
           financeApi.verifyPayment(paymentRef)
             .then((verification) => {
+              console.log('[Paystack] Verification response:', verification);
               const verifyStatus = verification.status?.toUpperCase?.() ?? "";
               if (verifyStatus !== "SUCCESS" && verifyStatus !== "SUCCESSFUL") {
+                console.error('[Paystack] Verification failed with status:', verifyStatus);
                 setError("Payment verification returned status: " + (verification.status ?? "unknown") + ". Please contact support with reference: " + paymentRef);
                 setVerifying(false);
                 return;
               }
+              console.log('[Paystack] Verification successful, submitting application...');
               return submitApplication();
             })
             .catch((err) => {
+              console.error('[Paystack] Error in verification/submission:', err);
               setVerifying(false);
               setError(err instanceof Error ? err.message : "Payment verification failed. Please contact support with reference: " + paymentRef);
             });
@@ -397,9 +402,11 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
 
   /* ── Submit the actual application form ── */
   async function submitApplication() {
+    console.log('[submitApplication] Starting application submission...');
     setSubmitting(true); setError(null);
     try {
       const names = splitName(`${surname} ${otherNames}`);
+      console.log('[submitApplication] Calling admissionsApi.apply...');
       const res = await admissionsApi.apply({
         schoolSlug: "goinze-demo",
         firstName: names.firstName,
@@ -431,6 +438,8 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
         declarationAgreed: true,
       });
 
+      console.log('[submitApplication] Application created:', res.id);
+
       // Upload documents after application is created
       const docs = Object.entries(docFiles).filter(([, files]) => files.length > 0);
       if (docs.length > 0) {
@@ -447,7 +456,9 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
       setResult(res);
       setTrackNo(res.applicationNo);
       setTrackEmail(email);
+      console.log('[submitApplication] Application submission complete');
     } catch (err) {
+      console.error('[submitApplication] Error submitting application:', err);
       setError(err instanceof ApiError ? err.message : "Unable to submit right now. Please try again.");
     } finally {
       setSubmitting(false);
