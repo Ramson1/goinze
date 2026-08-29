@@ -10,6 +10,7 @@ import {
   MapPin,
   Megaphone,
   Quote,
+  X,
 } from "lucide-react";
 import { currentAcademicSession } from "@/lib/utils";
 import Container from "@/components/Container";
@@ -80,6 +81,7 @@ export default function HomePage() {
   const [eventsLoading, setEventsLoading] = useState(true);
   const [gallery, setGallery] = useState<GalleryItemRecord[]>([]);
   const [galleryLoading, setGalleryLoading] = useState(true);
+  const [lightboxItem, setLightboxItem] = useState<GalleryItemRecord | null>(null);
   const { blocks } = useContentBlocks();
 
   useEffect(() => {
@@ -309,7 +311,12 @@ export default function HomePage() {
           <>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {galleryPreview.map((photo) => (
-                <div key={photo.id} className="group relative overflow-hidden rounded-xl shadow-card">
+                <button
+                  key={photo.id}
+                  type="button"
+                  onClick={() => setLightboxItem(photo)}
+                  className="group relative overflow-hidden rounded-xl shadow-card cursor-zoom-in text-left"
+                >
                   <div className="relative h-48 w-full">
                     <Image
                       src={photo.url}
@@ -324,7 +331,7 @@ export default function HomePage() {
                       <p className="text-sm font-medium text-white">{photo.caption}</p>
                     </div>
                   )}
-                </div>
+                </button>
               ))}
             </div>
             <div className="mt-8 text-center">
@@ -378,6 +385,47 @@ export default function HomePage() {
           ))}
         </Container>
       </div>
+
+      {/* Gallery lightbox */}
+      {lightboxItem && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"
+          onClick={() => setLightboxItem(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setLightboxItem(null)}
+            className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+            aria-label="Close"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          <div
+            className="relative max-h-[85vh] max-w-[90vw]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Image
+              src={lightboxItem.url}
+              alt={lightboxItem.caption ?? "Gallery image"}
+              width={1200}
+              height={800}
+              className="max-h-[85vh] w-auto rounded-lg object-contain shadow-2xl"
+            />
+            {(lightboxItem.caption || lightboxItem.album) && (
+              <div className="absolute inset-x-0 bottom-0 rounded-b-lg bg-gradient-to-t from-black/70 to-transparent px-5 py-4 pt-10">
+                {lightboxItem.album && (
+                  <span className="text-xs font-semibold uppercase tracking-wider text-amber-400">
+                    {lightboxItem.album}
+                  </span>
+                )}
+                {lightboxItem.caption && (
+                  <p className="text-sm font-medium text-white">{lightboxItem.caption}</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 }
