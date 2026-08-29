@@ -347,7 +347,10 @@ export class AuthService {
         });
         await tx.student.update({
           where: { id: student.id },
-          data: { userId: user.id },
+          data: {
+            userId: user.id,
+            ...(dto.currentLevel !== undefined ? { currentLevel: dto.currentLevel } : {}),
+          },
         });
       });
     } else {
@@ -362,7 +365,7 @@ export class AuthService {
           schoolId: dto.schoolId,
           role: 'STUDENT',
           status: 'PENDING',
-          metadata: { matricNumber: dto.matricNumber, departmentId: dto.departmentId },
+          metadata: { matricNumber: dto.matricNumber, departmentId: dto.departmentId, currentLevel: dto.currentLevel ?? null },
         } as any,
       });
     }
@@ -437,6 +440,14 @@ export class AuthService {
           where: { id: staff.id },
           data: { userId: user.id },
         });
+        // Create course allocations if courses were specified
+        if (dto.courseIds && dto.courseIds.length > 0) {
+          for (const courseId of dto.courseIds) {
+            await tx.courseAllocation.create({
+              data: { courseId, staffId: staff.id },
+            }).catch(() => { /* ignore duplicate allocation errors */ });
+          }
+        }
       });
     } else {
       // --- NEW: No staff record — create standalone PENDING user with metadata ---
@@ -450,7 +461,7 @@ export class AuthService {
           schoolId: dto.schoolId,
           role: 'LECTURER',
           status: 'PENDING',
-          metadata: { staffNumber: dto.staffNumber, departmentId: dto.departmentId },
+          metadata: { staffNumber: dto.staffNumber, departmentId: dto.departmentId, courseIds: dto.courseIds ?? [] },
         } as any,
       });
     }

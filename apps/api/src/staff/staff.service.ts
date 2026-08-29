@@ -194,10 +194,10 @@ export class StaffService {
     });
     if (!user) throw new NotFoundException('Pending user not found');
 
-    const meta = (user as any).metadata as { staffNumber?: string; departmentId?: string } | null;
+    const meta = (user as any).metadata as { staffNumber?: string; departmentId?: string; courseIds?: string[] } | null;
 
-    await this.prisma.db.$transaction(async (tx) => {
-      await tx.staff.create({
+    const staffRecord = await this.prisma.db.$transaction(async (tx) => {
+      const s = await tx.staff.create({
         data: {
           schoolId: user.schoolId!,
           userId: user.id,
@@ -211,10 +211,19 @@ export class StaffService {
           isActive: true,
         },
       });
+      // Create course allocations from self-registration
+      if (meta?.courseIds && meta.courseIds.length > 0) {
+        for (const courseId of meta.courseIds) {
+          await tx.courseAllocation.create({
+            data: { courseId, staffId: s.id },
+          }).catch(() => { /* ignore duplicate allocation errors */ });
+        }
+      }
       await tx.user.update({
         where: { id: userId },
         data: { status: 'ACTIVE' },
       });
+      return s;
     });
 
     return { success: true };

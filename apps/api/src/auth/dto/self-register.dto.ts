@@ -1,5 +1,6 @@
 import {
   IsEmail,
+  IsInt,
   IsOptional,
   IsString,
   MinLength,
@@ -28,6 +29,10 @@ export class SelfRegisterDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @IsOptional()
+  @IsInt()
+  currentLevel?: number;
 
   @IsString()
   schoolId!: string;

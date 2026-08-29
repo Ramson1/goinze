@@ -1,4 +1,5 @@
 import {
+  IsArray,
   IsEmail,
   IsOptional,
   IsString,
@@ -28,6 +29,11 @@ export class LecturerSelfRegisterDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  courseIds?: string[];
 
   @IsString()
   schoolId!: string;

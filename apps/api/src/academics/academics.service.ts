@@ -199,6 +199,17 @@ export class AcademicsService {
   }
 
   // ---- Courses ----
+  async listCoursesFlat(schoolId?: string, departmentId?: string) {
+    const where: Record<string, any> = {};
+    if (schoolId) where.schoolId = schoolId;
+    if (departmentId) where.departmentId = departmentId;
+    return this.prisma.db.course.findMany({
+      where,
+      select: { id: true, code: true, title: true, creditUnits: true, level: true, semester: true, departmentId: true },
+      orderBy: { code: 'asc' },
+    });
+  }
+
   async listCourses(
     schoolId: string | null,
     query: PaginationDto,

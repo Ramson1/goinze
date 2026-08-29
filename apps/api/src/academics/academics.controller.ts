@@ -163,6 +163,15 @@ export class AcademicsController {
   }
 
   // ---- Courses ----
+  @Public()
+  @Get('courses-list')
+  listCoursesPublic(
+    @Query('schoolId') schoolId?: string,
+    @Query('departmentId') departmentId?: string,
+  ) {
+    return this.academicsService.listCoursesFlat(schoolId, departmentId);
+  }
+
   @Get('courses')
   @Roles('SCHOOL_ADMIN', 'LECTURER', 'STUDENT')
   listCourses(

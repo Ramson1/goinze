@@ -16,8 +16,9 @@ import {
   School as SchoolIcon,
   Hash,
   Building2,
+  BookOpen,
 } from 'lucide-react';
-import { authApi, academicsApi, type School, type Department } from '@/lib/api';
+import { authApi, academicsApi, type School, type Department, type CourseSimple } from '@/lib/api';
 
 const STEPS = ['Verify Identity', 'Create Account'];
 
@@ -25,6 +26,7 @@ export default function SelfRegisterPage() {
   const [step, setStep] = useState(1);
   const [schools, setSchools] = useState<School[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [courses, setCourses] = useState<CourseSimple[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +42,7 @@ export default function SelfRegisterPage() {
   // Step 2 fields
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [selectedCourseIds, setSelectedCourseIds] = useState<string[]>([]);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
@@ -79,6 +82,24 @@ export default function SelfRegisterPage() {
     loadDepartments();
   }, [schoolId]);
 
+  // Load courses when department changes
+  useEffect(() => {
+    if (!departmentId) {
+      setCourses([]);
+      return;
+    }
+    async function loadCourses() {
+      try {
+        const c = await academicsApi.coursesByDepartment(schoolId, departmentId);
+        setCourses(c);
+      } catch (err) {
+        console.error('Failed to load courses:', err);
+        setCourses([]);
+      }
+    }
+    loadCourses();
+  }, [schoolId, departmentId]);
+
   async function handleStep1(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
@@ -110,6 +131,7 @@ export default function SelfRegisterPage() {
         firstName,
         lastName,
         phone: phone || undefined,
+        courseIds: selectedCourseIds.length > 0 ? selectedCourseIds : undefined,
         schoolId,
       });
       setSuccess(true);
@@ -381,6 +403,47 @@ export default function SelfRegisterPage() {
                     />
                   </div>
                 </div>
+
+                {courses.length > 0 && (
+                  <div>
+                    <label className="label">
+                      <BookOpen className="mr-1.5 inline h-4 w-4" />
+                      Assigned Courses <span className="text-slate-400">(select all that apply)</span>
+                    </label>
+                    <div className="mt-2 max-h-48 space-y-2 overflow-y-auto rounded-lg border border-slate-200 p-3">
+                      {courses.map((course) => (
+                        <label
+                          key={course.id}
+                          className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-slate-50"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedCourseIds.includes(course.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedCourseIds((prev) => [...prev, course.id]);
+                              } else {
+                                setSelectedCourseIds((prev) => prev.filter((id) => id !== course.id));
+                              }
+                            }}
+                            className="h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand"
+                          />
+                          <span className="text-sm text-slate-700">
+                            <span className="font-medium">{course.code}</span>
+                            <span className="text-slate-400"> — </span>
+                            {course.title}
+                            <span className="ml-1.5 text-xs text-slate-400">({course.creditUnits} units)</span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                    {selectedCourseIds.length > 0 && (
+                      <p className="mt-1 text-xs text-slate-500">
+                        {selectedCourseIds.length} course{selectedCourseIds.length !== 1 ? 's' : ''} selected
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 <div>
                   <label htmlFor="password" className="label">

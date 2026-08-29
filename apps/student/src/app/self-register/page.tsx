@@ -16,6 +16,7 @@ import {
   School as SchoolIcon,
   Hash,
   Building2,
+  GraduationCap,
 } from 'lucide-react';
 import { authApi, academicsApi, type School, type Department } from '@/lib/api';
 
@@ -40,6 +41,7 @@ export default function SelfRegisterPage() {
   // Step 2 fields
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [currentLevel, setCurrentLevel] = useState(100);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
@@ -110,6 +112,7 @@ export default function SelfRegisterPage() {
         firstName,
         lastName,
         phone: phone || undefined,
+        currentLevel,
         schoolId,
       });
       setSuccess(true);
@@ -379,6 +382,28 @@ export default function SelfRegisterPage() {
                       placeholder="+234 800 000 0000"
                       className="input-field pl-10"
                     />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="currentLevel" className="field-label">
+                    Current Level
+                  </label>
+                  <div className="relative">
+                    <GraduationCap className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <select
+                      id="currentLevel"
+                      required
+                      value={currentLevel}
+                      onChange={(e) => setCurrentLevel(Number(e.target.value))}
+                      className="input-field pl-10"
+                    >
+                      {[100, 200, 300, 400, 500, 600, 700, 800].map((lvl) => (
+                        <option key={lvl} value={lvl}>
+                          {lvl} Level
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 

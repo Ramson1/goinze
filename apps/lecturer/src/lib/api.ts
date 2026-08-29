@@ -514,6 +514,7 @@ export const authApi = {
     firstName: string;
     lastName: string;
     phone?: string;
+    courseIds?: string[];
     schoolId: string;
   }) => api.post<{ success: boolean; message: string }>('/auth/self-register-lecturer', payload),
 };
@@ -534,8 +535,22 @@ export interface Department {
   faculty: { id: string; name: string };
 }
 
+export interface CourseSimple {
+  id: string;
+  code: string;
+  title: string;
+  creditUnits: number;
+  level: number;
+  semester: string;
+  departmentId: string | null;
+}
+
 export const academicsApi = {
   schools: () => api.get<School[]>('/academics/schools'),
   departments: (schoolId: string) =>
     api.get<Department[]>(`/academics/departments?schoolId=${encodeURIComponent(schoolId)}`),
+  coursesByDepartment: (schoolId: string, departmentId: string) =>
+    api.get<CourseSimple[]>(
+      `/academics/courses-list?schoolId=${encodeURIComponent(schoolId)}&departmentId=${encodeURIComponent(departmentId)}`,
+    ),
 };

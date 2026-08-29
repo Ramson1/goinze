@@ -603,6 +603,7 @@ export const authApi = {
     firstName: string;
     lastName: string;
     phone?: string;
+    currentLevel?: number;
     schoolId: string;
   }) => api.post<{ success: boolean; message: string }>('/auth/self-register', payload),
 };
