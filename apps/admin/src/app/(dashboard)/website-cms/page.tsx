@@ -139,7 +139,7 @@ export default function WebsiteCmsPage() {
   const [mediaCaption, setMediaCaption] = useState('');
   const [mediaAlbum, setMediaAlbum] = useState('');
   const [mediaType, setMediaType] = useState('IMAGE');
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadMode, setUploadMode] = useState<'url' | 'file'>('file');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -154,9 +154,13 @@ export default function WebsiteCmsPage() {
   const [editType, setEditType] = useState('IMAGE');
   const [deletingItem, setDeletingItem] = useState<GalleryItemRecord | null>(null);
 
+  /* Bulk selection */
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+
   function resetGalleryForm() {
     setMediaUrl(''); setMediaCaption(''); setMediaAlbum('');
-    setMediaType('IMAGE'); setUploadFile(null); setUploadMode('file');
+    setMediaType('IMAGE'); setUploadFiles([]); setUploadMode('file');
     setFileKey((k) => k + 1);
   }
 
@@ -263,21 +267,62 @@ export default function WebsiteCmsPage() {
     e.preventDefault();
     setBusy('add-media');
     try {
-      let finalUrl = mediaUrl.trim();
-      if (uploadMode === 'file' && uploadFile) {
+      if (uploadMode === 'file' && uploadFiles.length > 0) {
         setUploading(true);
-        const result = await cmsApi.uploadMedia(uploadFile);
-        finalUrl = result.url;
+        for (const file of uploadFiles) {
+          const result = await cmsApi.uploadMedia(file);
+          const isVideo = file.type.startsWith('video/');
+          await cmsApi.addGalleryItem({
+            url: result.url,
+            type: isVideo ? 'VIDEO' : mediaType,
+            caption: mediaCaption.trim() || undefined,
+            album: mediaAlbum.trim() || undefined,
+          });
+        }
         setUploading(false);
+      } else if (uploadMode === 'url') {
+        const finalUrl = mediaUrl.trim();
+        if (!finalUrl) { setError('Please provide a URL.'); setBusy(null); return; }
+        await cmsApi.addGalleryItem({ url: finalUrl, type: mediaType, caption: mediaCaption.trim() || undefined, album: mediaAlbum.trim() || undefined });
+      } else {
+        setError('Please select at least one file.'); setBusy(null); return;
       }
-      if (!finalUrl) { setError('Please provide a URL or select a file.'); setBusy(null); return; }
-      await cmsApi.addGalleryItem({ url: finalUrl, type: mediaType, caption: mediaCaption.trim() || undefined, album: mediaAlbum.trim() || undefined });
       setGalleryOpen(false); resetGalleryForm();
-      setSuccessMsg('Gallery item added.');
+      setSuccessMsg(uploadFiles.length > 1 ? `${uploadFiles.length} items added to gallery.` : 'Gallery item added.');
       await load();
     } catch (err) {
       setUploading(false); setError(err instanceof Error ? err.message : 'Failed to add.');
     } finally { setBusy(null); }
+  }
+
+  async function handleBulkDelete() {
+    if (selectedItems.size === 0) return;
+    setBusy('bulk-delete');
+    try {
+      await Promise.all(Array.from(selectedItems).map((id) => cmsApi.deleteGalleryItem(id)));
+      setSelectedItems(new Set());
+      setBulkDeleteOpen(false);
+      setSuccessMsg(`${selectedItems.size} item(s) deleted.`);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete.');
+    } finally { setBusy(null); }
+  }
+
+  function toggleSelectItem(id: string) {
+    setSelectedItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selectedItems.size === gallery.length) {
+      setSelectedItems(new Set());
+    } else {
+      setSelectedItems(new Set(gallery.map((g) => g.id)));
+    }
   }
 
   function openEditModal(item: GalleryItemRecord) {
@@ -784,36 +829,78 @@ export default function WebsiteCmsPage() {
             No gallery items yet. Add photos or videos to showcase campus life.
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {gallery.map((item) => (
-              <div key={item.id} className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-card">
-                {item.type === 'VIDEO' ? (
-                  <a href={item.url} target="_blank" rel="noreferrer" className="flex h-40 items-center justify-center bg-gray-900 text-gray-300 transition hover:text-white">
-                    <Video className="h-10 w-10" />
-                  </a>
-                ) : (
-                  <button type="button" onClick={() => setLightboxItem(item)} className="block w-full cursor-zoom-in">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={item.url} alt={item.caption ?? 'Gallery image'} className="h-40 w-full object-cover transition-opacity hover:opacity-90" loading="lazy" />
+          <>
+            {/* Bulk selection toolbar */}
+            {selectedItems.size > 0 && (
+              <div className="mb-4 flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-2.5">
+                <span className="text-sm font-medium text-red-700">{selectedItems.size} item(s) selected</span>
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => setSelectedItems(new Set())}
+                    className="rounded-md bg-white px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-100">
+                    Clear
                   </button>
-                )}
-                <div className="px-4 py-3">
-                  <p className="truncate text-sm font-medium text-gray-800">{item.caption || 'Untitled'}</p>
-                  <p className="mt-0.5 text-xs font-medium text-amber-600">{item.album ? `Album: ${item.album}` : 'No album'}</p>
-                  <div className="mt-2 flex items-center gap-1.5">
-                    <button type="button" onClick={() => openEditModal(item)}
-                      className="flex items-center gap-1 rounded-md bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-600 transition hover:bg-blue-100">
-                      <Pencil className="h-3 w-3" /> Edit
-                    </button>
-                    <button type="button" onClick={() => setDeletingItem(item)}
-                      className="flex items-center gap-1 rounded-md bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 transition hover:bg-red-100">
-                      <Trash2 className="h-3 w-3" /> Delete
-                    </button>
-                  </div>
+                  <button type="button" onClick={() => setBulkDeleteOpen(true)}
+                    className="flex items-center gap-1 rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-red-700">
+                    <Trash2 className="h-3.5 w-3.5" /> Delete Selected
+                  </button>
                 </div>
               </div>
-            ))}
-          </div>
+            )}
+            {/* Select all bar */}
+            <div className="mb-3 flex items-center justify-between">
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-600">
+                <input type="checkbox" checked={selectedItems.size === gallery.length && gallery.length > 0}
+                  onChange={toggleSelectAll}
+                  className="h-4 w-4 rounded border-gray-300 text-brand focus:ring-brand" />
+                {selectedItems.size === gallery.length ? 'Deselect all' : 'Select all'}
+              </label>
+              <span className="text-xs text-gray-400">{gallery.length} item(s)</span>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {gallery.map((item) => {
+                const isSelected = selectedItems.has(item.id);
+                return (
+                  <div key={item.id} className={cn(
+                    'relative overflow-hidden rounded-xl border bg-white shadow-card transition',
+                    isSelected ? 'border-brand ring-2 ring-brand/20' : 'border-gray-200',
+                  )}>
+                    {/* Selection checkbox */}
+                    <button type="button" onClick={() => toggleSelectItem(item.id)}
+                      className={cn(
+                        'absolute left-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full border-2 transition',
+                        isSelected ? 'border-brand bg-brand text-white' : 'border-white/80 bg-white/60 text-transparent hover:border-brand hover:bg-white hover:text-brand',
+                      )}>
+                      <CheckCircle className="h-4 w-4" />
+                    </button>
+                    {item.type === 'VIDEO' ? (
+                      <a href={item.url} target="_blank" rel="noreferrer" className="flex h-40 items-center justify-center bg-gray-900 text-gray-300 transition hover:text-white">
+                        <Video className="h-10 w-10" />
+                      </a>
+                    ) : (
+                      <button type="button" onClick={() => setLightboxItem(item)} className="block w-full cursor-zoom-in">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={item.url} alt={item.caption ?? 'Gallery image'} className="h-40 w-full object-cover transition-opacity hover:opacity-90" loading="lazy" />
+                      </button>
+                    )}
+                    <div className="px-4 py-3">
+                      <p className="truncate text-sm font-medium text-gray-800">{item.caption || 'Untitled'}</p>
+                      <p className="mt-0.5 text-xs font-medium text-amber-600">{item.album ? `Album: ${item.album}` : 'No album'}</p>
+                      <div className="mt-2 flex items-center gap-1.5">
+                        <button type="button" onClick={() => openEditModal(item)}
+                          className="flex items-center gap-1 rounded-md bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-600 transition hover:bg-blue-100">
+                          <Pencil className="h-3 w-3" /> Edit
+                        </button>
+                        <button type="button" onClick={() => setDeletingItem(item)}
+                          className="flex items-center gap-1 rounded-md bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 transition hover:bg-red-100">
+                          <Trash2 className="h-3 w-3" /> Delete
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )
       )}
 
@@ -1419,19 +1506,23 @@ export default function WebsiteCmsPage() {
               <div className="flex rounded-lg border border-gray-200 p-0.5">
                 <button type="button" onClick={() => setUploadMode('file')}
                   className={cn('flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition',
-                    uploadMode === 'file' ? 'bg-brand text-white' : 'text-gray-600 hover:text-gray-900')}>Upload File</button>
+                    uploadMode === 'file' ? 'bg-brand text-white' : 'text-gray-600 hover:text-gray-900')}>Upload Files</button>
                 <button type="button" onClick={() => setUploadMode('url')}
                   className={cn('flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition',
                     uploadMode === 'url' ? 'bg-brand text-white' : 'text-gray-600 hover:text-gray-900')}>Paste URL</button>
               </div>
               {uploadMode === 'file' ? (
                 <div>
-                  <label className="label">Image or Video File</label>
-                  <input ref={fileInputRef} key={fileKey} type="file" accept="image/*,video/*"
-                    onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
+                  <label className="label">Image or Video Files</label>
+                  <input ref={fileInputRef} key={fileKey} type="file" accept="image/*,video/*" multiple
+                    onChange={(e) => setUploadFiles(e.target.files ? Array.from(e.target.files) : [])}
                     className="input file:mr-3 file:rounded-md file:border-0 file:bg-brand file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:bg-brand-dark" />
-                  <p className="mt-1 text-xs text-gray-400">{uploadFile ? uploadFile.name : 'Select a file to upload (max 10MB).'}</p>
-                  {uploading && <p className="mt-1 text-xs text-brand">Uploading…</p>}
+                  <p className="mt-1 text-xs text-gray-400">
+                    {uploadFiles.length === 0 ? 'Select one or more files to upload (max 10MB each).' :
+                      uploadFiles.length === 1 ? uploadFiles[0].name :
+                        `${uploadFiles.length} files selected: ${uploadFiles.map(f => f.name).join(', ')}`}
+                  </p>
+                  {uploading && <p className="mt-1 text-xs text-brand">Uploading {uploadFiles.length} file(s)…</p>}
                 </div>
               ) : (
                 <div>
@@ -1459,7 +1550,13 @@ export default function WebsiteCmsPage() {
                 <button type="button" onClick={() => { setGalleryOpen(false); resetGalleryForm(); }} className="btn-secondary">Cancel</button>
                 <button type="submit" disabled={busy === 'add-media' || uploading} className="btn-primary disabled:opacity-60">
                   <Plus className="h-4 w-4" />
-                  {uploading ? 'Uploading…' : busy === 'add-media' ? 'Adding…' : 'Add to Gallery'}
+                  {uploading
+                    ? `Uploading ${uploadFiles.length > 1 ? `${uploadFiles.length} files` : ''}…`
+                    : busy === 'add-media'
+                      ? 'Adding…'
+                      : uploadMode === 'file' && uploadFiles.length > 1
+                        ? `Add ${uploadFiles.length} Items`
+                        : 'Add to Gallery'}
                 </button>
               </div>
             </form>
@@ -1546,6 +1643,28 @@ export default function WebsiteCmsPage() {
               <button type="button" onClick={handleDeleteGallery} disabled={busy === 'delete-gallery'}
                 className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-60">
                 {busy === 'delete-gallery' ? <><Loader2 className="h-4 w-4 animate-spin" /> Deleting…</> : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Bulk Delete Gallery Items Confirmation ── */}
+      {bulkDeleteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
+              <Trash2 className="h-6 w-6 text-red-600" />
+            </div>
+            <h3 className="mt-4 text-center text-base font-semibold text-gray-900">Delete {selectedItems.size} Item(s)</h3>
+            <p className="mt-2 text-center text-sm text-gray-500">
+              Are you sure you want to delete {selectedItems.size} selected item(s)? This action cannot be undone.
+            </p>
+            <div className="mt-6 flex justify-center gap-3">
+              <button type="button" onClick={() => setBulkDeleteOpen(false)} className="btn-secondary">Cancel</button>
+              <button type="button" onClick={handleBulkDelete} disabled={busy === 'bulk-delete'}
+                className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-60">
+                {busy === 'bulk-delete' ? <><Loader2 className="h-4 w-4 animate-spin" /> Deleting…</> : `Delete ${selectedItems.size} Item(s)`}
               </button>
             </div>
           </div>
