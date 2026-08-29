@@ -646,7 +646,13 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
                           <Upload className="h-3.5 w-3.5" />
                           Add more files
                           <input type="file" className="hidden" multiple accept=".pdf,.jpg,.jpeg,.png"
-                            onChange={e => { if (e.target.files?.length) setDocFiles(prev => ({ ...prev, [dt.key]: [...(prev[dt.key] ?? []), ...Array.from(e.target.files!)] })); e.target.value = ''; }} />
+                            onChange={e => {
+                              const newFiles = e.target.files ? Array.from(e.target.files) : [];
+                              e.target.value = '';
+                              if (newFiles.length > 0) {
+                                setDocFiles(prev => ({ ...prev, [dt.key]: [...(prev[dt.key] ?? []), ...newFiles] }));
+                              }
+                            }} />
                         </label>
                       )}
                     </div>
@@ -658,7 +664,13 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
                         {isMulti && <span className="ml-1 text-xs text-slate-400">(multiple files allowed)</span>}
                       </span>
                       <input type="file" className="hidden" multiple={isMulti} accept=".pdf,.jpg,.jpeg,.png"
-                        onChange={e => { if (e.target.files?.length) setDocFiles(prev => ({ ...prev, [dt.key]: Array.from(e.target.files!) })); }} />
+                        onChange={e => {
+                          const newFiles = e.target.files ? Array.from(e.target.files) : [];
+                          e.target.value = '';
+                          if (newFiles.length > 0) {
+                            setDocFiles(prev => ({ ...prev, [dt.key]: newFiles }));
+                          }
+                        }} />
                     </label>
                   )}
                 </div>
