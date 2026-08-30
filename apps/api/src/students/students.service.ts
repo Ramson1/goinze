@@ -270,6 +270,34 @@ export class StudentsService {
   }
 
   /**
+   * Decline a self-registered student's portal account (linked flow):
+   * delete the User record and unlink from the Student.
+   */
+  async declinePortalAccount(studentId: string, schoolId: string | null) {
+    const where: Record<string, any> = { id: studentId };
+    if (schoolId) where.schoolId = schoolId;
+    const student = await this.prisma.db.student.findFirst({
+      where,
+      include: { user: true },
+    });
+    if (!student) throw new NotFoundException('Student not found');
+    if (!student.userId) throw new BadRequestException('This student has no portal account linked.');
+    if (student.user?.status !== 'PENDING') {
+      throw new BadRequestException('This account is not pending approval.');
+    }
+
+    await this.prisma.db.$transaction(async (tx) => {
+      await tx.user.delete({ where: { id: student.userId! } });
+      await tx.student.update({
+        where: { id: studentId },
+        data: { userId: null },
+      });
+    });
+
+    return { success: true };
+  }
+
+  /**
    * Find all PENDING student-role Users that have no linked Student record
    * (i.e. self-registered without a pre-existing student record).
    */
@@ -318,6 +346,20 @@ export class StudentsService {
         data: { status: 'ACTIVE' },
       });
     });
+
+    return { success: true };
+  }
+
+  /**
+   * Decline an unlinked PENDING user: delete the User record entirely.
+   */
+  async declineUnlinkedUser(userId: string, schoolId: string | null) {
+    const user = await this.prisma.db.user.findFirst({
+      where: { id: userId, schoolId: schoolId ?? undefined, role: 'STUDENT', status: 'PENDING', student: null },
+    });
+    if (!user) throw new NotFoundException('Pending user not found');
+
+    await this.prisma.db.user.delete({ where: { id: userId } });
 
     return { success: true };
   }

@@ -371,14 +371,23 @@ export class AuthService {
     }
 
     // 3. Notify admins about the new self-registration (fire-and-forget)
-    this.comms
+    const notifyStudentReg = this.comms
       .notifyUsersByRole(
         dto.schoolId,
         'SCHOOL_ADMIN',
         'New Portal Account Registration',
         `${dto.firstName} ${dto.lastName} (Matric: ${dto.matricNumber}) has registered for a portal account and is awaiting approval.`,
       )
-      .catch((err) => this.logger.error('Failed to notify admins of self-registration', err instanceof Error ? err.stack : ''));
+      .catch((err) => this.logger.error('Failed to notify SCHOOL_ADMIN of self-registration', err instanceof Error ? err.stack : ''));
+    const notifySuperReg = this.comms
+      .notifyUsersByRole(
+        dto.schoolId,
+        'SUPER_ADMIN',
+        'New Portal Account Registration',
+        `${dto.firstName} ${dto.lastName} (Matric: ${dto.matricNumber}) has registered for a portal account and is awaiting approval.`,
+      )
+      .catch((err) => this.logger.error('Failed to notify SUPER_ADMIN of self-registration', err instanceof Error ? err.stack : ''));
+    Promise.allSettled([notifyStudentReg, notifySuperReg]);
 
     return {
       success: true,
@@ -467,14 +476,23 @@ export class AuthService {
     }
 
     // 3. Notify admins about the new self-registration (fire-and-forget)
-    this.comms
+    const notifyLectReg = this.comms
       .notifyUsersByRole(
         dto.schoolId,
         'SCHOOL_ADMIN',
         'New Lecturer Portal Account Registration',
         `${dto.firstName} ${dto.lastName} (Staff: ${dto.staffNumber}) has registered for a lecturer portal account and is awaiting approval.`,
       )
-      .catch((err) => this.logger.error('Failed to notify admins of lecturer self-registration', err instanceof Error ? err.stack : ''));
+      .catch((err) => this.logger.error('Failed to notify SCHOOL_ADMIN of lecturer self-registration', err instanceof Error ? err.stack : ''));
+    const notifySuperLect = this.comms
+      .notifyUsersByRole(
+        dto.schoolId,
+        'SUPER_ADMIN',
+        'New Lecturer Portal Account Registration',
+        `${dto.firstName} ${dto.lastName} (Staff: ${dto.staffNumber}) has registered for a lecturer portal account and is awaiting approval.`,
+      )
+      .catch((err) => this.logger.error('Failed to notify SUPER_ADMIN of lecturer self-registration', err instanceof Error ? err.stack : ''));
+    Promise.allSettled([notifyLectReg, notifySuperLect]);
 
     return {
       success: true,

@@ -58,9 +58,19 @@ export class StaffController {
     return this.staffService.approveUnlinkedUser(userId, user.schoolId);
   }
 
+  @Post('decline-user/:userId')
+  declineUnlinkedUser(@Param('userId') userId: string, @CurrentUser() user: SessionUser) {
+    return this.staffService.declineUnlinkedUser(userId, user.schoolId);
+  }
+
   @Patch(':id/approve-portal')
   approvePortal(@Param('id') id: string, @CurrentUser() user: SessionUser) {
     return this.staffService.approvePortalAccount(id, user.schoolId);
+  }
+
+  @Patch(':id/decline-portal')
+  declinePortal(@Param('id') id: string, @CurrentUser() user: SessionUser) {
+    return this.staffService.declinePortalAccount(id, user.schoolId);
   }
 
   @Get(':id')

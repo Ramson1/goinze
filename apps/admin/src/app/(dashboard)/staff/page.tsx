@@ -18,6 +18,7 @@ import {
   UserX,
   UserCheck,
   X,
+  XCircle,
 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
 import Card from '@/components/Card';
@@ -96,12 +97,14 @@ export default function StaffPage() {
   const [showApprovals, setShowApprovals] = useState(false);
   const [loadingApprovals, setLoadingApprovals] = useState(false);
   const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [decliningId, setDecliningId] = useState<string | null>(null);
 
   // Unlinked pending portal requests (no Staff record)
   const [unlinkedPending, setUnlinkedPending] = useState<UserRecord[]>([]);
   const [showUnlinked, setShowUnlinked] = useState(false);
   const [loadingUnlinked, setLoadingUnlinked] = useState(false);
   const [approvingUnlinkedId, setApprovingUnlinkedId] = useState<string | null>(null);
+  const [decliningUnlinkedId, setDecliningUnlinkedId] = useState<string | null>(null);
 
   // Check user role on mount
   useEffect(() => {
@@ -146,6 +149,16 @@ export default function StaffPage() {
     });
   }
 
+  async function handleDeclinePortal(staffId: string, name: string) {
+    setConfirmDialog({
+      message: `Decline portal access for ${name}? This will delete their account request.`,
+      onConfirm: () => {
+        setConfirmDialog(null);
+        doDeclinePortal(staffId);
+      },
+    });
+  }
+
   async function doApprovePortal(staffId: string) {
     setApprovingId(staffId);
     setError(null);
@@ -161,12 +174,37 @@ export default function StaffPage() {
     }
   }
 
+  async function doDeclinePortal(staffId: string) {
+    setDecliningId(staffId);
+    setError(null);
+    setNotice(null);
+    try {
+      await staffApi.declinePortal(staffId);
+      setNotice('Lecturer portal request declined successfully.');
+      loadPendingApprovals();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Decline failed.');
+    } finally {
+      setDecliningId(null);
+    }
+  }
+
   async function handleApproveUnlinked(userId: string, name: string) {
     setConfirmDialog({
       message: `Approve and create staff record for ${name}? This will create their staff record and activate their lecturer account.`,
       onConfirm: () => {
         setConfirmDialog(null);
         doApproveUnlinked(userId);
+      },
+    });
+  }
+
+  async function handleDeclineUnlinked(userId: string, name: string) {
+    setConfirmDialog({
+      message: `Decline registration request from ${name}? This will delete their account request permanently.`,
+      onConfirm: () => {
+        setConfirmDialog(null);
+        doDeclineUnlinked(userId);
       },
     });
   }
@@ -183,6 +221,21 @@ export default function StaffPage() {
       setError(err instanceof Error ? err.message : 'Approval failed.');
     } finally {
       setApprovingUnlinkedId(null);
+    }
+  }
+
+  async function doDeclineUnlinked(userId: string) {
+    setDecliningUnlinkedId(userId);
+    setError(null);
+    setNotice(null);
+    try {
+      await staffApi.declineUnlinkedUser(userId);
+      setNotice('Lecturer registration request declined successfully.');
+      loadUnlinkedPending();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Decline failed.');
+    } finally {
+      setDecliningUnlinkedId(null);
     }
   }
 
@@ -781,22 +834,40 @@ export default function StaffPage() {
                               : '—'}
                           </td>
                           <td className="px-3 py-2 text-right">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleApprovePortal(s.id, `${s.firstName} ${s.lastName}`)
-                              }
-                              disabled={approvingId === s.id}
-                              className="btn-primary px-3 py-1.5 text-xs disabled:opacity-60"
-                            >
-                              {approvingId === s.id ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <>
-                                  <CheckCircle2 className="h-3.5 w-3.5" /> Approve
-                                </>
-                              )}
-                            </button>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleApprovePortal(s.id, `${s.firstName} ${s.lastName}`)
+                                }
+                                disabled={approvingId === s.id || decliningId === s.id}
+                                className="btn-primary px-3 py-1.5 text-xs disabled:opacity-60"
+                              >
+                                {approvingId === s.id ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <>
+                                    <CheckCircle2 className="h-3.5 w-3.5" /> Approve
+                                  </>
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleDeclinePortal(s.id, `${s.firstName} ${s.lastName}`)
+                                }
+                                disabled={decliningId === s.id || approvingId === s.id}
+                                className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-100 disabled:opacity-60"
+                              >
+                                {decliningId === s.id ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <>
+                                    <XCircle className="h-3.5 w-3.5" /> Decline
+                                  </>
+                                )}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -869,22 +940,40 @@ export default function StaffPage() {
                               {new Date(u.createdAt).toLocaleDateString()}
                             </td>
                             <td className="px-3 py-2 text-right">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleApproveUnlinked(u.id, `${u.firstName} ${u.lastName}`)
-                                }
-                                disabled={approvingUnlinkedId === u.id}
-                                className="btn-primary px-3 py-1.5 text-xs disabled:opacity-60"
-                              >
-                                {approvingUnlinkedId === u.id ? (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                ) : (
-                                  <>
-                                    <CheckCircle2 className="h-3.5 w-3.5" /> Approve
-                                  </>
-                                )}
-                              </button>
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleApproveUnlinked(u.id, `${u.firstName} ${u.lastName}`)
+                                  }
+                                  disabled={approvingUnlinkedId === u.id || decliningUnlinkedId === u.id}
+                                  className="btn-primary px-3 py-1.5 text-xs disabled:opacity-60"
+                                >
+                                  {approvingUnlinkedId === u.id ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <>
+                                      <CheckCircle2 className="h-3.5 w-3.5" /> Approve
+                                    </>
+                                  )}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleDeclineUnlinked(u.id, `${u.firstName} ${u.lastName}`)
+                                  }
+                                  disabled={decliningUnlinkedId === u.id || approvingUnlinkedId === u.id}
+                                  className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-100 disabled:opacity-60"
+                                >
+                                  {decliningUnlinkedId === u.id ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <>
+                                      <XCircle className="h-3.5 w-3.5" /> Decline
+                                    </>
+                                  )}
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );

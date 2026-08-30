@@ -63,6 +63,12 @@ export class StudentsController {
     return this.studentsService.approveUnlinkedUser(userId, user.schoolId);
   }
 
+  @Post('decline-user/:userId')
+  @Roles('SCHOOL_ADMIN')
+  declineUnlinkedUser(@Param('userId') userId: string, @CurrentUser() user: SessionUser) {
+    return this.studentsService.declineUnlinkedUser(userId, user.schoolId);
+  }
+
   @Get(':id')
   @Roles('SCHOOL_ADMIN', 'ADMISSION_OFFICER', 'LECTURER', 'STUDENT')
   findOne(@Param('id') id: string) {
@@ -136,5 +142,11 @@ export class StudentsController {
   @Roles('SCHOOL_ADMIN')
   approvePortal(@Param('id') id: string, @CurrentUser() user: SessionUser) {
     return this.studentsService.approvePortalAccount(id, user.schoolId);
+  }
+
+  @Patch(':id/decline-portal')
+  @Roles('SCHOOL_ADMIN')
+  declinePortal(@Param('id') id: string, @CurrentUser() user: SessionUser) {
+    return this.studentsService.declinePortalAccount(id, user.schoolId);
   }
 }

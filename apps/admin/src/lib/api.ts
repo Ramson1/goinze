@@ -551,8 +551,10 @@ export const studentsApi = {
       }[]
     >('/students/pending-approvals'),
   approvePortal: (id: string) => api.patch<{ success: boolean }>(`/students/${id}/approve-portal`),
+  declinePortal: (id: string) => api.patch<{ success: boolean }>(`/students/${id}/decline-portal`),
   pendingUnlinked: () => api.get<UserRecord[]>('/students/pending-approvals/unlinked'),
   approveUnlinkedUser: (userId: string) => api.post<{ success: boolean }>(`/students/approve-user/${userId}`),
+  declineUnlinkedUser: (userId: string) => api.post<{ success: boolean }>(`/students/decline-user/${userId}`),
 };
 
 // ---- Analytics (admin dashboard) ----
@@ -706,8 +708,10 @@ export const staffApi = {
       user?: { id: string; email: string; firstName: string; lastName: string; createdAt: string };
     }[]>('/staff/pending-approvals'),
   approvePortal: (id: string) => api.patch<{ success: boolean }>(`/staff/${id}/approve-portal`),
+  declinePortal: (id: string) => api.patch<{ success: boolean }>(`/staff/${id}/decline-portal`),
   pendingUnlinked: () => api.get<UserRecord[]>('/staff/pending-approvals/unlinked'),
   approveUnlinkedUser: (userId: string) => api.post<{ success: boolean }>(`/staff/approve-user/${userId}`),
+  declineUnlinkedUser: (userId: string) => api.post<{ success: boolean }>(`/staff/decline-user/${userId}`),
 };
 
 // ---- Academics (faculties / departments / programmes / courses) ----

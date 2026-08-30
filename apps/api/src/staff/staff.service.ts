@@ -170,6 +170,34 @@ export class StaffService {
   }
 
   /**
+   * Decline a self-registered lecturer's portal account (linked flow):
+   * delete the User record and unlink from the Staff.
+   */
+  async declinePortalAccount(staffId: string, schoolId: string | null) {
+    const where: Record<string, any> = { id: staffId };
+    if (schoolId) where.schoolId = schoolId;
+    const staff = await this.prisma.db.staff.findFirst({
+      where,
+      include: { user: true },
+    });
+    if (!staff) throw new NotFoundException('Staff not found');
+    if (!staff.userId) throw new BadRequestException('This staff member has no portal account linked.');
+    if (staff.user?.status !== 'PENDING') {
+      throw new BadRequestException('This account is not pending approval.');
+    }
+
+    await this.prisma.db.$transaction(async (tx) => {
+      await tx.user.delete({ where: { id: staff.userId! } });
+      await tx.staff.update({
+        where: { id: staffId },
+        data: { userId: null },
+      });
+    });
+
+    return { success: true };
+  }
+
+  /**
    * Find all PENDING lecturer-role Users that have no linked Staff record.
    */
   async findUnlinkedPendingUsers(schoolId: string | null) {
@@ -228,6 +256,21 @@ export class StaffService {
 
     return { success: true };
   }
+
+  /**
+   * Decline an unlinked PENDING lecturer user: delete the User record entirely.
+   */
+  async declineUnlinkedUser(userId: string, schoolId: string | null) {
+    const user = await this.prisma.db.user.findFirst({
+      where: { id: userId, schoolId: schoolId ?? undefined, role: 'LECTURER', status: 'PENDING', staff: null },
+    });
+    if (!user) throw new NotFoundException('Pending user not found');
+
+    await this.prisma.db.user.delete({ where: { id: userId } });
+
+    return { success: true };
+  }
+
   async toggleActive(id: string) {
     const staff = await this.prisma.db.staff.findUnique({ where: { id } });
     if (!staff) throw new NotFoundException('Staff not found');
