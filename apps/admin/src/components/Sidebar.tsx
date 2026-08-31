@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import {
+  Award,
   BarChart3,
   BookOpen,
   Briefcase,
@@ -59,6 +60,7 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Students', href: '/students', icon: Users },
       { label: 'Admissions', href: '/admissions', icon: UserPlus },
+      { label: 'Alumni', href: '/alumni', icon: Award },
       { label: 'Staff', href: '/staff', icon: Briefcase },
     ],
   },

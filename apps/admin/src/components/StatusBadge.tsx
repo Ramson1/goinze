@@ -46,6 +46,7 @@ const statusTone: Record<string, Tone> = {
   archived: 'gray',
   // negative
   rejected: 'red',
+  declined: 'red',
   failed: 'red',
   overdue: 'red',
   refunded: 'red',

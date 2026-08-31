@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
+  Award,
   BarChart3,
   Bell,
   BookOpen,
@@ -66,6 +67,7 @@ const allNavItems: NavItem[] = [
   { label: 'Reports', href: '/reports', icon: FileText, group: 'Overview', keywords: ['export', 'pdf'] },
   { label: 'Students', href: '/students', icon: Users, group: 'People', keywords: ['pupils', 'enrollees'] },
   { label: 'Admissions', href: '/admissions', icon: UserPlus, group: 'People', keywords: ['applications', 'applicants', 'new students'] },
+  { label: 'Alumni', href: '/alumni', icon: Award, group: 'People', keywords: ['graduates', 'former students', 'alumni network'] },
   { label: 'Staff', href: '/staff', icon: Briefcase, group: 'People', keywords: ['employees', 'lecturers', 'workers'] },
   { label: 'Departments', href: '/departments', icon: Building2, group: 'Academics', keywords: ['faculties', 'units'] },
   { label: 'Courses', href: '/courses', icon: BookOpen, group: 'Academics', keywords: ['subjects', 'classes'] },

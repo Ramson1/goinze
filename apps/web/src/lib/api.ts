@@ -383,4 +383,36 @@ export interface ContactMessageResult {
 export const contactApi = {
   sendMessage: (input: ContactMessageInput) =>
     api.post<ContactMessageResult>("/contact/message", input),
+  registerAlumni: (input: AlumniRegistrationInput) =>
+    api.post<AlumniRegistrationResult>("/alumni/register", input),
+};
+
+export interface AlumniRegistrationInput {
+  name: string;
+  email: string;
+  programme: string;
+  graduationYear: number;
+  currentRole?: string;
+}
+
+export interface AlumniRegistrationResult {
+  id: string;
+  name: string;
+  email: string;
+  programme: string;
+  graduationYear: number;
+  currentRole?: string | null;
+  status: string;
+}
+
+export interface ApprovedAlumnus {
+  id: string;
+  name: string;
+  programme: string;
+  graduationYear: number;
+  currentRole?: string | null;
+}
+
+export const alumniApi = {
+  listApproved: () => api.get<ApprovedAlumnus[]>("/alumni/approved"),
 };

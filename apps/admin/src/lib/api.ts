@@ -1405,3 +1405,27 @@ export const idCardsApi = {
   revoke: (id: string) =>
     api.patch<IdCardRecord>(`/id-cards/${id}/revoke`),
 };
+
+// ── Alumni Registration ────────────────────────────────────────────
+
+export interface AlumniRegistration {
+  id: string;
+  name: string;
+  email: string;
+  programme: string;
+  graduationYear: number;
+  currentRole: string | null;
+  status: 'PENDING' | 'APPROVED' | 'DECLINED';
+  createdAt: string;
+}
+
+export const alumniApi = {
+  list: (status?: string) =>
+    api.get<AlumniRegistration[]>(`/alumni${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+  approve: (id: string) =>
+    api.patch<AlumniRegistration>(`/alumni/${id}/approve`),
+  decline: (id: string) =>
+    api.patch<AlumniRegistration>(`/alumni/${id}/decline`),
+  delete: (id: string) =>
+    api.delete(`/alumni/${id}`),
+};
