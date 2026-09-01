@@ -129,7 +129,7 @@ function IdCardFront({
     : { label: 'Category', value: staff?.staffCategory === 'ACADEMIC' ? 'Academic Staff' : staff?.staffCategory === 'NON_ACADEMIC' ? 'Non-Academic Staff' : staff?.isLecturer ? 'Academic Staff' : 'Staff' };
 
   return (
-    <div ref={innerRef} data-card className="flex h-[214px] w-[340px] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg" style={{ fontFamily: 'system-ui, sans-serif' }}>
+    <div ref={innerRef} data-card className="flex h-[213px] w-[340px] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg" style={{ fontFamily: 'system-ui, sans-serif' }}>
       {/* Header */}
       <div className={cn('flex items-center gap-2 bg-gradient-to-r px-3 pt-1 pb-2 text-white', accent)}>
         {(school?.logoUrl || '/logo.png') ? (
@@ -236,7 +236,7 @@ function IdCardBack({
   });
 
   return (
-    <div ref={innerRef} data-card className="flex h-[214px] w-[340px] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg" style={{ fontFamily: 'system-ui, sans-serif' }}>
+    <div ref={innerRef} data-card className="flex h-[213px] w-[340px] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg" style={{ fontFamily: 'system-ui, sans-serif' }}>
       {/* Header */}
       <div className={cn('flex items-center justify-center bg-gradient-to-r px-3 py-1.5 text-white', accent)}>
         {(school?.logoUrl || '/logo.png') ? (
