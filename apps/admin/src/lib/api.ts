@@ -896,6 +896,20 @@ export const communicationApi = {
   }) => api.patch<AnnouncementRecord>(`/communication/announcements/${id}`, payload),
   deleteAnnouncement: (id: string) =>
     api.delete<{ success: boolean }>(`/communication/announcements/${id}`),
+
+  // ---- Bulk Email (Email Blast) ----
+  previewEmailBlast: (payload: { groups: string[]; specificUserIds?: string[] }) =>
+    api.post<{ id: string; email: string; name: string }[]>('/communication/email-blast/preview', payload),
+  sendEmailBlast: (payload: {
+    subject: string;
+    body: string;
+    groups: string[];
+    specificUserIds?: string[];
+  }) =>
+    api.post<{ sent: number; failed: number; total: number; message?: string }>(
+      '/communication/email-blast',
+      payload,
+    ),
 };
 
 // ---- News ----
