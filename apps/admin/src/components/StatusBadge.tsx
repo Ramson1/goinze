@@ -27,6 +27,9 @@ const statusTone: Record<string, Tone> = {
   present: 'green',
   // attention
   pending: 'amber',
+  absent: 'red',
+  late: 'amber',
+  excused: 'blue',
   'under review': 'amber',
   processing: 'amber',
   interview: 'amber',

@@ -12,6 +12,7 @@ import {
   Calendar,
   CalendarDays,
   ClipboardCheck,
+  ClipboardList,
   CreditCard,
   FileText,
   Globe,
@@ -84,6 +85,7 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'Results', href: '/results', icon: ClipboardCheck },
       { label: 'CBT', href: '/cbt', icon: MonitorSmartphone },
+      { label: 'Attendance', href: '/attendance', icon: ClipboardList },
     ],
   },
   {

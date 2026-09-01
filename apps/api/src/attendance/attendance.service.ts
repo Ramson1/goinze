@@ -305,12 +305,27 @@ export class AttendanceService {
       : [];
     const courseMap = new Map(courses.map((c) => [c.id, { code: c.code, title: c.title }]));
 
+    // Fetch lecturer names from course allocations
+    const allocations = courseIds.length > 0
+      ? await this.prisma.db.courseAllocation.findMany({
+          where: { courseId: { in: courseIds } },
+          include: { staff: { select: { firstName: true, lastName: true, title: true } } },
+        })
+      : [];
+    const lecturerMap = new Map<string, string[]>();
+    for (const a of allocations) {
+      const name = [a.staff?.title, a.staff?.firstName, a.staff?.lastName].filter(Boolean).join(' ');
+      if (!lecturerMap.has(a.courseId)) lecturerMap.set(a.courseId, []);
+      lecturerMap.get(a.courseId)!.push(name);
+    }
+
     // Build final array
     const sessions = [...sessionMap.values()]
       .map((s) => ({
         courseId: s.courseId,
         courseCode: courseMap.get(s.courseId)?.code ?? '—',
         courseTitle: courseMap.get(s.courseId)?.title ?? 'Unknown Course',
+        lecturers: lecturerMap.get(s.courseId) ?? [],
         date: s.date,
         totalMarked: s.presentCount + s.absentCount + s.lateCount + s.excusedCount,
         presentCount: s.presentCount,

@@ -1018,6 +1018,60 @@ export const reportsApi = {
   attendance: () => api.get<AttendanceReport>('/reports/attendance'),
 };
 
+// ---- Attendance ----
+
+export interface AttendanceSessionSummary {
+  courseId: string;
+  courseCode: string;
+  courseTitle: string;
+  lecturers: string[];
+  date: string;
+  totalMarked: number;
+  presentCount: number;
+  absentCount: number;
+  lateCount: number;
+  methods: string[];
+}
+
+export interface AttendanceSessionRecord {
+  id: string;
+  studentId: string | null;
+  firstName: string;
+  lastName: string;
+  matricNumber: string | null;
+  status: string;
+  method: string;
+  date: string;
+  overallAttendance: {
+    present: number;
+    absent: number;
+    late: number;
+    total: number;
+    rate: number;
+  };
+}
+
+export const attendanceApi = {
+  overview: (courseId?: string) =>
+    api.get<AttendanceSessionSummary[]>(
+      `/attendance/overview${courseId ? `?courseId=${encodeURIComponent(courseId)}` : ''}`,
+    ),
+  sessionDetail: (courseId: string, date: string) =>
+    api.get<AttendanceSessionRecord[]>(
+      `/attendance/session/${encodeURIComponent(courseId)}/${encodeURIComponent(date)}`,
+    ),
+  studentReport: (studentId: string) =>
+    api.get<{
+      studentId: string;
+      total: number;
+      PRESENT: number;
+      ABSENT: number;
+      LATE: number;
+      EXCUSED: number;
+      attendanceRate: number;
+    }>(`/attendance/report/${encodeURIComponent(studentId)}`),
+};
+
 // ---- CBT ----
 
 export type CbtExamStatus = 'DRAFT' | 'SCHEDULED' | 'ACTIVE' | 'CLOSED' | 'ARCHIVED';
