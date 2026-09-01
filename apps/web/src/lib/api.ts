@@ -81,6 +81,8 @@ export interface ApplyInput {
   declarationName?: string;
   declarationDate?: string;
   declarationAgreed?: boolean;
+  /** Payment reference from a successful pre-admission fee payment. */
+  paymentReference?: string;
 }
 
 export interface ApplyResult {

@@ -274,7 +274,7 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
         schoolSlug: "goinze-demo",
         amount: totalFees,
         customerEmail: email,
-        purpose: `Application fees: ${appFees.map(f => f.name).join(", ")}`,
+        purpose: "APPLICATION_FORM",
         gateway: selectedGateway,
       });
       paymentRef = initResult.reference;
@@ -324,7 +324,7 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
             setVerifying(false);
             return;
           }
-          await submitApplication();
+          await submitApplication(paymentRef);
         } catch (err) {
           setVerifying(false);
           setError(err instanceof Error ? err.message : "Payment verification failed. Please contact support with reference: " + paymentRef);
@@ -404,7 +404,7 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
               setVerifying(false);
               return;
             }
-            await submitApplication();
+            await submitApplication(paymentRef);
           } catch (err) {
             setVerifying(false);
             setError(err instanceof Error ? err.message : "Payment verification failed. Please contact support with reference: " + paymentRef);
@@ -424,7 +424,7 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
   }
 
   /* ── Submit the actual application form ── */
-  async function submitApplication() {
+  async function submitApplication(paymentRef?: string) {
     setSubmitting(true); setError(null);
     try {
       const names = splitName(`${surname} ${otherNames}`);
@@ -457,6 +457,7 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
         declarationName: signatureName || undefined,
         declarationDate: declDate || undefined,
         declarationAgreed: true,
+        paymentReference: paymentRef || undefined,
       });
 
       // Upload documents after application is created
