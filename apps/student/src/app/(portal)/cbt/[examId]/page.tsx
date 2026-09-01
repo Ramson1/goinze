@@ -15,6 +15,10 @@ import {
   Loader2,
   AlertCircle,
   Key,
+  HardDrive,
+  WifiOff,
+  RefreshCw,
+  Save,
 } from 'lucide-react';
 import Card from '@/components/Card';
 import {
@@ -54,6 +58,42 @@ function seededShuffle<T>(items: T[], seed: string): T[] {
   return out;
 }
 
+function lsKey(attemptId: string) {
+  return `cbt-progress-${attemptId}`;
+}
+
+async function encryptBackup(data: string): Promise<string> {
+  const key = process.env.NEXT_PUBLIC_CBT_ENCRYPTION_KEY;
+  if (!key) throw new Error('Encryption key not configured');
+  const enc = new TextEncoder();
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(key),
+    'PBKDF2',
+    false,
+    ['deriveKey'],
+  );
+  const cryptoKey = await crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt'],
+  );
+  const encrypted = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    cryptoKey,
+    enc.encode(data),
+  );
+  return JSON.stringify({
+    iv: btoa(String.fromCharCode(...new Uint8Array(iv))),
+    salt: btoa(String.fromCharCode(...new Uint8Array(salt))),
+    data: btoa(String.fromCharCode(...new Uint8Array(encrypted))),
+  });
+}
+
 export default function ExamPage(props: { params: Promise<{ examId: string }> }) {
   const { examId } = use(props.params);
   const { profile } = useStudent();
@@ -78,6 +118,10 @@ export default function ExamPage(props: { params: Promise<{ examId: string }> })
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [result, setResult] = useState<CbtSubmitResponse | null>(null);
+  const [isOnline, setIsOnline] = useState(true);
+  const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const [exportingBackup, setExportingBackup] = useState(false);
 
   // ---- Load exam details (but don't start attempt yet) ----
   useEffect(() => {
@@ -119,6 +163,18 @@ export default function ExamPage(props: { params: Promise<{ examId: string }> })
       setAttempt(att);
       setCodeVerified(true);
       setSecondsLeft(exam!.durationMins * 60);
+
+      // Restore from localStorage if available
+      const saved = localStorage.getItem(lsKey(att.id));
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.answers) setAnswers(parsed.answers);
+          if (parsed.texts) setTexts(parsed.texts);
+          if (parsed.flagged) setFlagged(new Set(parsed.flagged));
+          setRestoreMessage('Progress restored from your last session');
+        } catch {}
+      }
     } catch (err) {
       setCodeError(err instanceof Error ? err.message : 'Invalid or already used access code.');
     } finally {
@@ -150,25 +206,45 @@ export default function ExamPage(props: { params: Promise<{ examId: string }> })
     if (!attempt || submitting || result) return;
     setSubmitting(true);
     setSubmitError(null);
-    try {
-      const payload = questions.map((q) => {
-        const selected = answers[q.id] ?? [];
-        const text = texts[q.id]?.trim() ?? '';
-        return {
-          questionId: q.id,
-          selectedOptions: selected.length ? selected : undefined,
-          essayText: text || undefined,
-        };
-      });
-      const res = await cbtStudentApi.submitAttempt(attempt.id, payload);
-      setResult(res);
-    } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : 'Submission failed. Please try again.');
-    } finally {
-      setSubmitting(false);
-      setConfirmSubmit(false);
+    setRetryCount(0);
+
+    const payload = questions.map((q) => {
+      const selected = answers[q.id] ?? [];
+      const text = texts[q.id]?.trim() ?? '';
+      return {
+        questionId: q.id,
+        selectedOptions: selected.length ? selected : undefined,
+        essayText: text || undefined,
+      };
+    });
+
+    const maxRetries = 10;
+    for (let i = 0; i <= maxRetries; i++) {
+      try {
+        const res = await cbtStudentApi.submitAttempt(attempt.id, payload);
+        setResult(res);
+        setRetryCount(0);
+        break;
+      } catch (err) {
+        if (i === maxRetries) {
+          setSubmitError(
+            err instanceof Error
+              ? err.message
+              : 'Could not submit. Your answers are saved locally. You can try again or export a backup file.',
+          );
+          setRetryCount(0);
+        } else {
+          setRetryCount(i + 1);
+          const delay = Math.min(2000 * Math.pow(2, i), 30000);
+          setSubmitError(`Network issue detected. Retrying... (attempt ${i + 1}/${maxRetries})`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+      }
     }
-  }, [attempt, submitting, result, questions, answers, texts]);
+
+    setSubmitting(false);
+    setConfirmSubmit(false);
+  }, [attempt, submitting, result, questions, answers, texts, retryCount]);
 
   useEffect(() => {
     submitRef.current = doSubmit;
@@ -190,6 +266,82 @@ export default function ExamPage(props: { params: Promise<{ examId: string }> })
     return () => clearInterval(id);
   }, [inProgress]);
 
+  const toggleFlag = useCallback(() => {
+    if (!question) return;
+    setFlagged((prev) => {
+      const next = new Set(prev);
+      if (next.has(question.id)) next.delete(question.id);
+      else next.add(question.id);
+      return next;
+    });
+  }, [question]);
+
+  // Refs for auto-save
+  const attemptRef = useRef(attempt);
+  useEffect(() => {
+    attemptRef.current = attempt;
+  }, [attempt]);
+
+  const saveToLs = useCallback(() => {
+    if (!attemptRef.current) return;
+    const data = {
+      attemptId: attemptRef.current.id,
+      examId: attemptRef.current.examId,
+      studentId: attemptRef.current.studentId,
+      answers,
+      texts,
+      flagged: Array.from(flagged),
+      savedAt: new Date().toISOString(),
+    };
+    localStorage.setItem(lsKey(attemptRef.current.id), JSON.stringify(data));
+  }, [answers, texts, flagged]);
+
+  const saveToBackend = useCallback(async () => {
+    if (!attemptRef.current) return;
+    const payload = questions.map((q) => ({
+      questionId: q.id,
+      selectedOptions: answers[q.id] ?? [],
+      essayText: texts[q.id]?.trim() || undefined,
+    }));
+    try {
+      await cbtStudentApi.autoSave(attemptRef.current.id, payload);
+    } catch {}
+  }, [questions, answers, texts]);
+
+  // Periodic auto-save to localStorage (every 15 seconds)
+  useEffect(() => {
+    if (!inProgress || !attempt) return;
+    const id = setInterval(saveToLs, 15000);
+    return () => clearInterval(id);
+  }, [inProgress, attempt, saveToLs]);
+
+  // Debounced auto-save to backend (2 seconds after last change)
+  useEffect(() => {
+    if (!inProgress || !attempt) return;
+    const id = setTimeout(saveToBackend, 2000);
+    return () => clearTimeout(id);
+  }, [inProgress, attempt, answers, texts, saveToBackend]);
+
+  // Online/offline detection
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    setIsOnline(navigator.onLine);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Clear localStorage after successful submission
+  useEffect(() => {
+    if (result && attempt) {
+      localStorage.removeItem(lsKey(attempt.id));
+    }
+  }, [result, attempt]);
+
   const selectOption = useCallback(
     (optionId: string, multi: boolean) => {
       if (!question || !inProgress) return;
@@ -201,19 +353,11 @@ export default function ExamPage(props: { params: Promise<{ examId: string }> })
           : [...existing, optionId];
         return { ...prev, [question.id]: next };
       });
+      // Trigger debounced backend save
+      saveToBackend();
     },
-    [question, inProgress],
+    [question, inProgress, saveToBackend],
   );
-
-  const toggleFlag = useCallback(() => {
-    if (!question) return;
-    setFlagged((prev) => {
-      const next = new Set(prev);
-      if (next.has(question.id)) next.delete(question.id);
-      else next.add(question.id);
-      return next;
-    });
-  }, [question]);
 
   // ---- Loading / error states ----
   if (loading) {
@@ -442,6 +586,30 @@ export default function ExamPage(props: { params: Promise<{ examId: string }> })
         automatically when time runs out.
       </div>
 
+      {/* Restore banner */}
+      {restoreMessage && (
+        <div className="mb-4 flex items-center justify-between gap-2.5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span>{restoreMessage}</span>
+          </div>
+          <button
+            onClick={() => setRestoreMessage(null)}
+            className="text-green-600 hover:text-green-800"
+          >
+            <XCircle className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Offline banner */}
+      {!isOnline && (
+        <div className="mb-4 flex items-center gap-2.5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <WifiOff className="h-4 w-4 shrink-0" />
+          <span>You are offline. Your answers are being saved locally and will sync when connection is restored.</span>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_300px]">
         {/* Question panel */}
         <Card className="p-6">
@@ -618,6 +786,52 @@ export default function ExamPage(props: { params: Promise<{ examId: string }> })
             >
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               Submit Exam
+            </button>
+            <button
+              onClick={async () => {
+                if (!attempt || !exam || !profile) return;
+                setExportingBackup(true);
+                try {
+                  const backupData = {
+                    attemptId: attempt.id,
+                    examId: attempt.examId,
+                    studentId: attempt.studentId,
+                    answers: questions.map((q) => ({
+                      questionId: q.id,
+                      selectedOptions: answers[q.id] ?? [],
+                      essayText: texts[q.id]?.trim() || undefined,
+                    })),
+                    texts,
+                    flagged: Array.from(flagged),
+                    timestamp: new Date().toISOString(),
+                    checksum: await crypto.subtle.digest(
+                      'SHA-256',
+                      new TextEncoder().encode(JSON.stringify({ answers, texts })),
+                    ).then((buf) => Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('')),
+                  };
+                  const encrypted = await encryptBackup(JSON.stringify(backupData));
+                  const blob = new Blob([encrypted], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `${profile.firstName}_${profile.lastName}_${exam.title.replace(/[^a-z0-9]/gi, '_')}_backup.gzbak`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                } catch (err) {
+                  console.error('Backup export failed:', err);
+                } finally {
+                  setExportingBackup(false);
+                }
+              }}
+              disabled={exportingBackup}
+              className="btn-secondary mt-2 w-full disabled:opacity-60"
+            >
+              {exportingBackup ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
+              Save Backup
             </button>
           </Card>
         </div>

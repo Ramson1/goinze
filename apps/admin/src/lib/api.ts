@@ -1146,6 +1146,11 @@ export const cbtApi = {
       options?: { text: string; isCorrect?: boolean }[];
     }[];
   }) => api.post<{ count: number }>('/cbt/questions/bulk', payload),
+  importBackup: (examId: string, encryptedPayload: string) =>
+    api.post<{ success: boolean; studentName: string; score: string | number; attemptId: string }>(
+      '/cbt/import-backup',
+      { examId, encryptedPayload },
+    ),
 };
 
 // ---- Website CMS ----

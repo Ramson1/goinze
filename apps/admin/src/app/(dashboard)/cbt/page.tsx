@@ -7,6 +7,7 @@ import {
   Database,
   Download,
   FileQuestion,
+  FileUp,
   ListChecks,
   Loader2,
   Plus,
@@ -33,7 +34,7 @@ import {
   type ExamAccessCodeRecord,
 } from '@/lib/api';
 
-type Tab = 'exams' | 'banks';
+type Tab = 'exams' | 'banks' | 'recover';
 
 const QUESTION_TYPES = ['OBJECTIVE', 'MULTI_SELECT', 'TRUE_FALSE', 'ESSAY', 'FILL_BLANK'];
 
@@ -119,6 +120,18 @@ export default function CbtPage() {
   const [qDifficulty, setQDifficulty] = useState('medium');
   const [qExplanation, setQExplanation] = useState('');
   const [qOptions, setQOptions] = useState(EMPTY_OPTIONS());
+
+  // Recover backup state
+  const [recoverExamId, setRecoverExamId] = useState('');
+  const [recoverFile, setRecoverFile] = useState<File | null>(null);
+  const [recoverImporting, setRecoverImporting] = useState(false);
+  const [recoverResult, setRecoverResult] = useState<{
+    success: boolean;
+    studentName: string;
+    score: string | number;
+    attemptId: string;
+  } | null>(null);
+  const [recoverError, setRecoverError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -869,6 +882,16 @@ export default function CbtPage() {
         >
           <Database className="h-4 w-4" /> Question Banks
         </button>
+        <button
+          type="button"
+          onClick={() => setTab('recover')}
+          className={cn(
+            'flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition',
+            tab === 'recover' ? 'bg-brand text-white' : 'text-gray-600 hover:text-gray-900',
+          )}
+        >
+          <FileUp className="h-4 w-4" /> Recover Backups
+        </button>
       </div>
 
       {error && (
@@ -1021,6 +1044,133 @@ export default function CbtPage() {
               emptyMessage="No question banks yet. Create one to start adding questions."
             />
           )}
+        </Card>
+      )}
+
+      {tab === 'recover' && (
+        <Card title="Recover Exam Backups" subtitle="Import encrypted .gzbak backup files to recover student answers">
+          <div className="space-y-5 px-6 py-5">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Select Exam</label>
+              <select
+                value={recoverExamId}
+                onChange={(e) => {
+                  setRecoverExamId(e.target.value);
+                  setRecoverResult(null);
+                  setRecoverError(null);
+                }}
+                className="input-field"
+              >
+                <option value="">— Choose an exam —</option>
+                {exams.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.title}
+                    {e.course ? ` (${e.course.code})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Backup File (.gzbak)</label>
+              <div
+                className={cn(
+                  'relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed px-6 py-8 transition',
+                  recoverFile
+                    ? 'border-brand bg-blue-50'
+                    : 'border-gray-300 bg-gray-50 hover:border-gray-400',
+                )}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const file = e.dataTransfer.files[0];
+                  if (file && file.name.endsWith('.gzbak')) {
+                    setRecoverFile(file);
+                    setRecoverResult(null);
+                    setRecoverError(null);
+                  } else {
+                    setRecoverError('Please drop a .gzbak file');
+                  }
+                }}
+              >
+                <FileUp className="mb-2 h-8 w-8 text-gray-400" />
+                {recoverFile ? (
+                  <p className="text-sm font-medium text-brand-dark">{recoverFile.name}</p>
+                ) : (
+                  <>
+                    <p className="text-sm font-medium text-gray-600">Drop a .gzbak file here or click to browse</p>
+                    <p className="mt-1 text-xs text-gray-400">Encrypted backup files exported by students</p>
+                  </>
+                )}
+                <input
+                  type="file"
+                  accept=".gzbak"
+                  className="absolute inset-0 cursor-pointer opacity-0"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      setRecoverFile(file);
+                      setRecoverResult(null);
+                      setRecoverError(null);
+                    }
+                    e.target.value = '';
+                  }}
+                />
+              </div>
+            </div>
+
+            {recoverError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {recoverError}
+              </div>
+            )}
+
+            {recoverResult && (
+              <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+                <p className="font-semibold">Import successful!</p>
+                <p className="mt-1">
+                  Student: <strong>{recoverResult.studentName}</strong> — Score:{' '}
+                  <strong>{String(recoverResult.score)}</strong>
+                </p>
+              </div>
+            )}
+
+            <button
+              type="button"
+              disabled={!recoverExamId || !recoverFile || recoverImporting}
+              className="btn-primary disabled:opacity-60"
+              onClick={async () => {
+                if (!recoverExamId || !recoverFile) return;
+                setRecoverImporting(true);
+                setRecoverError(null);
+                setRecoverResult(null);
+                try {
+                  const text = await recoverFile.text();
+                  const result = await cbtApi.importBackup(recoverExamId, text);
+                  setRecoverResult(result);
+                  setRecoverFile(null);
+                } catch (err) {
+                  setRecoverError(err instanceof Error ? err.message : 'Import failed');
+                } finally {
+                  setRecoverImporting(false);
+                }
+              }}
+            >
+              {recoverImporting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Importing…
+                </>
+              ) : (
+                <>
+                  <FileUp className="h-4 w-4" /> Import Backup
+                </>
+              )}
+            </button>
+          </div>
         </Card>
       )}
 

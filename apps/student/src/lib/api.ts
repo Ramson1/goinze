@@ -562,6 +562,8 @@ export const cbtStudentApi = {
     api.post<CbtAttemptRecord>('/cbt/attempts/start', payload),
   submitAttempt: (attemptId: string, answers: CbtAnswerInput[]) =>
     api.post<CbtSubmitResponse>(`/cbt/attempts/${attemptId}/submit`, { answers }),
+  autoSave: (attemptId: string, answers: CbtAnswerInput[]) =>
+    api.patch<{ success: boolean }>(`/cbt/attempts/${attemptId}/auto-save`, { answers }),
 };
 
 // ---- Documents ----
