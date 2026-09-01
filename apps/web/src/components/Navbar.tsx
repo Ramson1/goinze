@@ -48,8 +48,8 @@ export default function Navbar() {
 
   // Determine portal URLs based on environment
   const isProd = typeof window !== 'undefined' && window.location.hostname !== 'localhost';
-  const studentPortalUrl = isProd ? 'https://student.goinzeschool.edu.ng/' : 'http://localhost:3002';
-  const lecturerPortalUrl = isProd ? 'https://lecturer.goinzeschool.edu.ng/' : 'http://localhost:3003';
+  const studentPortalUrl = isProd ? 'https://student-mnx7td3pg-black-box-tech-s-projects.vercel.app' : 'http://localhost:3002';
+  const lecturerPortalUrl = isProd ? 'https://lecturer-qnpcduyvv-black-box-tech-s-projects.vercel.app' : 'http://localhost:3003';
 
   // Flip to the blue variant only after the user scrolls past the hero
   // (or top banner) section; fall back to a viewport-height threshold.
