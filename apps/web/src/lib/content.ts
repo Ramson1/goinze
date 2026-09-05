@@ -178,7 +178,7 @@ export const defaultManagementTeam = [
 export const defaultContactInfo = {
   address: "Along Verita University Road Zuma 1, Opposite ECAW Church, Bwari Area Council, Abuja, Nigeria",
   phone: "0810 557 6617, 0805 817 6193, 0816 512 9613",
-  email: "gonzenicmhst@gmail.com",
+  email: "ishayadan5@gmail.com",
   hours: "Monday – Friday, 8:00 AM – 4:00 PM",
 };
 

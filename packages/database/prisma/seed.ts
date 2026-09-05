@@ -45,7 +45,7 @@ async function main() {
     where: { slug: 'goinze-demo' },
     update: {
       name: SCHOOL_NAME,
-      email: 'gonzenicmhst@gmail.com',
+      email: 'ishayadan5@gmail.com',
       phone: '+2348105576617',
       primaryColor: '#1e40af',
     },
@@ -53,7 +53,7 @@ async function main() {
       name: SCHOOL_NAME,
       slug: 'goinze-demo',
       code: 'GDU',
-      email: 'gonzenicmhst@gmail.com',
+      email: 'ishayadan5@gmail.com',
       phone: '+2348105576617',
       primaryColor: '#1e40af',
       subscription: {

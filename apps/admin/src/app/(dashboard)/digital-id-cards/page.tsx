@@ -269,7 +269,7 @@ function IdCardBack({
           <p className="text-center text-[6px] font-medium text-gray-600 leading-tight">of Medical Health Science and Technology</p>
           <div className="mt-0.5 flex justify-center gap-3">
             <p className="text-[6px] text-gray-500">Tel: 08105576617, 08058176193, 09163316143</p>
-            <p className="text-[6px] text-gray-500">Email: gonzenicmhst@gmail.com</p>
+            <p className="text-[6px] text-gray-500">Email: ishayadan5@gmail.com</p>
           </div>
           <p className="mt-0.5 text-center text-[6px] leading-tight text-gray-400">
             This card is the property of the school. Unauthorized use is prohibited.
