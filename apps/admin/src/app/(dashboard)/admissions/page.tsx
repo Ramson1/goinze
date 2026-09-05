@@ -171,9 +171,6 @@ export default function AdmissionsPage() {
   const onReject = (r: ApplicationRecord) =>
     run(r.id, () => admissionsApi.reject(r.id), `Application ${r.applicationNo} rejected.`);
 
-  const onLetter = (r: ApplicationRecord) =>
-    run(r.id, () => admissionsApi.generateLetter(r.id), 'Admission letter generated and sent.');
-
   const onSendLetter = async (r: ApplicationRecord) => {
     setBusyId(r.id);
     setNotice(null);
@@ -192,7 +189,7 @@ export default function AdmissionsPage() {
     setError(null);
     try {
       const res = await admissionsApi.createStudentPassword(r.id);
-      setNotice(`Password created: ${res.tempPassword} — share this with the student.`);
+      setNotice(`Temporary password created and emailed to the student: ${res.tempPassword}`);
     } catch (err) {
       setNotice(err instanceof ApiError ? err.message : 'Failed to create password.');
     } finally {
@@ -316,22 +313,12 @@ export default function AdmissionsPage() {
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => onLetter(r)}
+                  onClick={() => onSendLetter(r)}
                   className="btn-secondary inline-flex items-center gap-1 px-2.5 py-1.5 text-xs disabled:opacity-50"
+                  title="Generate and send the admission letter email to the student"
                 >
-                  <FileText className="h-3.5 w-3.5" /> Letter
+                  <Mail className="h-3.5 w-3.5" /> Send
                 </button>
-                {r.admissionLetterUrl && (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => onSendLetter(r)}
-                    className="btn-secondary inline-flex items-center gap-1 px-2.5 py-1.5 text-xs disabled:opacity-50"
-                    title="Send admission letter email to the student"
-                  >
-                    <Mail className="h-3.5 w-3.5" /> Send
-                  </button>
-                )}
                 {r.student && (
                   <button
                     type="button"
@@ -344,17 +331,6 @@ export default function AdmissionsPage() {
                   </button>
                 )}
               </>
-            )}
-
-            {r.admissionLetterUrl && (
-              <a
-                href={r.admissionLetterUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs font-medium text-brand hover:underline"
-              >
-                View
-              </a>
             )}
 
             <button
