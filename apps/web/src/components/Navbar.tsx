@@ -46,10 +46,9 @@ export default function Navbar() {
   const [portalDropdown, setPortalDropdown] = useState(false);
   const pathname = usePathname();
 
-  // Determine portal URLs based on environment
-  const isProd = typeof window !== 'undefined' && window.location.hostname !== 'localhost';
-  const studentPortalUrl = isProd ? 'https://student.goinzeschool.edu.ng/' : 'http://localhost:3002';
-  const lecturerPortalUrl = isProd ? 'https://lecturer.goinzeschool.edu.ng/' : 'http://localhost:3003';
+  // Portal buttons always link to the production URLs, in every environment.
+  const studentPortalUrl = 'https://student.goinzeschool.edu.ng/';
+  const lecturerPortalUrl = 'https://lecturer.goinzeschool.edu.ng/';
 
   // Flip to the blue variant only after the user scrolls past the hero
   // (or top banner) section; fall back to a viewport-height threshold.
