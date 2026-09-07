@@ -4,15 +4,18 @@ import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   AlertCircle,
+  AlertTriangle,
   Banknote,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Clock,
+  Eye,
   FileText,
   Loader2,
   Receipt,
   Search,
+  Trash2,
   Wallet,
   X,
 } from 'lucide-react';
@@ -34,6 +37,23 @@ import {
 } from '@/lib/api';
 
 /* ── Helpers ── */
+
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]+)'));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function decodeRoleFromToken(token: string): string | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1]));
+    return payload.role ?? null;
+  } catch {
+    return null;
+  }
+}
 
 const STATUS_FILTERS = ['', 'PENDING', 'SUCCESS', 'REFUNDED', 'FAILED'];
 const PAGE_SIZE = 10;
@@ -62,11 +82,39 @@ function formatDate(iso: string | null): string {
   });
 }
 
+function formatDateTime(iso: string | null): string {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('en-NG', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 function titleCase(value: string): string {
   return value
     .toLowerCase()
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** Label/value row used inside the payment detail modal. */
+function DetailRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs uppercase tracking-wide text-gray-400">{label}</dt>
+      <dd
+        className={
+          mono ? 'truncate font-mono text-xs text-gray-700' : 'text-sm font-medium text-gray-900'
+        }
+        title={value}
+      >
+        {value}
+      </dd>
+    </div>
+  );
 }
 
 export default function PaymentsPage() {
@@ -80,6 +128,20 @@ export default function PaymentsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  // Row detail modal (opened by clicking any payment row).
+  const [detailPayment, setDetailPayment] = useState<Payment | null>(null);
+  // Multi-select + custom delete-confirmation modal (SUPER_ADMIN only).
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<Payment[] | null>(null);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  // Check user role on mount — only SUPER_ADMIN may delete payment records.
+  useEffect(() => {
+    const token = getCookie('access_token');
+    const role = token ? decodeRoleFromToken(token) : null;
+    setIsSuperAdmin(role === 'SUPER_ADMIN');
+  }, []);
 
   // Student payments modal
   const [studentPaymentsModal, setStudentPaymentsModal] = useState<Student | null>(null);
@@ -127,6 +189,11 @@ export default function PaymentsPage() {
   useEffect(() => {
     setPage(1);
   }, [search, statusFilter]);
+
+  // Selection is scoped to the visible set — clear it when page/filters change.
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [page, search, statusFilter]);
 
   async function openStudentPayments(studentId: string) {
     setStudentPaymentsLoadingId(studentId);
@@ -201,6 +268,72 @@ export default function PaymentsPage() {
     }
   }
 
+  /** Toggle a single row's selection. */
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
+
+  /** Select/deselect every payment on the current page. */
+  function toggleSelectAll() {
+    const pageIds = (payments?.items ?? []).map((p) => p.id);
+    setSelectedIds((prev) => {
+      const allSelected = pageIds.length > 0 && pageIds.every((id) => prev.includes(id));
+      return allSelected
+        ? prev.filter((id) => !pageIds.includes(id))
+        : Array.from(new Set([...prev, ...pageIds]));
+    });
+  }
+
+  /** Open the custom delete-confirmation modal for one or more payments (SUPER_ADMIN only). */
+  function requestDelete(targets: Payment[]) {
+    if (targets.length === 0) return;
+    setDeleteTarget(targets);
+  }
+
+  /** Open the delete-confirmation modal for the current selection. */
+  function requestDeleteSelected() {
+    const items = (payments?.items ?? []).filter((p) => selectedIds.includes(p.id));
+    requestDelete(items);
+  }
+
+  /** Perform the deletion (single or bulk) after confirmation. */
+  async function confirmDelete() {
+    if (!deleteTarget || deleteTarget.length === 0) return;
+    setBulkDeleting(true);
+    setError(null);
+    setNotice(null);
+    try {
+      if (deleteTarget.length === 1) {
+        const p = deleteTarget[0];
+        await financeApi.deletePayment(p.id);
+        setNotice(`Payment ${p.reference} deleted.`);
+      } else {
+        const res = await financeApi.bulkDeletePayments(deleteTarget.map((p) => p.id));
+        if (res.failed.length > 0) {
+          setNotice(`${res.deleted} of ${res.requested} payments deleted.`);
+          setError(
+            `${res.failed.length} could not be deleted: ${res.failed
+              .map((f) => f.reason)
+              .join(', ')}`,
+          );
+        } else {
+          setNotice(`${res.deleted} payments deleted.`);
+        }
+      }
+      setDeleteTarget(null);
+      setDetailPayment(null);
+      setSelectedIds([]);
+      loadPayments();
+      loadDashboard();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete payment(s).');
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
   const columns: Column<Payment>[] = [
     { key: 'reference', header: 'Reference', className: 'font-mono text-xs' },
     {
@@ -219,7 +352,10 @@ export default function PaymentsPage() {
             </div>
             <button
               type="button"
-              onClick={() => openStudentPayments(p.student!.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                openStudentPayments(p.student!.id);
+              }}
               disabled={studentPaymentsLoadingId === p.student!.id}
               title="View all payments for this student"
               className="mt-1 inline-flex items-center gap-1 rounded-md border border-teal-200 bg-teal-50 px-2 py-1 text-xs font-medium text-teal-700 hover:bg-teal-100 disabled:opacity-50"
@@ -258,6 +394,27 @@ export default function PaymentsPage() {
       render: (p) => formatDate(p.paidAt ?? p.createdAt),
     },
     { key: 'status', header: 'Status', render: (p) => <StatusBadge status={p.status} /> },
+    ...(isSuperAdmin
+      ? [
+          {
+            key: 'actions',
+            header: 'Actions',
+            render: (p: Payment) => (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  requestDelete([p]);
+                }}
+                className="rounded-md p-1.5 text-gray-400 hover:bg-rose-50 hover:text-rose-600"
+                title="Delete payment (super admin)"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            ),
+          } as Column<Payment>,
+        ]
+      : []),
   ];
 
   const totalPages = payments?.totalPages ?? 1;
@@ -346,11 +503,39 @@ export default function PaymentsPage() {
           </div>
         ) : (
           <>
+            {isSuperAdmin && selectedIds.length > 0 && (
+              <div className="mx-5 mt-4 flex items-center justify-between rounded-lg border border-rose-200 bg-rose-50 px-4 py-2.5">
+                <p className="text-sm font-medium text-rose-700">
+                  {selectedIds.length} payment{selectedIds.length > 1 ? 's' : ''} selected
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedIds([])}
+                    className="btn-secondary px-3 py-1.5 text-xs"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    onClick={requestDeleteSelected}
+                    className="flex items-center gap-1.5 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-700"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> Delete selected
+                  </button>
+                </div>
+              </div>
+            )}
             <DataTable
               columns={columns}
               rows={payments?.items ?? []}
               keyField="id"
               emptyMessage="No payments match your filters."
+              onRowClick={(p) => setDetailPayment(p)}
+              selectable={isSuperAdmin}
+              selectedIds={selectedIds}
+              onToggleSelect={toggleSelect}
+              onToggleSelectAll={toggleSelectAll}
             />
             {payments && payments.total > 0 && (
               <div className="flex items-center justify-between border-t border-gray-100 px-5 py-3">
@@ -748,6 +933,193 @@ export default function PaymentsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Detail Modal — opened by clicking any row */}
+      {detailPayment && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setDetailPayment(null)}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-gray-100 px-6 py-4">
+              <div>
+                <h2 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
+                  <Eye className="h-5 w-5 text-brand" /> Payment Details
+                </h2>
+                <p className="font-mono text-xs text-gray-500">{detailPayment.reference}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDetailPayment(null)}
+                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="px-6 py-5">
+              {/* Amount + status highlight */}
+              <div className="mb-5 flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                <div>
+                  <p className="text-xs text-gray-500">Amount</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {formatNaira(Number(detailPayment.amount))}
+                  </p>
+                  <p className="text-xs text-gray-400">{detailPayment.currency}</p>
+                </div>
+                <StatusBadge status={detailPayment.status} />
+              </div>
+
+              <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+                <DetailRow
+                  label="Student"
+                  value={
+                    detailPayment.student
+                      ? `${detailPayment.student.firstName} ${detailPayment.student.lastName}`
+                      : 'Applicant (no student link)'
+                  }
+                />
+                <DetailRow label="Matric Number" value={detailPayment.student?.matricNumber ?? '—'} />
+                <DetailRow
+                  label="Description"
+                  value={
+                    detailPayment.feeStructure?.name ??
+                    (detailPayment.applicationId ? 'Acceptance Fee' : '—')
+                  }
+                />
+                <DetailRow
+                  label="Fee Type"
+                  value={detailPayment.feeStructure?.type ? titleCase(detailPayment.feeStructure.type) : '—'}
+                />
+                <DetailRow label="Method" value={methodLabel(detailPayment.gateway)} />
+                <DetailRow label="Gateway Reference" value={detailPayment.gatewayRef ?? '—'} mono />
+                <DetailRow label="Receipt Number" value={detailPayment.receipt?.receiptNumber ?? '—'} mono />
+                <DetailRow label="Date Paid" value={formatDateTime(detailPayment.paidAt)} />
+                <DetailRow label="Created" value={formatDateTime(detailPayment.createdAt)} />
+                <DetailRow label="Payment ID" value={detailPayment.id} mono />
+                {detailPayment.studentId && (
+                  <DetailRow label="Student ID" value={detailPayment.studentId} mono />
+                )}
+                {detailPayment.applicationId && (
+                  <DetailRow label="Application ID" value={detailPayment.applicationId} mono />
+                )}
+                {detailPayment.feeStructureId && (
+                  <DetailRow label="Fee Structure ID" value={detailPayment.feeStructureId} mono />
+                )}
+              </dl>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between gap-3 border-t border-gray-100 px-6 py-4">
+              {isSuperAdmin ? (
+                <button
+                  type="button"
+                  onClick={() => requestDelete([detailPayment])}
+                  className="flex items-center gap-2 rounded-lg border border-rose-200 px-4 py-2 text-sm font-medium text-rose-600 hover:bg-rose-50"
+                >
+                  <Trash2 className="h-4 w-4" /> Delete
+                </button>
+              ) : (
+                <span />
+              )}
+              <button
+                type="button"
+                onClick={() => setDetailPayment(null)}
+                className="btn-secondary px-4 py-2 text-sm"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Delete Confirmation Modal — single or bulk (SUPER_ADMIN only) */}
+      {deleteTarget && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          onClick={() => !bulkDeleting && setDeleteTarget(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex flex-col items-center px-6 pt-6 text-center">
+              <div className="rounded-full bg-rose-100 p-3">
+                <AlertTriangle className="h-6 w-6 text-rose-600" />
+              </div>
+              <h2 className="mt-3 text-lg font-semibold text-gray-900">
+                {deleteTarget.length === 1
+                  ? 'Delete this payment?'
+                  : `Delete ${deleteTarget.length} payments?`}
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                This permanently removes the transaction{deleteTarget.length > 1 ? 's' : ''},
+                associated receipt{deleteTarget.length > 1 ? 's' : ''} and ledger link
+                {deleteTarget.length > 1 ? 's' : ''}. This action cannot be undone.
+              </p>
+            </div>
+
+            <div className="mt-4 px-6">
+              <ul className="max-h-52 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200">
+                {deleteTarget.map((p) => (
+                  <li key={p.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="truncate font-mono text-xs text-gray-500">{p.reference}</p>
+                      <p className="truncate text-sm text-gray-700">
+                        {p.student ? `${p.student.firstName} ${p.student.lastName}` : 'Applicant'}
+                      </p>
+                    </div>
+                    <span className="whitespace-nowrap text-sm font-semibold text-gray-900">
+                      {formatNaira(Number(p.amount))}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {deleteTarget.length > 1 && (
+                <div className="mt-2 flex items-center justify-between text-sm">
+                  <span className="font-medium text-gray-500">Total</span>
+                  <span className="font-bold text-gray-900">
+                    {formatNaira(deleteTarget.reduce((sum, p) => sum + Number(p.amount), 0))}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-3 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                disabled={bulkDeleting}
+                className="btn-secondary px-4 py-2 text-sm disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                disabled={bulkDeleting}
+                className="flex items-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-50"
+              >
+                {bulkDeleting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Deleting…
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4" />
+                    {deleteTarget.length === 1 ? 'Delete' : `Delete ${deleteTarget.length}`}
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

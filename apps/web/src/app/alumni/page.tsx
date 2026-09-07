@@ -1,127 +1,15 @@
-"use client";
+import type { Metadata } from "next";
+import AlumniClient from "./AlumniClient";
+import { buildPageMetadata } from "@/lib/seo";
 
-import { useEffect, useState } from "react";
-import { Award, Briefcase, GraduationCap } from "lucide-react";
-import PageHeader from "@/components/PageHeader";
-import Section from "@/components/Section";
-import Card from "@/components/Card";
-import AlumniForm from "@/components/AlumniForm";
-import {
-  asArray,
-  defaultAlumniStories,
-  getBlockBody,
-  initialsOf,
-  useContentBlocks,
-} from "@/lib/content";
-import { alumniApi, type ApprovedAlumnus } from "@/lib/api";
+export const metadata: Metadata = buildPageMetadata({
+  title: "Alumni — Graduate Stories & Network",
+  description:
+    "Meet graduates of Goinze International School of Medical Health Science and Technology working in community health, public health, pharmacy and medical laboratory practice across Nigeria.",
+  path: "/alumni",
+  keywords: ["Goinze alumni", "community health graduates Nigeria", "health school alumni Abuja"],
+});
 
 export default function AlumniPage() {
-  const { blocks } = useContentBlocks();
-  const [approvedAlumni, setApprovedAlumni] = useState<ApprovedAlumnus[]>([]);
-
-  useEffect(() => {
-    alumniApi.listApproved().then(setApprovedAlumni).catch(() => {});
-  }, []);
-
-  const alumniStories = (() => {
-    const cms = asArray(getBlockBody(blocks, "alumni.stories"));
-    return cms.length > 0 ? cms : defaultAlumniStories;
-  })();
-
-  return (
-    <>
-      <PageHeader
-        breadcrumb="Alumni"
-        title="Alumni Network"
-        subtitle="Stay connected with Goinze and celebrate the achievements of our graduates."
-      />
-
-      {/* Success stories */}
-      <Section
-        eyebrow="Inspiration"
-        title="Alumni Success Stories"
-        subtitle="Our graduates are making an impact around the world."
-      >
-        <div className="grid gap-8 sm:grid-cols-2">
-          {alumniStories.map((story) => (
-            <Card key={story.name} hover className="p-8">
-              <div className="flex items-center gap-4">
-                <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand to-brand-light text-lg font-bold text-white">
-                  {story.initials ?? initialsOf(story.name ?? "")}
-                </span>
-                <div>
-                  <h3 className="text-lg font-bold text-slate-900">{story.name}</h3>
-                  {story.currentRole && (
-                    <p className="flex items-center gap-1.5 text-sm font-medium text-brand">
-                      <Briefcase className="h-3.5 w-3.5" />
-                      {story.currentRole}
-                    </p>
-                  )}
-                </div>
-              </div>
-              {story.story && (
-                <p className="mt-4 text-sm leading-relaxed text-slate-600">&ldquo;{story.story}&rdquo;</p>
-              )}
-              <div className="mt-5 flex flex-wrap gap-2 border-t border-slate-100 pt-4 text-xs">
-                {story.programme && (
-                  <span className="flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 font-semibold text-brand">
-                    <GraduationCap className="h-3.5 w-3.5" />
-                    {story.programme}
-                  </span>
-                )}
-                {story.graduationYear && (
-                  <span className="flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1 font-semibold text-red-700">
-                    <Award className="h-3.5 w-3.5" />
-                    Class of {story.graduationYear}
-                  </span>
-                )}
-              </div>
-            </Card>
-          ))}
-
-          {/* Approved alumni from database */}
-          {approvedAlumni.map((alumnus) => (
-            <Card key={alumnus.id} hover className="p-8">
-              <div className="flex items-center gap-4">
-                <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand to-brand-light text-lg font-bold text-white">
-                  {initialsOf(alumnus.name)}
-                </span>
-                <div>
-                  <h3 className="text-lg font-bold text-slate-900">{alumnus.name}</h3>
-                  {alumnus.currentRole && (
-                    <p className="flex items-center gap-1.5 text-sm font-medium text-brand">
-                      <Briefcase className="h-3.5 w-3.5" />
-                      {alumnus.currentRole}
-                    </p>
-                  )}
-                </div>
-              </div>
-              <div className="mt-5 flex flex-wrap gap-2 border-t border-slate-100 pt-4 text-xs">
-                <span className="flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 font-semibold text-brand">
-                  <GraduationCap className="h-3.5 w-3.5" />
-                  {alumnus.programme}
-                </span>
-                <span className="flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1 font-semibold text-red-700">
-                  <Award className="h-3.5 w-3.5" />
-                  Class of {alumnus.graduationYear}
-                </span>
-              </div>
-            </Card>
-          ))}
-        </div>
-      </Section>
-
-      {/* Registration form */}
-      <Section
-        className="bg-slate-50"
-        eyebrow="Reconnect"
-        title="Register as an Alumnus"
-        subtitle="Join the alumni network to receive updates, invitations and mentorship opportunities."
-      >
-        <Card className="mx-auto max-w-3xl p-8">
-          <AlumniForm />
-        </Card>
-      </Section>
-    </>
-  );
+  return <AlumniClient />;
 }

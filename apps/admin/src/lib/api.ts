@@ -351,6 +351,14 @@ export const financeApi = {
     reference?: string;
     narration?: string;
   }) => api.post<Payment>('/finance/payments/manual', data),
+  /** Permanently delete a payment record. SUPER_ADMIN only (backend-enforced). */
+  deletePayment: (id: string) => api.delete<Payment>(`/finance/payments/${id}`),
+  /** Permanently delete several payment records at once. SUPER_ADMIN only (backend-enforced). */
+  bulkDeletePayments: (ids: string[]) =>
+    api.post<{ requested: number; deleted: number; failed: { id: string; reason: string }[] }>(
+      '/finance/payments/bulk-delete',
+      { ids },
+    ),
 };
 
 // ---- Results (admin approval workflow) ----
