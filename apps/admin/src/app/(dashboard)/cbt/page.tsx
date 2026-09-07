@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import {
+  AlertTriangle,
   ArrowLeft,
   CheckSquare,
   Database,
@@ -12,6 +13,7 @@ import {
   Loader2,
   Plus,
   Square,
+  Trash2,
   Upload,
   X,
 } from 'lucide-react';
@@ -34,7 +36,31 @@ import {
   type ExamAccessCodeRecord,
 } from '@/lib/api';
 
+/* ── Helpers ── */
+
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]+)'));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function decodeRoleFromToken(token: string): string | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1]));
+    return payload.role ?? null;
+  } catch {
+    return null;
+  }
+}
+
 type Tab = 'exams' | 'banks' | 'recover';
+
+type DeleteTarget =
+  | { kind: 'exam'; id: string; label: string; detail?: string }
+  | { kind: 'bank'; id: string; label: string; detail?: string }
+  | { kind: 'question'; id: string; label: string; detail?: string };
 
 const QUESTION_TYPES = ['OBJECTIVE', 'MULTI_SELECT', 'TRUE_FALSE', 'ESSAY', 'FILL_BLANK'];
 
@@ -133,6 +159,13 @@ export default function CbtPage() {
   } | null>(null);
   const [recoverError, setRecoverError] = useState<string | null>(null);
 
+  // Role-gated deletion (SUPER_ADMIN / SCHOOL_ADMIN only).
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [isSchoolAdmin, setIsSchoolAdmin] = useState(false);
+  const canDelete = isSuperAdmin || isSchoolAdmin;
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     setError(null);
     try {
@@ -157,6 +190,14 @@ export default function CbtPage() {
     void load();
   }, [load]);
 
+  // Check user role on mount — only SUPER_ADMIN / SCHOOL_ADMIN may delete CBT records.
+  useEffect(() => {
+    const token = getCookie('access_token');
+    const role = token ? decodeRoleFromToken(token) : null;
+    setIsSuperAdmin(role === 'SUPER_ADMIN');
+    setIsSchoolAdmin(role === 'SCHOOL_ADMIN');
+  }, []);
+
   // Load questions when the selected bank changes in the add-questions modal.
   useEffect(() => {
     if (!addFor || !bankId) {
@@ -179,6 +220,42 @@ export default function CbtPage() {
 
   function courseCode(id: string | null): string {
     return courses.find((c) => c.id === id)?.code ?? '—';
+  }
+
+  // ---- Delete handlers (SUPER_ADMIN / SCHOOL_ADMIN) ----
+
+  /** Open the custom delete-confirmation modal for an exam / bank / question. */
+  function requestDelete(target: DeleteTarget) {
+    setDeleteTarget(target);
+  }
+
+  /** Perform the deletion after confirmation, then refresh the affected lists. */
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    const target = deleteTarget;
+    setDeletingId(target.id);
+    setError(null);
+    try {
+      if (target.kind === 'exam') {
+        await cbtApi.deleteExam(target.id);
+        if (attemptsFor === target.id) setAttemptsFor(null);
+        if (codesFor === target.id) setCodesFor(null);
+      } else if (target.kind === 'bank') {
+        await cbtApi.deleteBank(target.id);
+      } else {
+        await cbtApi.deleteQuestion(target.id);
+        if (manageBank) {
+          const qs = await cbtApi.bankQuestions(manageBank.id);
+          setManageQuestions(qs);
+        }
+      }
+      setDeleteTarget(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete record.');
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   // ---- Exam handlers ----
@@ -749,6 +826,20 @@ export default function CbtPage() {
               {codesFor === r.id ? 'Hide' : 'Codes'}
             </button>
           )}
+          {canDelete && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                requestDelete({ kind: 'exam', id: r.id, label: r.title, detail: r.course?.code ?? undefined });
+              }}
+              disabled={deletingId !== null}
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-gray-500 transition-colors hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+              title="Delete exam"
+            >
+              <Trash2 className="h-3.5 w-3.5" /> Delete
+            </button>
+          )}
         </div>
       ),
     },
@@ -829,13 +920,36 @@ export default function CbtPage() {
       header: '',
       className: 'text-right',
       render: (b) => (
-        <button
-          type="button"
-          onClick={() => openManage(b)}
-          className="btn-secondary px-2.5 py-1.5 text-xs"
-        >
-          <FileQuestion className="h-3.5 w-3.5" /> Manage Questions
-        </button>
+        <div className="flex items-center justify-end gap-1.5">
+          <button
+            type="button"
+            onClick={() => openManage(b)}
+            className="btn-secondary px-2.5 py-1.5 text-xs"
+          >
+            <FileQuestion className="h-3.5 w-3.5" /> Manage Questions
+          </button>
+          {canDelete && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                requestDelete({
+                  kind: 'bank',
+                  id: b.id,
+                  label: b.title,
+                  detail: b._count.questions
+                    ? `${b._count.questions} question${b._count.questions === 1 ? '' : 's'}`
+                    : undefined,
+                });
+              }}
+              disabled={deletingId !== null}
+              className="rounded-md p-1.5 text-gray-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+              title="Delete question bank"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
       ),
     },
   ];
@@ -1628,15 +1742,31 @@ export default function CbtPage() {
                         return (
                           <li
                             key={q.id}
-                            className="rounded-xl border border-gray-100 px-4 py-3"
+                            className="flex items-start justify-between gap-3 rounded-xl border border-gray-100 px-4 py-3"
                           >
-                            <p className="text-sm font-medium text-gray-800">{q.text}</p>
-                            <p className="mt-1 text-xs text-gray-400">
-                              {typeLabel(q.type)} · {q.marks} mark{q.marks === 1 ? '' : 's'} ·{' '}
-                              {q.difficulty ?? 'medium'}
-                              {q.options.length > 0 &&
-                                ` · ${q.options.length} options (${correct} correct)`}
-                            </p>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-gray-800">{q.text}</p>
+                              <p className="mt-1 text-xs text-gray-400">
+                                {typeLabel(q.type)} · {q.marks} mark{q.marks === 1 ? '' : 's'} ·{' '}
+                                {q.difficulty ?? 'medium'}
+                                {q.options.length > 0 &&
+                                  ` · ${q.options.length} options (${correct} correct)`}
+                              </p>
+                            </div>
+                            {canDelete && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  requestDelete({ kind: 'question', id: q.id, label: q.text, detail: typeLabel(q.type) });
+                                }}
+                                disabled={deletingId !== null}
+                                className="shrink-0 rounded-md p-1.5 text-gray-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+                                title="Delete question"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
                           </li>
                         );
                       })}
@@ -1904,6 +2034,72 @@ export default function CbtPage() {
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation modal (SUPER_ADMIN / SCHOOL_ADMIN) */}
+      {deleteTarget && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          onClick={() => deletingId === null && setDeleteTarget(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex flex-col items-center px-6 pt-6 text-center">
+              <div className="rounded-full bg-rose-100 p-3">
+                <AlertTriangle className="h-6 w-6 text-rose-600" />
+              </div>
+              <h2 className="mt-3 text-lg font-semibold text-gray-900">
+                {deleteTarget.kind === 'exam'
+                  ? 'Delete this exam?'
+                  : deleteTarget.kind === 'bank'
+                    ? 'Delete this question bank?'
+                    : 'Delete this question?'}
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                {deleteTarget.kind === 'exam'
+                  ? 'This permanently removes the exam along with its questions, attempts and access codes. This action cannot be undone.'
+                  : deleteTarget.kind === 'bank'
+                    ? 'This permanently removes the bank and every question inside it. This action cannot be undone.'
+                    : 'This permanently removes the question and its options. This action cannot be undone.'}
+              </p>
+              <div className="mt-3 w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-left">
+                <p className="truncate text-sm font-medium text-gray-800">{deleteTarget.label}</p>
+                {deleteTarget.detail && (
+                  <p className="truncate text-xs text-gray-500">{deleteTarget.detail}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-3 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                disabled={deletingId !== null}
+                className="btn-secondary px-4 py-2 text-sm disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                disabled={deletingId !== null}
+                className="flex items-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-50"
+              >
+                {deletingId !== null ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Deleting…
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4" /> Delete
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

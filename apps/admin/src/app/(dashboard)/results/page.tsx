@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   ChevronRight,
   Globe,
@@ -10,6 +11,7 @@ import {
   Lock,
   Pencil,
   ShieldCheck,
+  Trash2,
   X,
 } from 'lucide-react';
 import PageHeader from '@/components/PageHeader';
@@ -21,6 +23,25 @@ import {
   type CourseResultSummary,
 } from '@/lib/api';
 import { cn } from '@/lib/utils';
+
+/* ── Helpers ── */
+
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]+)'));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function decodeRoleFromToken(token: string): string | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1]));
+    return payload.role ?? null;
+  } catch {
+    return null;
+  }
+}
 
 function gradeClass(grade: string | null): string {
   switch (grade) {
@@ -86,6 +107,21 @@ export default function ResultsPage() {
   const [editCa, setEditCa] = useState('');
   const [editExam, setEditExam] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
+
+  // Role-gated deletion (SUPER_ADMIN / SCHOOL_ADMIN only).
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [isSchoolAdmin, setIsSchoolAdmin] = useState(false);
+  const canDelete = isSuperAdmin || isSchoolAdmin;
+  const [deleteTarget, setDeleteTarget] = useState<AdminResultRow | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Check user role on mount — only SUPER_ADMIN / SCHOOL_ADMIN may delete results.
+  useEffect(() => {
+    const token = getCookie('access_token');
+    const role = token ? decodeRoleFromToken(token) : null;
+    setIsSuperAdmin(role === 'SUPER_ADMIN');
+    setIsSchoolAdmin(role === 'SCHOOL_ADMIN');
+  }, []);
 
   const loadSummaries = useCallback(async (keepSelection = true) => {
     setError(null);
@@ -234,6 +270,37 @@ export default function ResultsPage() {
       setError(err instanceof Error ? err.message : 'Failed to lock.');
     } finally {
       setBusy(null);
+    }
+  }
+
+  /** Open the custom delete-confirmation modal for a result (SUPER_ADMIN / SCHOOL_ADMIN). */
+  function requestDelete(row: AdminResultRow) {
+    setDeleteTarget(row);
+  }
+
+  /** Perform the deletion after confirmation. */
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    const id = deleteTarget.id;
+    const name = deleteTarget.studentName;
+    setDeletingId(id);
+    setError(null);
+    setNotice(null);
+    try {
+      await resultsApi.deleteResult(id);
+      setNotice(`Result for ${name} deleted.`);
+      setDeleteTarget(null);
+      setSelectedRows((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      await loadSummaries(true);
+      if (selectedId) loadRows(selectedId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete result.');
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -477,6 +544,17 @@ export default function ResultsPage() {
                                 {busy === `lock-${r.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Lock className="h-3.5 w-3.5" />}
                               </button>
                             )}
+                            {canDelete && (
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); requestDelete(r); }}
+                                disabled={deletingId !== null}
+                                className="rounded p-1.5 text-gray-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+                                title="Delete result"
+                              >
+                                {deletingId === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -541,6 +619,59 @@ export default function ResultsPage() {
               >
                 {savingEdit && <Loader2 className="h-4 w-4 animate-spin" />}
                 Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation modal (SUPER_ADMIN / SCHOOL_ADMIN) */}
+      {deleteTarget && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          onClick={() => deletingId === null && setDeleteTarget(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex flex-col items-center px-6 pt-6 text-center">
+              <div className="rounded-full bg-rose-100 p-3">
+                <AlertTriangle className="h-6 w-6 text-rose-600" />
+              </div>
+              <h2 className="mt-3 text-lg font-semibold text-gray-900">Delete this result?</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                This permanently removes the result entry for{' '}
+                <strong className="text-gray-700">{deleteTarget.studentName || 'this student'}</strong>{' '}
+                ({deleteTarget.matricNo ?? 'N/A'})
+                {selected ? ` in ${selected.code} — ${selected.title}` : ''}. This action cannot be undone.
+              </p>
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-3 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                disabled={deletingId !== null}
+                className="btn-secondary px-4 py-2 text-sm disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                disabled={deletingId !== null}
+                className="flex items-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-50"
+              >
+                {deletingId !== null ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Deleting…
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4" /> Delete
+                  </>
+                )}
               </button>
             </div>
           </div>

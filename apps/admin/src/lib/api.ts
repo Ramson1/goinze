@@ -425,6 +425,8 @@ export const resultsApi = {
     api.patch<AdminResultRow>(`/results/${id}/lock`),
   publishResult: (id: string) =>
     api.patch<AdminResultRow>(`/results/${id}/publish`),
+  deleteResult: (id: string) =>
+    api.delete<AdminResultRow>(`/results/${id}`),
 };
 
 // ---- Students ----
@@ -1092,6 +1094,10 @@ export const attendanceApi = {
       EXCUSED: number;
       attendanceRate: number;
     }>(`/attendance/report/${encodeURIComponent(studentId)}`),
+  deleteSession: (courseId: string, date: string) =>
+    api.delete<{ deleted: number }>(
+      `/attendance/session/${encodeURIComponent(courseId)}/${encodeURIComponent(date)}`,
+    ),
 };
 
 // ---- CBT ----
@@ -1205,6 +1211,12 @@ export const cbtApi = {
     api.post<{ count: number }>(`/cbt/exams/${examId}/questions`, { questionIds }),
   removeExamQuestions: (examId: string, questionIds: string[]) =>
     api.delete<{ count: number }>(`/cbt/exams/${examId}/questions`, { questionIds }),
+  deleteExam: (id: string) =>
+    api.delete<CbtExamRecord>(`/cbt/exams/${id}`),
+  deleteBank: (bankId: string) =>
+    api.delete<CbtBankRecord>(`/cbt/question-banks/${bankId}`),
+  deleteQuestion: (id: string) =>
+    api.delete<CbtQuestionRecord>(`/cbt/questions/${id}`),
   examAttempts: (examId: string) =>
     api.get<CbtAttemptRecord[]>(`/cbt/exams/${examId}/attempts`),
   generateCodes: (examId: string) =>

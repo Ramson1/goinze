@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
+  AlertTriangle,
   ChevronDown,
   ChevronUp,
   ClipboardList,
@@ -10,6 +11,7 @@ import {
   Eye,
   Loader2,
   Search,
+  Trash2,
   Users,
   X,
 } from 'lucide-react';
@@ -30,6 +32,28 @@ import {
 // ---------------------------------------------------------------------------
 
 type Tab = 'sessions' | 'lecturers';
+
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]+)'));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function decodeRoleFromToken(token: string): string | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(atob(parts[1]));
+    return payload.role ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Stable identity for an attendance session (course + day). */
+function sessionKey(courseId: string, date: string): string {
+  return `${courseId}|${date}`;
+}
 
 function formatDate(d: string) {
   const dt = new Date(d);
@@ -102,6 +126,29 @@ export default function AttendancePage() {
   // Lecturers tab
   const [expandedLecturer, setExpandedLecturer] = useState<string | null>(null);
   const [lecturerSearch, setLecturerSearch] = useState('');
+
+  // Success notice
+  const [notice, setNotice] = useState<string | null>(null);
+
+  // Role-gated deletion (SUPER_ADMIN / SCHOOL_ADMIN only).
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [isSchoolAdmin, setIsSchoolAdmin] = useState(false);
+  const canDelete = isSuperAdmin || isSchoolAdmin;
+  const [deleteTarget, setDeleteTarget] = useState<{
+    courseId: string;
+    date: string;
+    courseCode: string;
+    courseTitle: string;
+  } | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Check user role on mount — only SUPER_ADMIN / SCHOOL_ADMIN may delete sessions.
+  useEffect(() => {
+    const token = getCookie('access_token');
+    const role = token ? decodeRoleFromToken(token) : null;
+    setIsSuperAdmin(role === 'SUPER_ADMIN');
+    setIsSchoolAdmin(role === 'SCHOOL_ADMIN');
+  }, []);
 
   // ---- Data fetching ----
 
@@ -177,6 +224,46 @@ export default function AttendancePage() {
     setModalSession(null);
     setModalRecords([]);
   }, []);
+
+  // ---- Session deletion (SUPER_ADMIN / SCHOOL_ADMIN) ----
+
+  /** Open the custom delete-confirmation modal for an attendance session. */
+  const requestDeleteSession = useCallback((s: AttendanceSessionSummary) => {
+    setDeleteTarget({
+      courseId: s.courseId,
+      date: s.date,
+      courseCode: s.courseCode,
+      courseTitle: s.courseTitle,
+    });
+  }, []);
+
+  /** Perform the deletion after confirmation, then refresh the session list. */
+  const confirmDeleteSession = useCallback(async () => {
+    if (!deleteTarget) return;
+    const key = sessionKey(deleteTarget.courseId, deleteTarget.date);
+    setDeletingId(key);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await attendanceApi.deleteSession(deleteTarget.courseId, deleteTarget.date);
+      setNotice(
+        `Deleted ${res.deleted} attendance record${res.deleted === 1 ? '' : 's'} for ${deleteTarget.courseCode}.`,
+      );
+      if (
+        modalSession &&
+        modalSession.courseId === deleteTarget.courseId &&
+        modalSession.date === deleteTarget.date
+      ) {
+        closeModal();
+      }
+      setDeleteTarget(null);
+      await fetchSessions(filterCourseId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete attendance session.');
+    } finally {
+      setDeletingId(null);
+    }
+  }, [deleteTarget, modalSession, closeModal, fetchSessions, filterCourseId]);
 
   // ---- Filtered sessions ----
 
@@ -304,6 +391,12 @@ export default function AttendancePage() {
           <span>{error}</span>
         </div>
       )}
+      {notice && (
+        <div className="mb-5 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+          <ClipboardList className="h-4 w-4" />
+          {notice}
+        </div>
+      )}
 
       {/* Tab buttons */}
       <div className="mb-5 flex gap-1 rounded-lg border border-gray-200 bg-gray-50 p-1">
@@ -344,6 +437,9 @@ export default function AttendancePage() {
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
               onViewSession={openSessionDetail}
+              canDelete={canDelete}
+              deletingKey={deletingId}
+              onDeleteSession={requestDeleteSession}
             />
           )}
           {tab === 'lecturers' && (
@@ -368,6 +464,58 @@ export default function AttendancePage() {
           onClose={closeModal}
         />
       )}
+
+      {/* Delete confirmation modal (SUPER_ADMIN / SCHOOL_ADMIN) */}
+      {deleteTarget && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          onClick={() => deletingId === null && setDeleteTarget(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex flex-col items-center px-6 pt-6 text-center">
+              <div className="rounded-full bg-rose-100 p-3">
+                <AlertTriangle className="h-6 w-6 text-rose-600" />
+              </div>
+              <h2 className="mt-3 text-lg font-semibold text-gray-900">Delete this attendance session?</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                This permanently removes every attendance record for{' '}
+                <strong className="text-gray-700">{deleteTarget.courseCode}</strong> — {deleteTarget.courseTitle} on{' '}
+                <strong className="text-gray-700">{formatDate(deleteTarget.date)}</strong>. This action cannot be undone.
+              </p>
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-3 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                disabled={deletingId !== null}
+                className="btn-secondary px-4 py-2 text-sm disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteSession}
+                disabled={deletingId !== null}
+                className="flex items-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-50"
+              >
+                {deletingId !== null ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Deleting…
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-4 w-4" /> Delete
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -384,6 +532,9 @@ function SessionsTab({
   searchQuery,
   onSearchChange,
   onViewSession,
+  canDelete,
+  deletingKey,
+  onDeleteSession,
 }: {
   sessions: AttendanceSessionSummary[];
   courses: CourseRecord[];
@@ -392,6 +543,9 @@ function SessionsTab({
   searchQuery: string;
   onSearchChange: (v: string) => void;
   onViewSession: (courseId: string, date: string, courseCode: string, courseTitle: string) => void;
+  canDelete: boolean;
+  deletingKey: string | null;
+  onDeleteSession: (s: AttendanceSessionSummary) => void;
 }) {
   return (
     <Card title="Attendance Sessions" subtitle={`${sessions.length} session${sessions.length === 1 ? '' : 's'} recorded`}>
@@ -489,14 +643,31 @@ function SessionsTab({
                       </span>
                     </td>
                     <td className="px-5 py-3 text-center">
-                      <button
-                        type="button"
-                        onClick={() => onViewSession(s.courseId, s.date, s.courseCode, s.courseTitle)}
-                        className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 transition hover:bg-blue-100"
-                        title="View session details"
-                      >
-                        <Eye className="h-3.5 w-3.5" /> View
-                      </button>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => onViewSession(s.courseId, s.date, s.courseCode, s.courseTitle)}
+                          className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 transition hover:bg-blue-100"
+                          title="View session details"
+                        >
+                          <Eye className="h-3.5 w-3.5" /> View
+                        </button>
+                        {canDelete && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); onDeleteSession(s); }}
+                            disabled={deletingKey !== null}
+                            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-gray-400 transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+                            title="Delete session"
+                          >
+                            {deletingKey === sessionKey(s.courseId, s.date) ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
