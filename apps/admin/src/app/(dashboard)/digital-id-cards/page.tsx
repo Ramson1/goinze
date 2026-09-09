@@ -222,7 +222,9 @@ function IdCardBack({
     school?.address ||
     'Along Verita University Road Zuma 1, Opposite ECAW Church, Bwari Area Council, Abuja, Nigeria';
   const schoolPhone = school?.phone || '0810 557 6617, 0805 817 6193, 0816 512 9613';
-  const schoolEmail = school?.email || 'ishayadan5@gmail.com';
+  // Fixed public contact email shown on the card back, regardless of the school
+  // profile's email, per the institution's request.
+  const schoolEmail = 'ishayadan5@gmail.com';
 
   // Details moved off the front to free up space for the portrait photo + QR.
   const department = person?.department?.name ?? '—';
