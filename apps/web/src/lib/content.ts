@@ -150,6 +150,12 @@ export const defaultTestimonials = [
 
 export const defaultManagementTeam = [
   {
+    name: "Dr Mohamed Kabir Buda",
+    role: "Chief Executive Officer (CEO)",
+    photo: "/staffs/ceo-dr-mohamed-kabir-buda.jpeg",
+    bio: "Provides overall strategic direction and executive leadership for the college and its primary-health-care mission.",
+  },
+  {
     name: "Mr Habila Audu",
     role: "Provost",
     photo: "/staffs/provost.jpeg",
@@ -172,6 +178,24 @@ export const defaultManagementTeam = [
     role: "Legal Adviser",
     photo: "/staffs/legal-adviser.jpeg",
     bio: "Advises the institution on legal and regulatory matters and safeguards the interests of the school.",
+  },
+  {
+    name: "Mr John Jeremiah",
+    role: "Examination Officer",
+    photo: "/staffs/examination-officer-john-jeremiah.jpeg",
+    bio: "Oversees examinations and assessments, safeguarding the integrity of the college's examination processes and records.",
+  },
+  {
+    name: "Mrs Rcph Jibril Husseinat Ramat",
+    role: "School Accountant",
+    photo: "/staffs/accountant-jibril-husseinat-ramat.jpeg",
+    bio: "Manages the school's accounts, billing and financial records with transparency and accuracy.",
+  },
+  {
+    name: "Rchp Victory Chinemerem Maurice",
+    role: "School Secretary",
+    photo: "/staffs/secretary-victory-chinemerem-maurice.jpeg",
+    bio: "Coordinates the school's correspondence, official records and communications, and supports the day-to-day running of the registry office.",
   },
 ];
 

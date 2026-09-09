@@ -97,6 +97,7 @@ function IdCardFront({
   mode,
   cardNo,
   expiry,
+  verificationCode,
   photoUrl,
   school,
   innerRef,
@@ -105,6 +106,7 @@ function IdCardFront({
   mode: CardMode;
   cardNo: string;
   expiry: string;
+  verificationCode: string;
   photoUrl: string | null;
   school: SchoolProfile | null;
   innerRef?: React.Ref<HTMLDivElement>;
@@ -120,84 +122,73 @@ function IdCardFront({
     ? (student?.matricNumber ?? student?.regNumber ?? 'Not assigned')
     : (staff?.staffNumber ?? staff?.email ?? 'Not assigned');
 
-  const dept = (student?.department?.name ?? staff?.department?.name ?? '—');
   const role = isStudent
     ? 'Student'
     : (staff?.designation ?? (staff?.staffCategory === 'ACADEMIC' ? 'Academic Staff' : staff?.staffCategory === 'NON_ACADEMIC' ? 'Non-Academic Staff' : 'Staff'));
-  const subInfo = isStudent
-    ? { label: 'Level', value: student?.currentLevel ? `${student.currentLevel} Level` : '—' }
-    : { label: 'Category', value: staff?.staffCategory === 'ACADEMIC' ? 'Academic Staff' : staff?.staffCategory === 'NON_ACADEMIC' ? 'Non-Academic Staff' : staff?.isLecturer ? 'Academic Staff' : 'Staff' };
+
+  // QR verification payload — the QR code now lives on the FRONT of the card.
+  const qrData = buildVerificationPayload({
+    verificationCode,
+    cardNumber: cardNo,
+    personId: person.id ?? '',
+    firstName: person.firstName,
+    lastName: person.lastName,
+    type: isStudent ? 'STUDENT' : 'STAFF',
+  });
 
   return (
-    <div ref={innerRef} data-card className="flex h-[213px] w-[340px] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg" style={{ fontFamily: 'system-ui, sans-serif' }}>
+    <div ref={innerRef} data-card className="flex h-[340px] w-[213px] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg" style={{ fontFamily: 'system-ui, sans-serif' }}>
       {/* Header */}
-      <div className={cn('flex items-center gap-2 bg-gradient-to-r px-3 pt-1 pb-2 text-white', accent)}>
-        {(school?.logoUrl || '/logo.png') ? (
-          <img src={school?.logoUrl || '/logo.png'} alt="" className="mt-auto mb-auto h-7 w-7 shrink-0 rounded-full object-contain bg-white/90 p-0.5 ring-1 ring-white/30" />
-        ) : (
-          <ShieldCheck className="mt-auto mb-auto h-5 w-5 shrink-0 text-white/80" />
-        )}
-        <div className="mt-auto mb-auto min-w-0 flex-1">
-          <p className="text-[9px] font-bold leading-[1.2]">Goinze International School</p>
-          <p className="text-[7px] font-semibold leading-[1.2] opacity-90">of Medical Health Science and Technology</p>
+      <div className={cn('flex items-center gap-1.5 bg-gradient-to-r px-2 py-1.5 text-white', accent)}>
+        <img src={school?.logoUrl || '/logo.png'} alt="" className="h-7 w-7 shrink-0 rounded-full object-contain bg-white/90 p-0.5 ring-1 ring-white/30" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[8px] font-bold leading-[1.15]">Goinze International School</p>
+          <p className="text-[6px] font-semibold leading-[1.15] opacity-90">of Medical Health Science and Technology</p>
         </div>
-        <span className={cn('mt-auto mb-auto inline-flex items-center justify-center shrink-0 rounded-full px-2 py-[3px] text-[7px] font-bold uppercase tracking-wider leading-none', badgeBg)}>
+      </div>
+
+      {/* Type badge */}
+      <div className="flex justify-center">
+        {/* Preview: inline-block + explicit line-height centers the text in the browser.
+            data-badge marks this element so exportPdf() can add PDF-only padding-bottom,
+            extending the amber background downward to catch the text that html2canvas
+            paints slightly too low. The preview CSS itself is never modified. */}
+        <span
+          data-badge
+          className={cn('inline-block rounded-b-md px-2.5 text-[7px] font-bold uppercase tracking-wider', badgeBg)}
+          style={{ lineHeight: '14px' }}
+        >
           {isStudent ? 'Student' : 'Staff'} ID
         </span>
       </div>
 
       {/* Body */}
-      <div className="flex flex-1 gap-3 px-3 py-2">
+      <div className="flex flex-1 flex-col items-center px-2.5 pt-2 pb-1">
         {/* Photo */}
         {photoUrl ? (
-          <img src={photoUrl} alt="" className="h-[64px] w-[52px] shrink-0 rounded-lg object-cover ring-1 ring-gray-200" />
+          <img src={photoUrl} alt="" className="h-[86px] w-[70px] shrink-0 rounded-lg object-cover ring-1 ring-gray-200" />
         ) : (
-          <span className={cn('flex h-[64px] w-[52px] shrink-0 items-center justify-center rounded-lg text-lg font-bold ring-1', avatarBg)}>
+          <span className={cn('flex h-[86px] w-[70px] shrink-0 items-center justify-center rounded-lg text-xl font-bold ring-1', avatarBg)}>
             {initialsOf(person)}
           </span>
         )}
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-bold text-gray-900 leading-tight break-words">{fullName(person)}</p>
-          <p className="font-mono text-[9px] text-gray-500 mt-0.5 break-all">{idNumber}</p>
-          <dl className="mt-1.5 space-y-1 text-[9px]">
-            {isStudent && (
-              <div className="flex gap-2">
-                <dt className="w-12 shrink-0 text-gray-400">Role</dt>
-                <dd className="min-w-0 font-semibold text-gray-800 break-words">{role}</dd>
-              </div>
-            )}
-            <div className="flex gap-2">
-              <dt className="w-12 shrink-0 text-gray-400">Department</dt>
-              <dd className="min-w-0 font-medium text-gray-700 break-words">{dept}</dd>
-            </div>
-            <div className="flex gap-2">
-              <dt className="w-12 shrink-0 text-gray-400">{subInfo.label}</dt>
-              <dd className="font-medium text-gray-700">{subInfo.value}</dd>
-            </div>
-            <div className="flex gap-2">
-              <dt className="w-12 shrink-0 text-gray-400">Expires</dt>
-              <dd className="font-medium text-gray-700">{expiry}</dd>
-            </div>
-          </dl>
+
+        {/* Name, role & ID number */}
+        <p className="mt-1.5 text-center text-[11px] font-bold leading-tight text-gray-900 break-words">{fullName(person)}</p>
+        <p className="text-center text-[8px] font-semibold leading-tight text-gray-600">{role}</p>
+        <p className="mt-0.5 text-center font-mono text-[8px] text-gray-500 break-all">{idNumber}</p>
+
+        {/* QR code (moved to the front for scanning) */}
+        <div className="mt-1.5 flex items-center justify-center rounded-lg border border-gray-200 bg-white p-1">
+          <QRCodeSVG value={qrData} size={76} level="Q" includeMargin={false} />
         </div>
+        <p className="mt-0.5 text-[6px] uppercase tracking-wide text-gray-400">Scan to verify</p>
       </div>
 
-      {/* Footer with barcode */}
-      <div className="flex items-center justify-center border-t border-dashed border-gray-200 px-3 py-1.5">
-        <div className="overflow-hidden text-center">
-          <p className="font-mono text-[8px] text-gray-500">{cardNo}</p>
-          <div className="mt-0.5 flex justify-center">
-            <Barcode
-              value={cardNo}
-              format="CODE128"
-              height={18}
-              width={1.1}
-              margin={0}
-              fontSize={0}
-              displayValue={false}
-            />
-          </div>
-        </div>
+      {/* Footer: expiry */}
+      <div className="flex items-center justify-between border-t border-dashed border-gray-200 px-2.5 py-1">
+        <span className="text-[6px] uppercase tracking-wide text-gray-400">Expires</span>
+        <span className="text-[8px] font-semibold text-gray-700">{expiry}</span>
       </div>
     </div>
   );
@@ -214,7 +205,7 @@ function IdCardBack({
   school,
   innerRef,
 }: {
-  person: { id?: string; firstName: string; lastName: string };
+  person: any;
   mode: CardMode;
   cardNo: string;
   verificationCode: string;
@@ -225,55 +216,100 @@ function IdCardBack({
   const isStudent = mode === 'student';
   const accent = isStudent ? 'from-blue-900 to-blue-700' : 'from-emerald-900 to-emerald-700';
 
-  // Build QR payload with full user verification data
-  const qrData = buildVerificationPayload({
-    verificationCode,
-    cardNumber: cardNo,
-    personId: person.id ?? '',
-    firstName: person.firstName,
-    lastName: person.lastName,
-    type: isStudent ? 'STUDENT' : 'STAFF',
-  });
+  // School details (fall back to the institution's known contacts).
+  const schoolName = school?.name || 'Goinze International School';
+  const schoolAddress =
+    school?.address ||
+    'Along Verita University Road Zuma 1, Opposite ECAW Church, Bwari Area Council, Abuja, Nigeria';
+  const schoolPhone = school?.phone || '0810 557 6617, 0805 817 6193, 0816 512 9613';
+  const schoolEmail = school?.email || 'ishayadan5@gmail.com';
+
+  // Details moved off the front to free up space for the portrait photo + QR.
+  const department = person?.department?.name ?? '—';
+  const dob = person?.dateOfBirth
+    ? new Date(person.dateOfBirth).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+    : '—';
+  const details: { label: string; value: string }[] = isStudent
+    ? [
+        { label: 'Department', value: department },
+        { label: 'Level', value: person?.currentLevel ? String(person.currentLevel) : '—' },
+        { label: 'Gender', value: person?.gender ?? '—' },
+        { label: 'Date of Birth', value: dob },
+      ]
+    : [
+        { label: 'Department', value: department },
+        { label: 'Designation', value: person?.designation ?? '—' },
+        { label: 'Gender', value: person?.gender ?? '—' },
+        {
+          label: 'Category',
+          value:
+            person?.staffCategory === 'ACADEMIC'
+              ? 'Academic'
+              : person?.staffCategory === 'NON_ACADEMIC'
+                ? 'Non-Academic'
+                : '—',
+        },
+      ];
 
   return (
-    <div ref={innerRef} data-card className="flex h-[213px] w-[340px] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg" style={{ fontFamily: 'system-ui, sans-serif' }}>
+    <div ref={innerRef} data-card className="flex h-[340px] w-[213px] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg" style={{ fontFamily: 'system-ui, sans-serif' }}>
       {/* Header */}
-      <div className={cn('flex items-center justify-center bg-gradient-to-r px-3 py-1.5 text-white', accent)}>
-        {(school?.logoUrl || '/logo.png') ? (
-          <img src={school?.logoUrl || '/logo.png'} alt="" className="h-6 w-6 rounded-full object-contain bg-white/90 p-0.5 mr-1.5 ring-1 ring-white/30" />
-        ) : null}
+      <div className={cn('flex items-center gap-1.5 bg-gradient-to-r px-2 py-1.5 text-white', accent)}>
+        <img src={school?.logoUrl || '/logo.png'} alt="" className="h-7 w-7 shrink-0 rounded-full object-contain bg-white/90 p-0.5 ring-1 ring-white/30" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[8px] font-bold leading-[1.15]">Goinze International School</p>
+          <p className="text-[6px] font-semibold leading-[1.15] opacity-90">of Medical Health Science and Technology</p>
+        </div>
       </div>
 
-      {/* Body */}
-      <div className="flex flex-1 flex-col items-center justify-between px-3 py-2">
-        {/* Large QR code for scanning + verification code beside it */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center justify-center rounded-lg border border-gray-200 bg-white p-1">
-            <QRCodeSVG
-              value={qrData}
-              size={100}
-              level="Q"
-              includeMargin={false}
-            />
+      {/* Body — three groups spread across the portrait card */}
+      <div className="flex flex-1 flex-col justify-between px-2.5 py-2">
+        {/* Card + personal details */}
+        <div>
+          <div className="rounded-md bg-gray-50 px-2 py-1 ring-1 ring-gray-100">
+            <div className="flex items-start gap-1">
+              <span className="w-[56px] shrink-0 text-[6px] uppercase leading-tight tracking-wide text-gray-400">Card No</span>
+              <span className="min-w-0 flex-1 break-all font-mono text-[7px] font-semibold leading-tight text-gray-700">{cardNo}</span>
+            </div>
+            <div className="mt-[3px] flex items-start gap-1">
+              <span className="w-[56px] shrink-0 text-[6px] uppercase leading-tight tracking-wide text-gray-400">Verification</span>
+              <span className="min-w-0 flex-1 break-all font-mono text-[7px] font-semibold leading-tight text-gray-700">{verificationCode}</span>
+            </div>
+            <div className="mt-[3px] flex items-start gap-1">
+              <span className="w-[56px] shrink-0 text-[6px] uppercase leading-tight tracking-wide text-gray-400">Expires</span>
+              <span className="min-w-0 flex-1 text-[7px] font-semibold leading-tight text-gray-700">{expiry}</span>
+            </div>
           </div>
-          <div className="text-left">
-            <p className="text-[6px] uppercase tracking-wide text-gray-400">Verification Code</p>
-            <p className="font-mono text-[11px] font-bold text-gray-800">{verificationCode}</p>
+
+          <div className="mt-1.5 space-y-[3px]">
+            {details.map((d) => (
+              <div key={d.label} className="flex items-start gap-1">
+                <span className="w-[56px] shrink-0 text-[6px] uppercase leading-tight tracking-wide text-gray-400">{d.label}</span>
+                <span className="min-w-0 flex-1 break-words text-[7px] font-medium leading-tight text-gray-700">{d.value}</span>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Contact info - full width */}
-        <div className="w-full border-t border-dashed border-gray-200 pt-1">
+        {/* Return-to / school details */}
+        <div className="border-t border-dashed border-gray-200 pt-1">
           <p className="text-center text-[6px] font-semibold uppercase tracking-wide text-gray-400">If found, please return to:</p>
-          <p className="text-center text-[8px] font-bold text-gray-800 leading-tight">Goinze International School</p>
-          <p className="text-center text-[6px] font-medium text-gray-600 leading-tight">of Medical Health Science and Technology</p>
-          <div className="mt-0.5 flex justify-center gap-3">
-            <p className="text-[6px] text-gray-500">Tel: 08105576617, 08058176193, 09163316143</p>
-            <p className="text-[6px] text-gray-500">Email: ishayadan5@gmail.com</p>
-          </div>
-          <p className="mt-0.5 text-center text-[6px] leading-tight text-gray-400">
+          <p className="text-center text-[7.5px] font-bold leading-tight text-gray-800">{schoolName}</p>
+          <p className="mt-[2px] text-center text-[6px] leading-tight text-gray-500">{schoolAddress}</p>
+          <p className="text-center text-[6px] leading-tight text-gray-500">Tel: {schoolPhone}</p>
+          <p className="text-center text-[6px] leading-tight text-gray-500">Email: {schoolEmail}</p>
+          <p className="mt-[2px] text-center text-[5.5px] leading-tight text-gray-400">
             This card is the property of the school. Unauthorized use is prohibited.
           </p>
+        </div>
+
+        {/* Developer credit — Rhema Expert Solutions */}
+        <div className="flex items-center justify-center gap-1.5 border-t border-gray-100 pt-1">
+          <img src="/rhema.png" alt="Rhema Expert Solutions" className="h-5 w-5 shrink-0 rounded-sm object-contain" />
+          <div className="leading-tight">
+            <p className="text-[6px] font-bold text-gray-600">Developed by Rhema Expert Solutions</p>
+            <p className="text-[5.5px] text-gray-400">rhemaexpertsolutions@gmail.com</p>
+          </div>
         </div>
       </div>
     </div>
@@ -323,7 +359,7 @@ function PreviewModal({
           <div className="flex flex-col items-center gap-6">
             <div>
               <p className="mb-2 text-center text-xs font-semibold uppercase tracking-wide text-gray-400">Front</p>
-              <IdCardFront person={person} mode={mode} cardNo={cardNo} expiry={expiry} photoUrl={photoUrl} school={school} />
+              <IdCardFront person={person} mode={mode} cardNo={cardNo} expiry={expiry} verificationCode={verificationCode} photoUrl={photoUrl} school={school} />
             </div>
             <div>
               <p className="mb-2 text-center text-xs font-semibold uppercase tracking-wide text-gray-400">Back</p>
@@ -539,10 +575,10 @@ export default function DigitalIdCardsPage() {
       const html2canvas = (await import('html2canvas')).default;
       const { jsPDF } = await import('jspdf');
 
-      // CRDF credit card size in mm: 85.6 x 53.98
-      const cardW = 85.6;
-      const cardH = 53.98;
-      const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [cardW, cardH] });
+      // CR80 ID card in portrait: 53.98mm wide x 85.6mm tall
+      const cardW = 53.98;
+      const cardH = 85.6;
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [cardW, cardH] });
 
       const container = pdfAreaRef.current;
       if (!container) throw new Error('PDF render area not found');
@@ -550,6 +586,13 @@ export default function DigitalIdCardsPage() {
       // Temporarily remove overflow-hidden so html2canvas captures all content
       const cards = container.querySelectorAll<HTMLElement>('[data-card]');
       cards.forEach((el) => { el.style.overflow = 'visible'; });
+
+      // PDF-only fix: html2canvas paints the type-badge text lower than the browser
+      // does, so on the exported card it drops below the amber background. Extend each
+      // badge's background downward for the capture only — the on-screen preview keeps
+      // its original CSS (these instances live solely in the hidden PDF render area).
+      const badges = container.querySelectorAll<HTMLElement>('[data-badge]');
+      badges.forEach((el) => { el.style.paddingBottom = '5px'; });
 
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
@@ -561,7 +604,7 @@ export default function DigitalIdCardsPage() {
         const frontEl = container.querySelector(`#front-${item.id}`) as HTMLElement;
         if (frontEl) {
           const canvas = await html2canvas(frontEl, { scale: 4, useCORS: true, backgroundColor: '#ffffff' });
-          if (i > 0) pdf.addPage([cardW, cardH], 'landscape');
+          if (i > 0) pdf.addPage([cardW, cardH], 'portrait');
           pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, cardW, cardH);
         }
 
@@ -569,13 +612,14 @@ export default function DigitalIdCardsPage() {
         const backEl = container.querySelector(`#back-${item.id}`) as HTMLElement;
         if (backEl) {
           const canvas = await html2canvas(backEl, { scale: 4, useCORS: true, backgroundColor: '#ffffff' });
-          pdf.addPage([cardW, cardH], 'landscape');
+          pdf.addPage([cardW, cardH], 'portrait');
           pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, cardW, cardH);
         }
       }
 
-      // Restore overflow-hidden
+      // Restore overflow-hidden and badge padding (preview stays pixel-identical)
       cards.forEach((el) => { el.style.overflow = ''; });
+      badges.forEach((el) => { el.style.paddingBottom = ''; });
 
       pdf.save(`id-cards-${mode}-${new Date().toISOString().slice(0, 10)}.pdf`);
     } catch (err) {
@@ -710,7 +754,7 @@ export default function DigitalIdCardsPage() {
               const hasCard = !!cardMap[item.id];
               const isSelected = selectedIds.has(item.id);
               return (
-                <div key={item.id} className={cn('flex flex-col gap-2 rounded-xl border p-3 transition', isSelected ? 'border-brand bg-brand/5' : 'border-transparent bg-white')} style={{ width: 364 }}>
+                <div key={item.id} className={cn('flex flex-col gap-2 rounded-xl border p-3 transition', isSelected ? 'border-brand bg-brand/5' : 'border-transparent bg-white')} style={{ width: 239 }}>
                   {/* Checkbox + status */}
                   <div className="flex items-center justify-between">
                     <label className="flex items-center gap-2">
@@ -738,6 +782,7 @@ export default function DigitalIdCardsPage() {
                     mode={mode}
                     cardNo={cardMap[item.id]?.cardNumber ?? cardNoFor(item.id)}
                     expiry={expiry}
+                    verificationCode={cardMap[item.id]?.verificationCode ?? verifyCodeFor(item.id)}
                     photoUrl={photoFor(item)}
                     school={school}
                   />
@@ -799,6 +844,7 @@ export default function DigitalIdCardsPage() {
                 mode={mode}
                 cardNo={cardMap[item.id]?.cardNumber ?? cardNoFor(item.id)}
                 expiry={expiry}
+                verificationCode={cardMap[item.id]?.verificationCode ?? verifyCodeFor(item.id)}
                 photoUrl={photoFor(item)}
                 school={school}
               />
