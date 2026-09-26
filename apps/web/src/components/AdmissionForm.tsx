@@ -127,6 +127,7 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
   const [declaredAgreed, setDeclaredAgreed] = useState(false);
   const [signatureName, setSignatureName] = useState("");
   const [declDate, setDeclDate] = useState("");
+  const [isScholarship, setIsScholarship] = useState(false);
 
   // Payment state
   const [appFees, setAppFees] = useState<ApplicationFee[]>([]);
@@ -457,6 +458,7 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
         declarationName: signatureName || undefined,
         declarationDate: declDate || undefined,
         declarationAgreed: true,
+        isScholarship,
         paymentReference: paymentRef || undefined,
       });
 
@@ -720,6 +722,10 @@ export default function AdmissionForm({ blocks }: { blocks?: WebsiteContentRecor
               <div><label className={labelCls}>Signature of Applicant (Full Name) *</label><input type="text" required value={signatureName} onChange={e => setSignatureName(e.target.value)} className={inputCls} /></div>
               <div><label className={labelCls}>Date *</label><input type="date" required value={declDate} onChange={e => setDeclDate(e.target.value)} className={inputCls} /></div>
             </div>
+            <label className="mt-4 flex items-start gap-3">
+              <input type="checkbox" checked={isScholarship} onChange={e => setIsScholarship(e.target.checked)} className="mt-1 h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand" />
+              <span className="text-sm text-slate-600">I am a scholarship student of the institution (scholarship tuition rates apply to my admission).</span>
+            </label>
             <label className="mt-4 flex items-start gap-3">
               <input type="checkbox" checked={declaredAgreed} onChange={e => setDeclaredAgreed(e.target.checked)} className="mt-1 h-4 w-4 rounded border-slate-300 text-brand focus:ring-brand" />
               <span className="text-sm text-slate-600">I agree to the declaration above and confirm that all information provided is true and accurate.</span>

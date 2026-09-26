@@ -144,6 +144,7 @@ export default function StudentsPage() {
     departmentId: '',
     currentLevel: '100',
     status: 'ACTIVE' as StudentStatus,
+    isScholarship: 'false',
   });
   const [passportFile, setPassportFile] = useState<File | null>(null);
   const [editSaving, setEditSaving] = useState(false);
@@ -456,6 +457,7 @@ export default function StudentsPage() {
       departmentId: student.departmentId ?? '',
       currentLevel: String(student.currentLevel ?? 100),
       status: student.status,
+      isScholarship: String(student.isScholarship ?? false),
     });
     setPassportFile(null);
   }
@@ -491,6 +493,7 @@ export default function StudentsPage() {
         departmentId: editForm.departmentId || undefined,
         currentLevel: Number(editForm.currentLevel),
         status: editForm.status,
+        isScholarship: editForm.isScholarship === 'true',
         passportUrl,
       });
       setNotice(`${editForm.firstName.trim()} ${editForm.lastName.trim()} updated.`);
@@ -638,6 +641,11 @@ export default function StudentsPage() {
           <div>
             <p className="font-medium text-gray-900">
               {s.firstName} {s.lastName}
+              {s.isScholarship && (
+                <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                  Scholarship
+                </span>
+              )}
             </p>
             <p className="text-xs text-gray-400">{s.email ?? '—'}</p>
           </div>
@@ -1429,6 +1437,19 @@ export default function StudentsPage() {
                       </option>
                     ))}
                   </select>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={editForm.isScholarship === 'true'}
+                      onChange={(e) =>
+                        setEditForm((f) => ({ ...f, isScholarship: e.target.checked ? 'true' : 'false' }))
+                      }
+                      className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    Scholarship student (flat scholarship tuition applies)
+                  </label>
                 </div>
               </div>
 

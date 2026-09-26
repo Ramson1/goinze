@@ -462,6 +462,7 @@ export interface Student {
   passportUrl: string | null;
   status: StudentStatus;
   currentLevel: number | null;
+  isScholarship?: boolean;
   programmeId: string | null;
   departmentId: string | null;
   tempPassword: string | null;
@@ -515,6 +516,7 @@ export interface StudentInput {
   nationality?: string;
   dateOfBirth?: string;
   passportUrl?: string;
+  isScholarship?: boolean;
 }
 
 export const studentsApi = {

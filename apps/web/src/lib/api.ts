@@ -81,6 +81,8 @@ export interface ApplyInput {
   declarationName?: string;
   declarationDate?: string;
   declarationAgreed?: boolean;
+  /** Applicant declares they are a scholarship student (flat tuition applies). */
+  isScholarship?: boolean;
   /** Payment reference from a successful pre-admission fee payment. */
   paymentReference?: string;
 }
