@@ -275,6 +275,41 @@ export interface StudentFeeBreakdown {
   summary: { total: number; paid: number; outstanding: number };
 }
 
+/** Admin overview of new vs returning vs scholarship fees under the 2026/2027 policy. */
+export interface FeePolicySummary {
+  sessionName: string | null;
+  portalConfigured: boolean;
+  scholarship: {
+    tuitionAmount: number;
+    portalAccess: { name: string; amount: number } | null;
+    total: number;
+  };
+  returning: {
+    minLevel: number;
+    allowedTypes: string[];
+    portalAccess: { name: string; amount: number } | null;
+    departments: {
+      code: string;
+      name: string;
+      tuition: number;
+      portalAccess: number;
+      total: number;
+    }[];
+  };
+  entering: {
+    level: number;
+    items: {
+      name: string;
+      type: string;
+      amount: number;
+      isMandatory: boolean;
+      departmentName: string | null;
+    }[];
+    total: number;
+    configured: boolean;
+  };
+}
+
 export interface Payment {
   id: string;
   reference: string;
@@ -317,6 +352,7 @@ export const financeApi = {
     return api.get<Paginated<Payment>>(`/finance/payments${qs ? `?${qs}` : ''}`);
   },
   feeStructures: () => api.get<FeeStructure[]>('/finance/fee-structures'),
+  feePolicy: () => api.get<FeePolicySummary>('/finance/fee-policy'),
   createFeeStructure: (payload: {
     name: string;
     amount: number;
