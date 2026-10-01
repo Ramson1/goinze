@@ -223,8 +223,8 @@ export default function Sidebar({ open, onClose, collapsed, onToggleCollapse }: 
               </a>
             </p>
             <p className="text-[10px] text-blue-200/40">
-              <a href="tel:+2348035226642" className="text-blue-200/40 hover:text-white">
-                +234 803 522 6642
+              <a href="mailto:rhemaexpertsolutions@gmail.com" className="text-blue-200/40 hover:text-white">
+                rhemaexpertsolutions@gmail.com
               </a>
             </p>
           </div>

@@ -167,12 +167,12 @@ export default function Footer() {
             >
               Rhema Expert Solutions
             </a>
-            {' '}| Contact:{' '}
+            {' '}|{' '}
             <a
-              href="tel:+2348035226642"
+              href="mailto:rhemaexpertsolutions@gmail.com"
               className="font-medium text-brand-light hover:underline"
             >
-              +234 803 522 6642
+              rhemaexpertsolutions@gmail.com
             </a>
           </p>
         </div>

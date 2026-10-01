@@ -87,7 +87,13 @@ export default function PortalLayout({
               >
                 Rhema Expert Solutions
               </a>
-              {' '}| +234 803 522 6642
+              {' '}|{' '}
+              <a
+                href="mailto:rhemaexpertsolutions@gmail.com"
+                className="font-medium text-brand hover:underline"
+              >
+                rhemaexpertsolutions@gmail.com
+              </a>
             </p>
           </footer>
         </div>
